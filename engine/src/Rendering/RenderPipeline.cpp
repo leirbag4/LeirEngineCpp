@@ -108,7 +108,7 @@ void RenderPipeline::Render(VkCommandBuffer cmd, Scene* scene)
         if (!mesh || !material)
             continue;
 
-        push.color = glm::vec4(1.0f);
+        push.color = material ? material->GetColor() : glm::vec4(1.0f);
 
         RenderMeshRenderer(cmd, renderer, viewProj,
             obj->GetTransform().GetLocalToWorldMatrix(), push);

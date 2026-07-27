@@ -20,6 +20,7 @@ public:
 
     void SetTexture(const std::string& name, std::shared_ptr<Texture2D> texture);
     void SetColor(const glm::vec4& color) { m_Color = color; }
+    glm::vec4 GetColor() const { return m_Color; }
     void SetFloat(const std::string& name, float value);
     void SetVec3(const std::string& name, const glm::vec3& value);
 

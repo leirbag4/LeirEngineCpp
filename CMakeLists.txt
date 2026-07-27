@@ -10,7 +10,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(LEIR_BUILD_EDITOR "Build the LeirEngineEditor" ON)
 option(LEIR_BUILD_TESTS "Build unit tests" OFF)
-option(LEIR_BUILD_EXAMPLES "Build example projects" OFF)
+option(LEIR_BUILD_EXAMPLES "Build example projects" ON)
 option(LEIR_BUILD_DOCS "Build Doxygen documentation" OFF)
 
 # Dependencies
