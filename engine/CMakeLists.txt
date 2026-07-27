@@ -71,14 +71,9 @@ target_link_libraries(LeirEngine
 )
 
 # Vulkan
-find_package(Vulkan QUIET)
-if(Vulkan_FOUND)
-    target_link_libraries(LeirEngine PUBLIC Vulkan::Vulkan)
-    target_compile_definitions(LeirEngine PUBLIC LEIR_HAS_VULKAN)
-    message(STATUS "Vulkan SDK found via FindVulkan")
-elseif(APPLE)
+if(APPLE)
     find_path(Vulkan_INCLUDE_DIR vulkan/vulkan.h)
-    find_library(Vulkan_LIBRARY MoltenVK)
+    find_library(Vulkan_LIBRARY NAMES MoltenVK vulkan)
     if(Vulkan_INCLUDE_DIR AND Vulkan_LIBRARY)
         add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
         set_target_properties(Vulkan::Vulkan PROPERTIES
@@ -89,10 +84,13 @@ elseif(APPLE)
         target_compile_definitions(LeirEngine PUBLIC LEIR_HAS_VULKAN)
         message(STATUS "Vulkan SDK found via MoltenVK at ${Vulkan_LIBRARY}")
     else()
-        message(STATUS "Vulkan SDK not found — build without Vulkan support")
+        message(FATAL_ERROR "Vulkan SDK not found. Install: brew install molten-vk vulkan-headers")
     endif()
 else()
-    message(STATUS "Vulkan SDK not found — build without Vulkan support")
+    find_package(Vulkan REQUIRED)
+    target_link_libraries(LeirEngine PUBLIC Vulkan::Vulkan)
+    target_compile_definitions(LeirEngine PUBLIC LEIR_HAS_VULKAN)
+    message(STATUS "Vulkan SDK found")
 endif()
 
 # Jolt Physics

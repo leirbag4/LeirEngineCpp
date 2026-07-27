@@ -32,20 +32,48 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
-          $sdkRoot = "C:\VulkanSDK"
-          if (Test-Path $sdkRoot) {
-            $version = Get-ChildItem $sdkRoot | Sort-Object Name -Descending | Select-Object -First 1
-            $sdkPath = Join-Path $sdkRoot $version.Name
+          # GitHub Actions Windows runner has Vulkan SDK pre-installed
+          $sdkPath = $null
+          $base = "C:\VulkanSDK"
+          if (Test-Path $base) {
+            $dirs = Get-ChildItem -Path $base -Directory | Sort-Object Name -Descending
+            foreach ($d in $dirs) {
+              $testPath = Join-Path $d.FullName "Include\vulkan\vulkan.h"
+              if (Test-Path $testPath) { $sdkPath = $d.FullName; break }
+            }
+          }
+          if (-not $sdkPath) {
+            # Try common paths
+            $altPaths = @(
+              "$env:ProgramFiles\VulkanSDK",
+              "$env:LOCALAPPDATA\VulkanSDK",
+              "$env:USERPROFILE\VulkanSDK"
+            )
+            foreach ($basePath in $altPaths) {
+              if (Test-Path $basePath) {
+                $dirs = Get-ChildItem -Path $basePath -Directory | Sort-Object Name -Descending
+                foreach ($d in $dirs) {
+                  $testPath = Join-Path $d.FullName "Include\vulkan\vulkan.h"
+                  if (Test-Path $testPath) { $sdkPath = $d.FullName; break }
+                }
+              }
+              if ($sdkPath) { break }
+            }
+          }
+          if ($sdkPath) {
+            Write-Host "Vulkan SDK found at $sdkPath"
             Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_SDK=$sdkPath"
             Add-Content -Path $env:GITHUB_PATH -Value "$sdkPath\Bin"
-            Write-Host "Found Vulkan SDK at $sdkPath"
           } else {
-            choco install vulkan-sdk -y --no-progress 2>&1 | Out-Null
-            if (Test-Path $sdkRoot) {
-              $version = Get-ChildItem $sdkRoot | Sort-Object Name -Descending | Select-Object -First 1
-              $sdkPath = Join-Path $sdkRoot $version.Name
+            Write-Host "No pre-installed Vulkan SDK found, trying choco..."
+            choco install vulkan-sdk -y --no-progress --force 2>&1
+            if (Test-Path "$base\1.3.296.0\Include\vulkan\vulkan.h") {
+              $sdkPath = "$base\1.3.296.0"
               Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_SDK=$sdkPath"
               Add-Content -Path $env:GITHUB_PATH -Value "$sdkPath\Bin"
+            } else {
+              Write-Error "Failed to install Vulkan SDK"
+              exit 1
             }
           }
 
@@ -54,20 +82,26 @@ jobs:
         run: |
           brew update
           brew install molten-vk vulkan-headers shaderc
-          VK_SDK=$(brew --prefix vulkan-headers)
-          echo "VULKAN_SDK=${VK_SDK}" >> "$GITHUB_ENV"
+          echo "VULKAN_SDK=$(brew --prefix)" >> "$GITHUB_ENV"
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          echo "MoltenVK installed at: $(brew --prefix molten-vk)"
+          find "$(brew --prefix)" -name "libMoltenVK*" 2>/dev/null
 
       - name: Setup Vulkan SDK (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gnupg
+          sudo apt-get install -y libvulkan-dev
+          # Try to get glslc via LunarG repo (best-effort)
+          sudo apt-get install -y gnupg 2>/dev/null || true
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | \
-            sudo gpg --dearmor --yes -o /usr/share/keyrings/lunarg-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/lunarg-archive-keyring.gpg] https://packages.lunarg.com/vulkan/1.3.296 jammy main" | \
-            sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list
-          sudo apt-get update
-          sudo apt-get install -y vulkan-sdk
+            sudo gpg --dearmor --yes -o /usr/share/keyrings/lunarg-archive-keyring.gpg 2>/dev/null || true
+          CODENAME=$(lsb_release -cs 2>/dev/null || echo "jammy")
+          echo "deb [signed-by=/usr/share/keyrings/lunarg-archive-keyring.gpg] https://packages.lunarg.com/vulkan/1.3.296/ubuntu $CODENAME main" | \
+            sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list 2>/dev/null || true
+          sudo apt-get update 2>/dev/null || true
+          sudo apt-get install -y glslc 2>/dev/null || echo "glslc not found via LunarG"
+          which glslc || echo "glslc not found — shaders won't compile at build time"
 
       - name: Configure CMake
         run: cmake --preset=${{ steps.preset.outputs.name }}
