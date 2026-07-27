@@ -70,12 +70,27 @@ target_link_libraries(LeirEngine
         cereal::cereal
 )
 
-# Vulkan (optional without SDK for now)
+# Vulkan
 find_package(Vulkan QUIET)
 if(Vulkan_FOUND)
     target_link_libraries(LeirEngine PUBLIC Vulkan::Vulkan)
     target_compile_definitions(LeirEngine PUBLIC LEIR_HAS_VULKAN)
-    message(STATUS "Vulkan SDK found")
+    message(STATUS "Vulkan SDK found via FindVulkan")
+elseif(APPLE)
+    find_path(Vulkan_INCLUDE_DIR vulkan/vulkan.h)
+    find_library(Vulkan_LIBRARY MoltenVK)
+    if(Vulkan_INCLUDE_DIR AND Vulkan_LIBRARY)
+        add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
+        set_target_properties(Vulkan::Vulkan PROPERTIES
+            IMPORTED_LOCATION "${Vulkan_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${Vulkan_INCLUDE_DIR}"
+        )
+        target_link_libraries(LeirEngine PUBLIC Vulkan::Vulkan)
+        target_compile_definitions(LeirEngine PUBLIC LEIR_HAS_VULKAN)
+        message(STATUS "Vulkan SDK found via MoltenVK at ${Vulkan_LIBRARY}")
+    else()
+        message(STATUS "Vulkan SDK not found — build without Vulkan support")
+    endif()
 else()
     message(STATUS "Vulkan SDK not found — build without Vulkan support")
 endif()
