@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Options
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 option(LEIR_BUILD_EDITOR "Build the LeirEngineEditor" ON)
 option(LEIR_BUILD_TESTS "Build unit tests" OFF)
 option(LEIR_BUILD_EXAMPLES "Build example projects" OFF)
