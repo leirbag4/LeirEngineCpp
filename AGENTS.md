@@ -76,6 +76,27 @@ cmake --build build/linux-debug
 - SoLoud for cross-platform audio (zlib license)
 - Documentation auto-generated from Doxygen comments in headers
 
+## Jolt Physics Integration
+
+### Init order (required)
+PhysicsWorld::Init() must call in this exact order:
+1. `RegisterDefaultAllocator()`
+2. `Factory::sInstance = new Factory()`
+3. `RegisterTypes()` — without this, CollisionDispatch is uninitialized → AV on first contact
+
+### On Shutdown
+1. Destroy all Scene objects (RigidBody dtors clean up Jolt bodies via RemoveBody + DestroyBody)
+2. Call `PhysicsWorld::Shutdown()` which calls `UnregisterTypes()`, deletes Factory
+3. Use scoped scene (`{ Scene s; ... }`) before Shutdown to ensure bodies are removed while PhysicsSystem is still alive
+
+### Layer configuration
+Use table-based classes (BroadPhaseLayerInterfaceTable, ObjectLayerPairFilterTable, ObjectVsBroadPhaseLayerFilterTable) with 2 layers:
+- `PhysicsLayers::NON_MOVING (0)` for Static bodies
+- `PhysicsLayers::MOVING (1)` for Dynamic/Kinematic bodies
+
+### Public headers must not expose Jolt types
+Conversion helpers live in internal `PhysicsConversions.h`, not in public includes.
+
 ## Class Hierarchy
 
 ```

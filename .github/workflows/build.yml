@@ -87,11 +87,24 @@ jobs:
           which glslc || echo "glslc not found — shaders won't compile at build time"
 
       - name: Configure CMake
-        run: cmake --preset=${{ steps.preset.outputs.name }}
+        run: cmake --preset=${{ steps.preset.outputs.name }} -DLEIR_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build/${{ steps.preset.outputs.name }}
 
       - name: Test
         shell: bash
-        run: cmake --build build/${{ steps.preset.outputs.name }} --target test 2>&1 || echo "No test target"
+        run: |
+          BUILD_DIR="build/${{ steps.preset.outputs.name }}"
+          case "${{ matrix.os }}" in
+            windows-latest)
+              export PATH="$BUILD_DIR/engine:$PATH"
+              ;;
+            macos-latest)
+              export DYLD_LIBRARY_PATH="$BUILD_DIR/engine:$DYLD_LIBRARY_PATH"
+              ;;
+            ubuntu-latest)
+              export LD_LIBRARY_PATH="$BUILD_DIR/engine:$LD_LIBRARY_PATH"
+              ;;
+          esac
+          cmake --build "$BUILD_DIR" --target test 2>&1

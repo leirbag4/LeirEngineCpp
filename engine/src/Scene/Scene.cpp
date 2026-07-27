@@ -2,6 +2,7 @@
 #include "LeirEngine/Core/CoreObject.h"
 #include "LeirEngine/Objects/Object3D.h"
 #include "LeirEngine/Objects/Object2D.h"
+#include "LeirEngine/Physics/PhysicsWorld.h"
 
 #include <algorithm>
 
@@ -72,6 +73,8 @@ CoreObject* Scene::FindObjectByName(const std::string& name) const
 
 void Scene::OnUpdate(float deltaTime)
 {
+    PhysicsWorld::GetInstance().StepPhysics(deltaTime);
+
     for (auto& obj : m_Objects)
         obj->OnUpdate(deltaTime);
 }

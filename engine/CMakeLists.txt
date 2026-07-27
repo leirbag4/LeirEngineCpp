@@ -18,6 +18,9 @@ add_library(LeirEngine SHARED
     src/Components/MeshRenderer.cpp
     src/Components/Camera.cpp
     src/Components/Light.cpp
+    src/Physics/PhysicsWorld.cpp
+    src/Physics/Collider.cpp
+    src/Physics/RigidBody.cpp
 )
 
 # Shader compilation
@@ -96,8 +99,8 @@ endif()
 # Jolt Physics
 if(TARGET Jolt::Jolt)
     target_link_libraries(LeirEngine PRIVATE Jolt::Jolt)
-elseif(TARGET jolt)
-    target_link_libraries(LeirEngine PRIVATE jolt)
+elseif(TARGET Jolt)
+    target_link_libraries(LeirEngine PRIVATE Jolt)
 endif()
 
 # SoLoud

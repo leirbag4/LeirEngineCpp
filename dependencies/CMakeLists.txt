@@ -26,10 +26,17 @@ FetchContent_Declare(stb
 )
 
 # Jolt Physics
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE ON CACHE BOOL "" FORCE)
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(jolt
     GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
     GIT_TAG master
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR Build
 )
 
 # SoLoud — audio
