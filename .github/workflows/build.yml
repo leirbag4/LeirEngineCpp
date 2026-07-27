@@ -96,6 +96,7 @@ jobs:
         shell: bash
         run: |
           BUILD_DIR="build/${{ steps.preset.outputs.name }}"
+          # Add engine library dir to loader path so tests can find LeirEngine
           case "${{ matrix.os }}" in
             windows-latest)
               export PATH="$BUILD_DIR/engine:$PATH"
@@ -107,4 +108,4 @@ jobs:
               export LD_LIBRARY_PATH="$BUILD_DIR/engine:$LD_LIBRARY_PATH"
               ;;
           esac
-          cmake --build "$BUILD_DIR" --target test 2>&1
+          ctest --output-on-failure --test-dir "$BUILD_DIR"
