@@ -1,0 +1,105 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "windows-debug",
+            "displayName": "Windows Debug",
+            "description": "Debug build for Windows (Visual Studio)",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/build/windows-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Windows Release",
+            "description": "Release build for Windows",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/build/windows-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "macos-debug",
+            "displayName": "macOS Debug",
+            "description": "Debug build for macOS (Ninja)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "macos-release",
+            "displayName": "macOS Release",
+            "description": "Release build for macOS",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux Debug",
+            "description": "Debug build for Linux (Ninja)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "description": "Release build for Linux",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-debug",
+            "configurePreset": "windows-debug"
+        },
+        {
+            "name": "windows-release",
+            "configurePreset": "windows-release"
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos-debug"
+        },
+        {
+            "name": "macos-release",
+            "configurePreset": "macos-release"
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug"
+        },
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release"
+        }
+    ]
+}
