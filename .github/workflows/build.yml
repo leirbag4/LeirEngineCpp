@@ -74,7 +74,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+          sudo apt-get install -y libvulkan-dev libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
           # Try to get glslc via LunarG repo (best-effort)
           sudo apt-get install -y gnupg 2>/dev/null || true
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | \
