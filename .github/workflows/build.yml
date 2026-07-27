@@ -93,4 +93,5 @@ jobs:
         run: cmake --build build/${{ steps.preset.outputs.name }}
 
       - name: Test
+        shell: bash
         run: cmake --build build/${{ steps.preset.outputs.name }} --target test 2>&1 || echo "No test target"
