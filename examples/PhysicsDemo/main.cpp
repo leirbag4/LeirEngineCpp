@@ -163,19 +163,28 @@ protected:
         camPos.y = m_OrbitDistance * std::sin(m_OrbitPitch);
         camPos.z = m_OrbitDistance * std::cos(m_OrbitPitch) * std::cos(m_OrbitYaw);
 
-        // Compute rotation to look at origin
-        glm::vec3 forward = glm::normalize(-camPos);
-        glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
-        glm::vec3 right = glm::normalize(glm::cross(worldUp, forward));
-        glm::vec3 up = glm::cross(forward, right);
-        glm::mat3 rotMat(right, up, forward);
+        // Camera always looks at origin
+        glm::vec3 f = glm::normalize(camPos);
+        glm::vec3 r = glm::normalize(glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), f));
+        glm::vec3 u = glm::cross(f, r);
+        glm::mat3 rotMat(r, u, f);
         glm::quat camRot(rotMat);
 
         m_CameraObj->GetTransform().SetLocalPosition(camPos);
         m_CameraObj->GetTransform().SetLocalRotation(camRot);
 
-        // ---- Step physics + objects ----
-        scene->OnUpdate(deltaTime);
+        // Debug: count objects with renderers
+        static int frameCount = 0;
+        if (++frameCount % 60 == 0) {
+            int renderable = 0;
+            for (auto& obj : scene->GetObjects()) {
+                if (obj->IsActive() && obj->GetComponent<Leir::MeshRenderer>())
+                    ++renderable;
+            }
+            auto& t = m_CameraObj->GetTransform();
+            spdlog::info("Frame {}: cam=({:.1f},{:.1f},{:.1f}) objs={}", 
+                frameCount, t.GetWorldPosition().x, t.GetWorldPosition().y, t.GetWorldPosition().z, renderable);
+        }
     }
 
     void OnRender() override
