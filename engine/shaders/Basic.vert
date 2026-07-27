@@ -10,13 +10,23 @@ layout(location = 2) out vec3 fragWorldPos;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 viewProjection;
-    mat4 model;
 } ubo;
 
+layout(push_constant) uniform PushConstants {
+    vec3 lightDir;
+    float pad0;
+    vec3 lightColor;
+    float pad1;
+    vec3 ambientColor;
+    float pad2;
+    vec4 color;
+    mat4 model;
+} push;
+
 void main() {
-    vec4 worldPos = ubo.model * vec4(inPosition, 1.0);
+    vec4 worldPos = push.model * vec4(inPosition, 1.0);
     gl_Position = ubo.viewProjection * worldPos;
-    fragNormal = mat3(ubo.model) * inNormal;
+    fragNormal = mat3(push.model) * inNormal;
     fragTexCoord = inTexCoord;
     fragWorldPos = worldPos.xyz;
 }

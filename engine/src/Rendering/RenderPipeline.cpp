@@ -15,7 +15,7 @@
 namespace Leir {
 
 static const int RENDER_FRAMES_IN_FLIGHT = 2;
-static const size_t UBO_SIZE = sizeof(PerMeshUBO);
+static const size_t UBO_SIZE = sizeof(glm::mat4);
 
 RenderPipeline::RenderPipeline(VulkanDevice* device)
     : m_Device(device)
@@ -166,13 +166,9 @@ void RenderPipeline::RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* rende
 
     auto& uboBuf = m_UBOBuffers[frame];
 
-    PerMeshUBO ubo{};
-    ubo.viewProjection = viewProj;
-    ubo.model = model;
-
     void* data;
     vkMapMemory(m_Device->GetDevice(), uboBuf.memory, 0, UBO_SIZE, 0, &data);
-    memcpy(data, &ubo, UBO_SIZE);
+    memcpy(data, &viewProj, UBO_SIZE);
     vkUnmapMemory(m_Device->GetDevice(), uboBuf.memory);
 
     material->Bind(cmd, material->GetPipelineLayout());
@@ -180,8 +176,10 @@ void RenderPipeline::RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* rende
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         material->GetPipelineLayout(), 0, 1, &m_UBOSets[frame], 0, nullptr);
 
+    PushConstants pushWithModel = push;
+    pushWithModel.model = model;
     vkCmdPushConstants(cmd, material->GetPipelineLayout(),
-        VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &push);
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushWithModel);
 
     mesh->Bind(cmd);
     mesh->Draw(cmd);

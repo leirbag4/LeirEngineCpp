@@ -24,11 +24,11 @@ struct LEIR_API PushConstants {
     glm::vec3 ambientColor = {0.2f, 0.2f, 0.3f};
     float pad2 = 0.0f;
     glm::vec4 color = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::mat4 model = glm::mat4(1.0f);
 };
 
 struct LEIR_API PerMeshUBO {
     glm::mat4 viewProjection;
-    glm::mat4 model;
 };
 
 struct UBOBuffer {

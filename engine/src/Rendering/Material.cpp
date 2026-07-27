@@ -129,7 +129,7 @@ void Material::CreatePipeline(VkRenderPass renderPass)
     auto dev = m_Device->GetDevice();
 
     VkPushConstantRange pushRange{};
-    pushRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushRange.offset = 0;
     pushRange.size = sizeof(PushConstants);
 
