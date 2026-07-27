@@ -11,3 +11,11 @@ target_link_libraries(LeirEngineEditor
     PRIVATE
         LeirEngine
 )
+
+if(WIN32)
+    add_custom_command(TARGET LeirEngineEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:LeirEngine>"
+            "$<TARGET_FILE_DIR:LeirEngineEditor>"
+    )
+endif()
