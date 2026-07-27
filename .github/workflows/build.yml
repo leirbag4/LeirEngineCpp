@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           case "${{ matrix.os }}" in
-            windows-latest) echo "name=windows-debug" >> "$GITHUB_OUTPUT" ;;
+            windows-latest) echo "name=windows-ci-debug" >> "$GITHUB_OUTPUT" ;;
             macos-latest)   echo "name=macos-debug"   >> "$GITHUB_OUTPUT" ;;
             ubuntu-latest)  echo "name=linux-debug"   >> "$GITHUB_OUTPUT" ;;
           esac

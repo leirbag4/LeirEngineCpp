@@ -28,6 +28,18 @@
             }
         },
         {
+            "name": "windows-ci-debug",
+            "displayName": "Windows CI Debug",
+            "description": "Debug build for Windows CI (Ninja)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/windows-ci-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "LEIR_BUILD_EDITOR": "ON",
+                "LEIR_BUILD_TESTS": "OFF"
+            }
+        },
+        {
             "name": "macos-debug",
             "displayName": "macOS Debug",
             "description": "Debug build for macOS (Ninja)",
