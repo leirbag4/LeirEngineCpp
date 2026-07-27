@@ -81,7 +81,7 @@ void VulkanDevice::CreateInstance()
     createInfo.pApplicationInfo = &appInfo;
 
     auto extensions = GetRequiredExtensions(m_Config.enableValidationLayers);
-#ifdef __APPLE__
+#ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
     createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #endif
@@ -219,7 +219,7 @@ bool VulkanDevice::CheckDeviceExtensionSupport(VkPhysicalDevice device) const
     vkEnumerateDeviceExtensionProperties(device, nullptr, &count, available.data());
 
     std::set<std::string> required(m_DeviceExtensions.begin(), m_DeviceExtensions.end());
-#ifdef __APPLE__
+#ifdef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
     required.insert(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 #endif
     for (const auto& ext : available)
@@ -267,7 +267,7 @@ void VulkanDevice::CreateLogicalDevice()
     features.samplerAnisotropy = VK_TRUE;
 
     std::vector<const char*> deviceExtensions(m_DeviceExtensions.begin(), m_DeviceExtensions.end());
-#ifdef __APPLE__
+#ifdef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
     deviceExtensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 #endif
 

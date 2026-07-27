@@ -32,9 +32,8 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
-          # GitHub Actions Windows runner has Vulkan SDK pre-installed
-          $sdkPath = $null
           $base = "C:\VulkanSDK"
+          $sdkPath = $null
           if (Test-Path $base) {
             $dirs = Get-ChildItem -Path $base -Directory | Sort-Object Name -Descending
             foreach ($d in $dirs) {
@@ -43,21 +42,13 @@ jobs:
             }
           }
           if (-not $sdkPath) {
-            # Try common paths
-            $altPaths = @(
-              "$env:ProgramFiles\VulkanSDK",
-              "$env:LOCALAPPDATA\VulkanSDK",
-              "$env:USERPROFILE\VulkanSDK"
-            )
-            foreach ($basePath in $altPaths) {
-              if (Test-Path $basePath) {
-                $dirs = Get-ChildItem -Path $basePath -Directory | Sort-Object Name -Descending
-                foreach ($d in $dirs) {
-                  $testPath = Join-Path $d.FullName "Include\vulkan\vulkan.h"
-                  if (Test-Path $testPath) { $sdkPath = $d.FullName; break }
-                }
+            choco install vulkan-sdk -y --no-progress --force 2>&1
+            if (Test-Path $base) {
+              $dirs = Get-ChildItem -Path $base -Directory | Sort-Object Name -Descending
+              foreach ($d in $dirs) {
+                $testPath = Join-Path $d.FullName "Include\vulkan\vulkan.h"
+                if (Test-Path $testPath) { $sdkPath = $d.FullName; break }
               }
-              if ($sdkPath) { break }
             }
           }
           if ($sdkPath) {
@@ -65,33 +56,25 @@ jobs:
             Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_SDK=$sdkPath"
             Add-Content -Path $env:GITHUB_PATH -Value "$sdkPath\Bin"
           } else {
-            Write-Host "No pre-installed Vulkan SDK found, trying choco..."
-            choco install vulkan-sdk -y --no-progress --force 2>&1
-            if (Test-Path "$base\1.3.296.0\Include\vulkan\vulkan.h") {
-              $sdkPath = "$base\1.3.296.0"
-              Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_SDK=$sdkPath"
-              Add-Content -Path $env:GITHUB_PATH -Value "$sdkPath\Bin"
-            } else {
-              Write-Error "Failed to install Vulkan SDK"
-              exit 1
-            }
+            Write-Error "Failed to find/install Vulkan SDK"
+            exit 1
           }
 
       - name: Setup Vulkan SDK (macOS)
         if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
         run: |
           brew update
           brew install molten-vk vulkan-headers shaderc
           echo "VULKAN_SDK=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
-          echo "MoltenVK installed at: $(brew --prefix molten-vk)"
-          find "$(brew --prefix)" -name "libMoltenVK*" 2>/dev/null
 
       - name: Setup Vulkan SDK (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvulkan-dev
+          sudo apt-get install -y libvulkan-dev libwayland-dev wayland-scanner
           # Try to get glslc via LunarG repo (best-effort)
           sudo apt-get install -y gnupg 2>/dev/null || true
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | \
