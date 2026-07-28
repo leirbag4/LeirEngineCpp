@@ -122,29 +122,18 @@ protected:
         sprTex.SetTexture(m_WhiteTexture.get());
         sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
 
-        // Procedural sprite sheet: 32x32 texture, 4 colored quadrants (2x2 grid, 16x16 each)
-        unsigned char sheetPixels[32 * 32 * 4];
-        for (int y = 0; y < 32; ++y) {
-            for (int x = 0; x < 32; ++x) {
-                int idx = (y * 32 + x) * 4;
-                int quadX = x / 16;
-                int quadY = y / 16;
-                if (quadX == 0 && quadY == 0) { sheetPixels[idx+0]=255; sheetPixels[idx+1]=0;   sheetPixels[idx+2]=0;   sheetPixels[idx+3]=255; } // Red
-                else if (quadX == 1 && quadY == 0) { sheetPixels[idx+0]=0; sheetPixels[idx+1]=255; sheetPixels[idx+2]=0;   sheetPixels[idx+3]=255; } // Green
-                else if (quadX == 0 && quadY == 1) { sheetPixels[idx+0]=0; sheetPixels[idx+1]=0;   sheetPixels[idx+2]=255; sheetPixels[idx+3]=255; } // Blue
-                else { sheetPixels[idx+0]=255; sheetPixels[idx+1]=255; sheetPixels[idx+2]=0;   sheetPixels[idx+3]=255; } // Yellow
-            }
-        }
-        auto sheetTex = std::make_shared<Leir::Texture2D>(m_VulkanDevice.get(), 32, 32, sheetPixels);
-        auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 16, 16);
+        // Load sprite sheet from file: assets/sprite_sheet_64_64.png (64x64, tiles 32x32)
+        Leir::Image sheetImage("assets/sprite_sheet_64_64.png");
+        auto sheetTex = std::make_shared<Leir::Texture2D>(m_VulkanDevice.get(), sheetImage);
+        auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 32, 32);
 
-        // Green frame (frame 1) at top-right
+        // Show all 4 frames across the screen
         auto* sheetSprite = scene.CreateObject2D("SheetSprite");
         sheetSprite->GetTransform().SetLocalPosition({GetWidth() * 0.75f, GetHeight() * 0.25f, 0.0f});
         sheetSprite->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
         auto& sSpr = sheetSprite->AddComponent<Leir::SpriteRenderer>();
         sSpr.SetSpriteSheet(sheet.get());
-        sSpr.SetFrameIndex(1);
+        sSpr.SetFrameIndex(0);
         sSpr.SetColor({1.0f, 1.0f, 1.0f, 1.0f});
 
         // Store shared_ptr to keep alive

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Rendering/Image.h"
 
 #include <vulkan/vulkan.h>
 #include <string>
@@ -14,7 +15,10 @@ public:
     Texture2D(VulkanDevice* device, const std::string& path);
     Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,
               const unsigned char* pixels);
+    Texture2D(VulkanDevice* device, Image& image);
     ~Texture2D();
+
+    void UpdateFromImage(Image& image);
 
     VkImageView GetImageView() const { return m_ImageView; }
     VkSampler GetSampler() const { return m_Sampler; }
@@ -30,6 +34,7 @@ public:
     }
 
 private:
+    void CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height);
     void TransitionLayout(VkImage image, VkFormat format,
         VkImageLayout oldLayout, VkImageLayout newLayout);
     void CopyBufferToImage(VkBuffer buffer, VkImage image,

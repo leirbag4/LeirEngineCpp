@@ -11,6 +11,7 @@ add_library(LeirEngine SHARED
     src/Input/InputManager.cpp
     src/Rendering/VulkanDevice.cpp
     src/Rendering/Shader.cpp
+    src/Rendering/Image.cpp
     src/Rendering/Texture2D.cpp
     src/Rendering/Mesh.cpp
     src/Rendering/Material.cpp

@@ -27,27 +27,29 @@
 - [x] Logging con spdlog integrado
 
 ## Fase 2 — Renderer (Vulkan)
-- [ ] `RHI` (Render Hardware Interface): Device, Swapchain, CommandBuffer
-- [ ] Pipeline creation (Vertex, Fragment shaders)
-- [ ] Compilación de shaders GLSL→SPIR-V en build time (glslc)
-- [ ] `Mesh`, `VertexBuffer`, `IndexBuffer`, `UniformBuffer`
-- [ ] `Texture2D` (carga con stb_image)
-- [ ] `Material` (shader + parameters + textures)
-- [ ] `MeshRenderer` component
-- [ ] Forward renderer básico (diffuse + specular lighting)
-- [ ] `Camera` component (view/projection, frustum culling)
-- [ ] `Light` component (directional, point, spot)
+- [x] `RHI` (Render Hardware Interface): Device, Swapchain, CommandBuffer
+- [x] Pipeline creation (Vertex, Fragment shaders)
+- [x] Compilación de shaders GLSL→SPIR-V en build time (glslc)
+- [x] `Mesh`, `VertexBuffer`, `IndexBuffer`, `UniformBuffer`
+- [x] `Texture2D` (carga con stb_image)
+- [x] `Image` (CPU-side, SetPixel/GetPixel/SavePNG, separado de Texture2D)
+- [x] `Material` (shader + parameters + textures)
+- [x] `MeshRenderer` component
+- [x] Forward renderer básico (diffuse + specular lighting)
+- [x] `Camera` component (view/projection, frustum culling)
+- [x] `Light` component (directional, point, spot)
+- [x] Sprite 2D overlay system (pipeline, SpriteRenderer, SpriteSheet, push constants con uvRect)
 - [ ] MoltenVK integration para macOS/iOS
 
 ## Fase 3 — Physics (Jolt)
-- [ ] Integrar Jolt Physics via CMake FetchContent
-- [ ] `PhysicsWorld` wrapper (step, gravity, debug draw)
-- [ ] `RigidBody` component (mass, gravity, kinematic/static)
-- [ ] `Collider` component (box, sphere, capsule, mesh)
-- [ ] Sync transform → Jolt → transform cada frame
-- [ ] Raycast / Shape overlap queries
+- [x] Integrar Jolt Physics via CMake FetchContent
+- [x] `PhysicsWorld` wrapper (step, gravity, debug draw)
+- [x] `RigidBody` component (mass, gravity, kinematic/static)
+- [x] `Collider` component (box, sphere, capsule, mesh)
+- [x] Sync transform → Jolt → transform cada frame
+- [x] Raycast / Shape overlap queries
 - [ ] `CharacterController` component
-- [ ] Configurar Jolt multithreading
+- [x] Configurar Jolt multithreading
 
 ## Fase 4 — Audio (SoLoud)
 - [ ] `AudioSystem` wrapper

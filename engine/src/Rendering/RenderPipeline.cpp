@@ -203,8 +203,8 @@ void RenderPipeline::CreateSpriteResources()
     vkDestroyShaderModule(dev, fragMod, nullptr);
 
     // Create a 1x1 white fallback texture for sprites without a texture
-    unsigned char whitePixel[4] = { 255, 255, 255, 255 };
-    m_Sprite.fallbackTexture = new Texture2D(m_Device, 1, 1, whitePixel);
+    Image fallbackImage(1, 1, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    m_Sprite.fallbackTexture = new Texture2D(m_Device, fallbackImage);
 
     spdlog::info("Sprite pipeline created");
 }

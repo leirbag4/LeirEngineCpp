@@ -1,12 +1,48 @@
 #include "LeirEngine/Rendering/Texture2D.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include <spdlog/spdlog.h>
 
 namespace Leir {
+
+void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height)
+{
+    m_Width = width;
+    m_Height = height;
+    VkDeviceSize imageSize = (VkDeviceSize)width * height * 4;
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+    stagingBuffer = m_Device->CreateBuffer(imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingMemory);
+
+    void* data;
+    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, (size_t)imageSize);
+    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
+
+    m_Device->CreateImage(width, height, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_Image, m_Memory);
+
+    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    CopyBufferToImage(stagingBuffer, m_Image, width, height);
+    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
+    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
+
+    m_ImageView = m_Device->CreateImageView(m_Image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+    m_Sampler = m_Device->CreateSampler();
+}
 
 Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
     : m_Device(device)
@@ -24,44 +60,10 @@ Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
         useFallback = true;
     }
 
-    m_Width = texWidth;
-    m_Height = texHeight;
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    // Staging buffer
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
-    stagingBuffer = m_Device->CreateBuffer(imageSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingMemory);
-
-    void* data;
-    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, imageSize, 0, &data);
-    memcpy(data, pixels, imageSize);
-    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
+    CreateFromData(pixels, (uint32_t)texWidth, (uint32_t)texHeight);
 
     if (!useFallback)
         stbi_image_free(pixels);
-
-    // Create Vulkan image
-    m_Device->CreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_Image, m_Memory);
-
-    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    CopyBufferToImage(stagingBuffer, m_Image, texWidth, texHeight);
-    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
-
-    m_ImageView = m_Device->CreateImageView(m_Image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-    m_Sampler = m_Device->CreateSampler();
 
     spdlog::info("Texture loaded: {} ({}x{})", path, m_Width, m_Height);
 }
@@ -69,40 +71,14 @@ Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
 Texture2D::Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,
                      const unsigned char* pixels)
     : m_Device(device)
-    , m_Width(width)
-    , m_Height(height)
 {
-    VkDeviceSize imageSize = width * height * 4;
+    CreateFromData(pixels, width, height);
+}
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
-    stagingBuffer = m_Device->CreateBuffer(imageSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingMemory);
-
-    void* data;
-    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, imageSize, 0, &data);
-    memcpy(data, pixels, (size_t)imageSize);
-    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
-
-    m_Device->CreateImage(width, height, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_Image, m_Memory);
-
-    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    CopyBufferToImage(stagingBuffer, m_Image, width, height);
-    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
-
-    m_ImageView = m_Device->CreateImageView(m_Image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-    m_Sampler = m_Device->CreateSampler();
+Texture2D::Texture2D(VulkanDevice* device, Image& image)
+    : m_Device(device)
+{
+    CreateFromData(image.GetData(), image.GetWidth(), image.GetHeight());
 }
 
 Texture2D::~Texture2D()
@@ -111,6 +87,35 @@ Texture2D::~Texture2D()
     vkDestroyImageView(m_Device->GetDevice(), m_ImageView, nullptr);
     vkDestroyImage(m_Device->GetDevice(), m_Image, nullptr);
     vkFreeMemory(m_Device->GetDevice(), m_Memory, nullptr);
+}
+
+void Texture2D::UpdateFromImage(Image& image)
+{
+    VkDeviceSize imageSize = (VkDeviceSize)image.GetWidth() * image.GetHeight() * 4;
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+    stagingBuffer = m_Device->CreateBuffer(imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingMemory);
+
+    void* data;
+    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, imageSize, 0, &data);
+    memcpy(data, image.GetData(), (size_t)imageSize);
+    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
+
+    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    CopyBufferToImage(stagingBuffer, m_Image, image.GetWidth(), image.GetHeight());
+    TransitionLayout(m_Image, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
+    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
+
+    m_Width = image.GetWidth();
+    m_Height = image.GetHeight();
 }
 
 void Texture2D::TransitionLayout(VkImage image, VkFormat format,
@@ -155,6 +160,12 @@ void Texture2D::TransitionLayout(VkImage image, VkFormat format,
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+               newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
                newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
         barrier.srcAccessMask = 0;
