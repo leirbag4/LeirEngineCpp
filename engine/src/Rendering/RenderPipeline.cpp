@@ -83,10 +83,10 @@ void RenderPipeline::CreateSpriteResources()
 
     // Shared quad: centered unit quad with UVs (texcoord Y flipped for correct orientation)
     std::vector<SpriteVertex> verts = {
-        { {-0.5f, -0.5f}, {0.0f, 1.0f} },
-        { { 0.5f, -0.5f}, {1.0f, 1.0f} },
-        { { 0.5f,  0.5f}, {1.0f, 0.0f} },
-        { {-0.5f,  0.5f}, {0.0f, 0.0f} },
+        { {-0.5f, -0.5f}, {0.0f, 0.0f} },
+        { { 0.5f, -0.5f}, {1.0f, 0.0f} },
+        { { 0.5f,  0.5f}, {1.0f, 1.0f} },
+        { {-0.5f,  0.5f}, {0.0f, 1.0f} },
     };
     std::vector<uint32_t> idxs = { 0, 1, 2, 0, 2, 3 };
     m_Sprite.indexCount = (int)idxs.size();

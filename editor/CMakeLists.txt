@@ -17,5 +17,8 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:LeirEngine>"
             "$<TARGET_FILE_DIR:LeirEngineEditor>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:LeirEngineEditor>/assets"
     )
 endif()
