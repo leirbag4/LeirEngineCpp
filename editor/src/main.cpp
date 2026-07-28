@@ -11,6 +11,7 @@
 #include <LeirEngine/Rendering/Material.h>
 #include <LeirEngine/Rendering/Texture2D.h>
 #include <LeirEngine/Components/MeshRenderer.h>
+#include <LeirEngine/Components/SpriteRenderer.h>
 #include <LeirEngine/Components/Camera.h>
 #include <LeirEngine/Components/Light.h>
 
@@ -102,6 +103,23 @@ protected:
         child->GetTransform().SetLocalPosition({2.0f, 1.0f, 0.0f});
         child->SetParent(cubeObj);
 
+        // Test 2D sprite overlay — bright cyan quad at center (no texture)
+        auto* spriteObj = scene.CreateObject2D("TestSprite");
+        spriteObj->GetTransform().SetLocalPosition(
+            {GetWidth() * 0.5f, GetHeight() * 0.5f, 0.0f});
+        spriteObj->GetTransform().SetLocalScale({200.0f, 200.0f, 1.0f});
+        auto& spr = spriteObj->AddComponent<Leir::SpriteRenderer>();
+        // No texture — uses internal white fallback, color tint makes it cyan
+        spr.SetColor({0.0f, 1.0f, 1.0f, 1.0f});
+
+        // Second sprite with explicit white texture — red tint at top-left
+        auto* spriteTex = scene.CreateObject2D("TexSprite");
+        spriteTex->GetTransform().SetLocalPosition({100.0f, 100.0f, 0.0f});
+        spriteTex->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
+        auto& sprTex = spriteTex->AddComponent<Leir::SpriteRenderer>();
+        sprTex.SetTexture(m_WhiteTexture.get());
+        sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
+
         spdlog::info("Scene hierarchy created with Vulkan renderer");
     }
 
@@ -128,6 +146,10 @@ protected:
 
             auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
             m_RenderPipeline->Render(cmd, scene);
+
+            // 2D overlay (UI / sprites rendered on top)
+            m_VulkanDevice->BeginOverlay();
+            m_RenderPipeline->RenderOverlay(cmd, scene);
 
             m_VulkanDevice->EndFrame();
         }

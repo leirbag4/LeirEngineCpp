@@ -16,6 +16,7 @@ add_library(LeirEngine SHARED
     src/Rendering/Material.cpp
     src/Rendering/RenderPipeline.cpp
     src/Components/MeshRenderer.cpp
+    src/Components/SpriteRenderer.cpp
     src/Components/Camera.cpp
     src/Components/Light.cpp
     src/Physics/PhysicsWorld.cpp
@@ -29,6 +30,8 @@ if(GLSLC)
     set(SHADER_SOURCES
         shaders/Basic.vert
         shaders/Basic.frag
+        shaders/Sprite.vert
+        shaders/Sprite.frag
     )
     set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
     file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")

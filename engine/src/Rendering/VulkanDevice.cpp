@@ -48,6 +48,15 @@ VulkanDevice::~VulkanDevice()
 {
     vkDeviceWaitIdle(m_Device);
     CleanupSwapchain();
+    // Render passes persist across swapchain recreations (format rarely changes)
+    if (m_OverlayRenderPass) {
+        vkDestroyRenderPass(m_Device, m_OverlayRenderPass, nullptr);
+        m_OverlayRenderPass = VK_NULL_HANDLE;
+    }
+    if (m_RenderPass) {
+        vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
+        m_RenderPass = VK_NULL_HANDLE;
+    }
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
         vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
@@ -434,6 +443,36 @@ void VulkanDevice::CreateRenderPass()
 
     if (vkCreateRenderPass(m_Device, &info, nullptr, &m_RenderPass) != VK_SUCCESS)
         throw std::runtime_error("Failed to create render pass");
+
+    // Overlay render pass (no depth, loads existing color)
+    VkAttachmentDescription overlayColor{};
+    overlayColor.format = m_SwapchainFormat;
+    overlayColor.samples = VK_SAMPLE_COUNT_1_BIT;
+    overlayColor.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    overlayColor.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    overlayColor.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    overlayColor.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    overlayColor.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    overlayColor.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference overlayColorRef{};
+    overlayColorRef.attachment = 0;
+    overlayColorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription overlaySubpass{};
+    overlaySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    overlaySubpass.colorAttachmentCount = 1;
+    overlaySubpass.pColorAttachments = &overlayColorRef;
+
+    VkRenderPassCreateInfo overlayInfo{};
+    overlayInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    overlayInfo.attachmentCount = 1;
+    overlayInfo.pAttachments = &overlayColor;
+    overlayInfo.subpassCount = 1;
+    overlayInfo.pSubpasses = &overlaySubpass;
+
+    if (vkCreateRenderPass(m_Device, &overlayInfo, nullptr, &m_OverlayRenderPass) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create overlay render pass");
 }
 
 // ---- Command Pool ----
@@ -526,6 +565,7 @@ void VulkanDevice::TransitionImageLayout(VkImage image, VkFormat format,
 void VulkanDevice::CreateFramebuffers()
 {
     m_SwapchainFramebuffers.resize(m_SwapchainImageViews.size());
+    m_OverlayFramebuffers.resize(m_SwapchainImageViews.size());
     for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i) {
         VkImageView attachments[] = { m_SwapchainImageViews[i], m_DepthImageView };
         VkFramebufferCreateInfo info{};
@@ -538,6 +578,18 @@ void VulkanDevice::CreateFramebuffers()
         info.layers = 1;
         if (vkCreateFramebuffer(m_Device, &info, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
             throw std::runtime_error("Failed to create framebuffer");
+
+        // Overlay framebuffer (color only, no depth)
+        VkFramebufferCreateInfo overlayInfo{};
+        overlayInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        overlayInfo.renderPass = m_OverlayRenderPass;
+        overlayInfo.attachmentCount = 1;
+        overlayInfo.pAttachments = &m_SwapchainImageViews[i];
+        overlayInfo.width = m_SwapchainExtent.width;
+        overlayInfo.height = m_SwapchainExtent.height;
+        overlayInfo.layers = 1;
+        if (vkCreateFramebuffer(m_Device, &overlayInfo, nullptr, &m_OverlayFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create overlay framebuffer");
     }
 }
 
@@ -616,8 +668,7 @@ bool VulkanDevice::BeginFrame()
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Store image index for EndFrame
-    // (We use m_CurrentFrame to index command buffers, store imageIndex separately)
+    // Store image index
     VkViewport viewport{};
     viewport.width = (float)m_SwapchainExtent.width;
     viewport.height = (float)m_SwapchainExtent.height;
@@ -628,16 +679,59 @@ bool VulkanDevice::BeginFrame()
     scissor.extent = m_SwapchainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // Store image index in a temp variable for end frame
-    // We'll use a simple mapping: the command buffer index is our frame index,
-    // and we track which swapchain image is currently being drawn to.
-    // For simplicity, store in a thread_local or just use a member variable.
-    // Actually, let's just use the current frame index to look up the framebuffer we already set.
-    // But we need to know which swapchain image this cmd buffer corresponds to.
-    // Simplest fix: just store the image index.
     m_CurrentImageIndex = imageIndex;
+    m_InOverlay = false;
 
     return true;
+}
+
+void VulkanDevice::BeginOverlay()
+{
+    VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrame];
+    vkCmdEndRenderPass(cmd);
+
+    // Transition swapchain image from PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = m_SwapchainImages[m_CurrentImageIndex];
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkRenderPassBeginInfo rpInfo{};
+    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rpInfo.renderPass = m_OverlayRenderPass;
+    rpInfo.framebuffer = m_OverlayFramebuffers[m_CurrentImageIndex];
+    rpInfo.renderArea.extent = m_SwapchainExtent;
+    vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Flip viewport Y: screen coords (top-left origin) → NDC (bottom-left)
+    VkViewport viewport{};
+    viewport.x = 0;
+    viewport.y = (float)m_SwapchainExtent.height;
+    viewport.width = (float)m_SwapchainExtent.width;
+    viewport.height = -(float)m_SwapchainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.extent = m_SwapchainExtent;
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    m_InOverlay = true;
 }
 
 void VulkanDevice::EndFrame()
@@ -706,6 +800,9 @@ void VulkanDevice::CleanupSwapchain()
 
     for (auto fb : m_SwapchainFramebuffers)
         vkDestroyFramebuffer(m_Device, fb, nullptr);
+    for (auto fb : m_OverlayFramebuffers)
+        vkDestroyFramebuffer(m_Device, fb, nullptr);
+    m_OverlayFramebuffers.clear();
     for (auto iv : m_SwapchainImageViews)
         vkDestroyImageView(m_Device, iv, nullptr);
     vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
@@ -734,7 +831,8 @@ VkPipeline VulkanDevice::CreateGraphicsPipeline(
     const std::vector<VkVertexInputAttributeDescription>& vertexAttributes,
     VkPrimitiveTopology topology,
     VkPolygonMode polygonMode,
-    VkCullModeFlags cullMode) const
+    VkCullModeFlags cullMode,
+    bool depthTestEnable) const
 {
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -771,8 +869,8 @@ VkPipeline VulkanDevice::CreateGraphicsPipeline(
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthTestEnable = depthTestEnable ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable = depthTestEnable ? VK_TRUE : VK_FALSE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
     VkPipelineColorBlendAttachmentState blend{};

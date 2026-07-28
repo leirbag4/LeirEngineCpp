@@ -40,6 +40,7 @@ public:
 
     // Frame lifecycle
     bool BeginFrame();
+    void BeginOverlay();
     void EndFrame();
 
     // Helpers
@@ -47,6 +48,7 @@ public:
     uint32_t GetCurrentFrameIndex() const { return m_CurrentFrame; }
     VkExtent2D GetSwapchainExtent() const { return m_SwapchainExtent; }
     VkRenderPass GetRenderPass() const { return m_RenderPass; }
+    VkRenderPass GetOverlayRenderPass() const { return m_OverlayRenderPass; }
     VkDevice GetDevice() const { return m_Device; }
     VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
     VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
@@ -63,7 +65,8 @@ public:
         const std::vector<VkVertexInputAttributeDescription>& vertexAttributes,
         VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         VkPolygonMode polygonMode = VK_POLYGON_MODE_FILL,
-        VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT
+        VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
+        bool depthTestEnable = true
     ) const;
     VkPipelineLayout CreatePipelineLayout(
         const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts,
@@ -154,6 +157,8 @@ private:
 
     // Render pass
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+    VkRenderPass m_OverlayRenderPass = VK_NULL_HANDLE;
+    std::vector<VkFramebuffer> m_OverlayFramebuffers;
 
     // Command pools
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
@@ -171,6 +176,7 @@ private:
 
     // Temp storage for current swapchain image index
     uint32_t m_CurrentImageIndex = 0;
+    bool m_InOverlay = false;
 
     // Validation
     std::vector<const char*> m_ValidationLayers = { "VK_LAYER_KHRONOS_validation" };
