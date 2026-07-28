@@ -1,0 +1,102 @@
+#pragma once
+#include "LeirEngine/Core/Export.h"
+#include "LeirEngine/UI/Rect2D.h"
+#include <glm/glm.hpp>
+#include <string>
+#include <vector>
+
+namespace Leir {
+
+enum class LEIR_API LayoutMode {
+    Free,
+    Row,
+    Column,
+};
+
+enum class LEIR_API SizePolicy {
+    Fixed,
+    Fill,
+    Grow,
+};
+
+class LEIR_API UIElement {
+public:
+    UIElement();
+    virtual ~UIElement();
+
+    Rect2D& GetRect() { return m_Rect; }
+    const Rect2D& GetRect() const { return m_Rect; }
+
+    void SetLayoutMode(LayoutMode mode) { m_LayoutMode = mode; }
+    LayoutMode GetLayoutMode() const { return m_LayoutMode; }
+
+    void SetSizePolicy(SizePolicy policy) { m_SizePolicy = policy; }
+    SizePolicy GetSizePolicy() const { return m_SizePolicy; }
+
+    void SetPadding(float left, float top, float right, float bottom);
+    void SetSpacing(float spacing) { m_Spacing = spacing; }
+
+    void SetPivot(const glm::vec2& pivot) { m_Rect.pivot = pivot; }
+    const glm::vec2& GetPivot() const { return m_Rect.pivot; }
+
+    void SetName(const std::string& name) { m_Name = name; }
+    const std::string& GetName() const { return m_Name; }
+
+    void SetParent(UIElement* parent);
+    UIElement* GetParent() const { return m_Parent; }
+
+    void AddChild(UIElement* child);
+    void RemoveChild(UIElement* child);
+    const std::vector<UIElement*>& GetChildren() const { return m_Children; }
+
+    const glm::vec4& GetComputedRect() const { return m_ComputedRect; }
+
+    void SetColor(const glm::vec4& color) { m_Color = color; }
+    const glm::vec4& GetColor() const { return m_Color; }
+
+    void SetActive(bool active) { m_Active = active; }
+    bool IsActive() const { return m_Active; }
+
+    virtual glm::vec2 GetMinSize() const;
+    void ComputeLayout(const glm::vec2& availableSize);
+
+    UIElement* FindChildByName(const std::string& name);
+
+    // Input events
+    virtual void OnPointerEnter(const glm::vec2& pos) {}
+    virtual void OnPointerExit() {}
+    virtual void OnPointerMove(const glm::vec2& pos) {}
+    virtual bool OnPointerDown(const glm::vec2& pos) { return false; }
+    virtual bool OnPointerUp(const glm::vec2& pos) { return false; }
+    virtual bool OnTextInput(uint32_t codepoint) { return false; }
+    virtual bool OnKeyDown(int key) { return false; }
+    virtual void OnFocus() {}
+    virtual void OnBlur() {}
+
+    // Events for pointer tracking (called by canvas)
+    void SetHovered(bool h) { m_Hovered = h; }
+    bool IsHovered() const { return m_Hovered; }
+
+protected:
+    virtual void OnLayoutComputed() {}
+
+    Rect2D m_Rect;
+    LayoutMode m_LayoutMode = LayoutMode::Free;
+    SizePolicy m_SizePolicy = SizePolicy::Fixed;
+    float m_Padding[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_Spacing = 0.0f;
+    glm::vec4 m_ComputedRect = {0.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec4 m_Color = {1.0f, 1.0f, 1.0f, 1.0f};
+    bool m_Active = true;
+    bool m_Hovered = false;
+    std::string m_Name;
+
+private:
+    UIElement* m_Parent = nullptr;
+    std::vector<UIElement*> m_Children;
+    void ComputeFreeLayout(const glm::vec2& availableSize);
+    void ComputeRowLayout(const glm::vec2& availableSize);
+    void ComputeColumnLayout(const glm::vec2& availableSize);
+};
+
+} // namespace Leir

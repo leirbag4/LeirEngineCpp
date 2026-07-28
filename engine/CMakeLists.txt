@@ -21,6 +21,16 @@ add_library(LeirEngine SHARED
     src/Components/Camera.cpp
     src/Rendering/SpriteSheet.cpp
     src/Components/Light.cpp
+    src/UI/UIElement.cpp
+    src/UI/UICanvas.cpp
+    src/UI/UIImage.cpp
+    src/UI/UILabel.cpp
+    src/UI/Font.cpp
+    src/UI/UIButton.cpp
+    src/UI/UIRenderer.cpp
+    src/UI/UITextInput.cpp
+    src/UI/UISlider.cpp
+    src/UI/ScrollView.cpp
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp
     src/Physics/RigidBody.cpp
@@ -34,6 +44,8 @@ if(GLSLC)
         shaders/Basic.frag
         shaders/Sprite.vert
         shaders/Sprite.frag
+        shaders/UI.vert
+        shaders/UI.frag
     )
     set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
     file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")

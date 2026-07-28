@@ -12,10 +12,21 @@
 #include <LeirEngine/Rendering/Material.h>
 #include <LeirEngine/Rendering/Texture2D.h>
 #include <LeirEngine/Rendering/SpriteSheet.h>
+#include <LeirEngine/Rendering/Image.h>
 #include <LeirEngine/Components/MeshRenderer.h>
 #include <LeirEngine/Components/SpriteRenderer.h>
 #include <LeirEngine/Components/Camera.h>
 #include <LeirEngine/Components/Light.h>
+
+#include <LeirEngine/UI/UICanvas.h>
+#include <LeirEngine/UI/UIImage.h>
+#include <LeirEngine/UI/UILabel.h>
+#include <LeirEngine/UI/UIButton.h>
+#include <LeirEngine/UI/UISlider.h>
+#include <LeirEngine/UI/UITextInput.h>
+#include <LeirEngine/UI/ScrollView.h>
+#include <LeirEngine/UI/Font.h>
+#include <LeirEngine/UI/UIRenderer.h>
 
 #include <spdlog/spdlog.h>
 
@@ -39,14 +50,12 @@ protected:
     {
         spdlog::info("Editor initialized");
 
-        // Init Vulkan
         Leir::VulkanDeviceConfig config;
         config.appName = "LeirEngine Editor";
         config.windowWidth = GetWidth();
         config.windowHeight = GetHeight();
         m_VulkanDevice = std::make_unique<Leir::VulkanDevice>(GetWindow(), config);
 
-        // Create shader
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
             m_VulkanDevice.get(),
@@ -54,24 +63,18 @@ protected:
             shaderDir + "/Basic.frag.spv"
         );
 
-        // Create a default white texture
         unsigned char whitePixel[4] = { 255, 255, 255, 255 };
         m_WhiteTexture = std::make_shared<Leir::Texture2D>(
             m_VulkanDevice.get(), 1, 1, whitePixel);
 
-        // Create a test material
         m_Material = std::make_shared<Leir::Material>(m_VulkanDevice.get(), m_Shader);
         m_Material->SetTexture("texSampler", m_WhiteTexture);
         m_Material->RecreatePipeline(m_VulkanDevice->GetRenderPass());
 
-        // Create a test cube mesh
         auto [verts, idxs] = Leir::Primitives::CreateCube();
         m_Mesh = std::make_shared<Leir::Mesh>(m_VulkanDevice.get(), verts, idxs);
-
-        // Create render pipeline
         m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_VulkanDevice.get());
 
-        // Create a test scene
         auto& sceneManager = Leir::SceneManager::GetInstance();
         auto& scene = sceneManager.CreateScene("Main Scene");
         sceneManager.SetActiveScene(&scene);
@@ -100,21 +103,18 @@ protected:
         renderer.SetMesh(m_Mesh);
         renderer.SetMaterial(m_Material);
 
-        // Test hierarchy
         Leir::Object3D* child = scene.CreateObject3D("Child");
         child->GetTransform().SetLocalPosition({2.0f, 1.0f, 0.0f});
         child->SetParent(cubeObj);
 
-        // Test 2D sprite overlay — bright cyan quad at center (no texture)
+        // Sprites (unchanged)
         auto* spriteObj = scene.CreateObject2D("TestSprite");
         spriteObj->GetTransform().SetLocalPosition(
             {GetWidth() * 0.5f, GetHeight() * 0.5f, 0.0f});
         spriteObj->GetTransform().SetLocalScale({200.0f, 200.0f, 1.0f});
         auto& spr = spriteObj->AddComponent<Leir::SpriteRenderer>();
-        // No texture — uses internal white fallback, color tint makes it cyan
         spr.SetColor({0.0f, 1.0f, 1.0f, 1.0f});
 
-        // Second sprite with explicit white texture — red tint at top-left
         auto* spriteTex = scene.CreateObject2D("TexSprite");
         spriteTex->GetTransform().SetLocalPosition({100.0f, 100.0f, 0.0f});
         spriteTex->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
@@ -122,12 +122,10 @@ protected:
         sprTex.SetTexture(m_WhiteTexture.get());
         sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
 
-        // Load sprite sheet from file: assets/sprite_sheet_64_64.png (64x64, tiles 32x32)
         Leir::Image sheetImage("assets/sprite_sheet_64_64.png");
         auto sheetTex = std::make_shared<Leir::Texture2D>(m_VulkanDevice.get(), sheetImage);
         auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 32, 32);
 
-        // Show all 4 frames across the screen
         auto* sheetSprite = scene.CreateObject2D("SheetSprite");
         sheetSprite->GetTransform().SetLocalPosition({GetWidth() * 0.75f, GetHeight() * 0.25f, 0.0f});
         sheetSprite->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
@@ -136,19 +134,128 @@ protected:
         sSpr.SetFrameIndex(0);
         sSpr.SetColor({1.0f, 1.0f, 1.0f, 1.0f});
 
-        // Store shared_ptr to keep alive
         m_SheetTexture = sheetTex;
         m_SpriteSheet = sheet;
         m_SheetSprites.push_back(sheetSprite);
 
-        spdlog::info("Scene hierarchy created with Vulkan renderer");
+        // ---- UI System ----
+        m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_VulkanDevice.get());
+
+        // Try loading a system font
+        std::string fontPath;
+        FILE* testFont = nullptr;
+        if (fopen_s(&testFont, "C:/Windows/Fonts/Arial.ttf", "rb") == 0 && testFont) {
+            fclose(testFont);
+            fontPath = "C:/Windows/Fonts/Arial.ttf";
+        } else if (fopen_s(&testFont, "C:/Windows/Fonts/segoeui.ttf", "rb") == 0 && testFont) {
+            fclose(testFont);
+            fontPath = "C:/Windows/Fonts/segoeui.ttf";
+        } else if (fopen_s(&testFont, "C:/Windows/Fonts/consola.ttf", "rb") == 0 && testFont) {
+            fclose(testFont);
+            fontPath = "C:/Windows/Fonts/consola.ttf";
+        } else {
+            spdlog::warn("No system font found, text will not render");
+        }
+
+        if (!fontPath.empty()) {
+            m_Font = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 16);
+            m_FontTitle = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 22);
+        }
+
+        // Create canvas
+        m_Canvas = std::make_unique<Leir::UICanvas>();
+        m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
+
+        // Title
+        auto* title = new Leir::UILabel();
+        title->SetName("Title");
+        title->SetText("LeirEngine UI Demo");
+        title->SetFont(m_FontTitle.get());
+        title->GetRect().anchor = Leir::AnchorSet::TopLeft();
+        title->GetRect().offset = Leir::OffsetSet::All(10.0f);
+        title->GetRect().offset.right = 400.0f;
+        title->GetRect().offset.bottom = 50.0f;
+        m_Canvas->AddChild(title);
+
+        // Panel with vertical layout
+        auto* panel = new Leir::UIElement();
+        panel->SetName("Panel");
+        panel->SetLayoutMode(Leir::LayoutMode::Column);
+        panel->GetRect() = Leir::Rect2D::Absolute(20.0f, 60.0f, 300.0f, 300.0f);
+        panel->SetPadding(8.0f, 8.0f, 8.0f, 8.0f);
+        panel->SetSpacing(8.0f);
+        m_Canvas->AddChild(panel);
+
+        // Button
+        auto* btn = new Leir::UIButton();
+        btn->SetName("ClickBtn");
+        btn->SetText("Click Me!");
+        btn->SetFont(m_Font.get());
+        btn->SetSizePolicy(Leir::SizePolicy::Fixed);
+        btn->SetColors(
+            {0.3f, 0.6f, 0.9f, 1.0f},
+            {0.4f, 0.7f, 1.0f, 1.0f},
+            {0.2f, 0.4f, 0.7f, 1.0f}
+        );
+        btn->SetOnClick([this]() {
+            spdlog::info("Button clicked!");
+        });
+        panel->AddChild(btn);
+
+        // Label
+        auto* label = new Leir::UILabel();
+        label->SetName("InfoLabel");
+        label->SetText("Hello from UILabel!\nMulti-line support.");
+        label->SetFont(m_Font.get());
+        label->SetColor({0.8f, 0.9f, 1.0f, 1.0f});
+        label->SetSizePolicy(Leir::SizePolicy::Fill);
+        panel->AddChild(label);
+
+        // Slider
+        auto* slider = new Leir::UISlider();
+        slider->SetName("TestSlider");
+        slider->SetRange(0.0f, 100.0f);
+        slider->SetValue(50.0f);
+        slider->SetSizePolicy(Leir::SizePolicy::Fixed);
+        slider->SetOnChange([](float v) {
+            spdlog::info("Slider: {}", v);
+        });
+        panel->AddChild(slider);
+
+        // Text input
+        auto* input = new Leir::UITextInput();
+        input->SetName("TextInput");
+        input->SetFont(m_Font.get());
+        input->SetPlaceholder("Type here...");
+        input->SetSizePolicy(Leir::SizePolicy::Fill);
+        panel->AddChild(input);
+
+        // Bottom bar stretch across bottom
+        auto* bottomBar = new Leir::UIImage();
+        bottomBar->SetName("BottomBar");
+        bottomBar->GetRect().anchor = {0.0f, 1.0f, 1.0f, 1.0f}; // left=0, top=1, right=1, bottom=1
+        bottomBar->GetRect().offset = {0.0f, -30.0f, 0.0f, 0.0f};
+        bottomBar->SetColor({0.1f, 0.1f, 0.15f, 1.0f});
+        m_Canvas->AddChild(bottomBar);
+
+        auto* statusLabel = new Leir::UILabel();
+        statusLabel->SetName("StatusLabel");
+        statusLabel->SetText("UI System Online");
+        statusLabel->SetFont(m_Font.get());
+        statusLabel->SetColor({0.5f, 0.8f, 0.5f, 1.0f});
+        statusLabel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f}; // bottom-left point anchor
+        statusLabel->GetRect().offset = {8.0f, -28.0f, 200.0f, 0.0f};
+        m_Canvas->AddChild(statusLabel);
+
+        m_Canvas->UpdateLayout();
+
+        spdlog::info("Scene hierarchy created with Vulkan renderer + UI");
     }
 
     void OnUpdate(float deltaTime) override
     {
         (void)deltaTime;
 
-        // Rotate the cube
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (scene) {
             auto* cube = scene->FindObjectByName("Cube");
@@ -157,6 +264,12 @@ protected:
                 t.SetLocalRotation(
                     glm::quat(glm::vec3(0.0f, deltaTime * 0.5f, 0.0f)) * t.GetLocalRotation());
             }
+        }
+
+        // Update UI layout on resize
+        if (m_Canvas) {
+            m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
+            m_Canvas->UpdateLayout();
         }
     }
 
@@ -168,9 +281,12 @@ protected:
             auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
             m_RenderPipeline->Render(cmd, scene);
 
-            // 2D overlay (UI / sprites rendered on top)
             m_VulkanDevice->BeginOverlay();
             m_RenderPipeline->RenderOverlay(cmd, scene);
+
+            // Render UI overlay
+            if (m_UIRenderer && m_Canvas)
+                m_UIRenderer->Render(cmd, m_Canvas.get());
 
             m_VulkanDevice->EndFrame();
         }
@@ -194,6 +310,11 @@ private:
     std::shared_ptr<Leir::Texture2D> m_SheetTexture;
     std::shared_ptr<Leir::SpriteSheet> m_SpriteSheet;
     std::vector<Leir::Object2D*> m_SheetSprites;
+
+    std::unique_ptr<Leir::UIRenderer> m_UIRenderer;
+    std::unique_ptr<Leir::UICanvas> m_Canvas;
+    std::unique_ptr<Leir::Font> m_Font;
+    std::unique_ptr<Leir::Font> m_FontTitle;
 };
 
 int main()
