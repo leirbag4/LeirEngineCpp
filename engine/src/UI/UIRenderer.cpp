@@ -80,10 +80,11 @@ UIRenderer::UIRenderer(VulkanDevice* device)
         m_Device->GetOverlayRenderPass(),
         { stages[0], stages[1] },
         bindingDesc, attrs,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
         VK_POLYGON_MODE_FILL,
         VK_CULL_MODE_NONE,
-        false);
+        false,
+        true);
 
     vkDestroyShaderModule(dev, vertMod, nullptr);
     vkDestroyShaderModule(dev, fragMod, nullptr);
@@ -124,8 +125,8 @@ void UIRenderer::BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm
 
     m_Vertices.push_back({{x0, y0}, {u0, v0}, color});
     m_Vertices.push_back({{x1, y0}, {u1, v0}, color});
-    m_Vertices.push_back({{x1, y1}, {u1, v1}, color});
     m_Vertices.push_back({{x0, y1}, {u0, v1}, color});
+    m_Vertices.push_back({{x1, y1}, {u1, v1}, color});
 
     m_QuadTextures.push_back(texture ? texture : m_FallbackTex);
 }

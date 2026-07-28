@@ -66,7 +66,8 @@ public:
         VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         VkPolygonMode polygonMode = VK_POLYGON_MODE_FILL,
         VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
-        bool depthTestEnable = true
+        bool depthTestEnable = true,
+        bool blendEnable = false
     ) const;
     VkPipelineLayout CreatePipelineLayout(
         const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts,
