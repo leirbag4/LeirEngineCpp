@@ -276,7 +276,7 @@ std::vector<glm::vec4> Font::LayoutText(const std::string& text, float maxWidth)
         }
 
         float gx = x + g.bearing.x;
-        float gy = y + m_Ascender - g.bearing.y;
+        float gy = y + g.bearing.y;
         quads.push_back({gx, gy, g.size.x, g.size.y});
         quads.push_back({g.uv0.x, g.uv0.y, g.uv1.x - g.uv0.x, g.uv1.y - g.uv0.y});
         x = nextX;
