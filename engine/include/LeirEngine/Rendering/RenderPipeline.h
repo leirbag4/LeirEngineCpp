@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace Leir {
@@ -86,8 +87,8 @@ private:
         VkBuffer indexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory indexMemory = VK_NULL_HANDLE;
         int indexCount = 0;
-        std::array<VkDescriptorSet, 2> descSets = { VK_NULL_HANDLE, VK_NULL_HANDLE };
         Texture2D* fallbackTexture = nullptr;
+        std::unordered_map<Texture2D*, VkDescriptorSet> descSetCache;
     } m_Sprite;
 };
 

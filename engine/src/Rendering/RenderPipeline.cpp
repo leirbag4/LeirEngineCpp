@@ -143,22 +143,11 @@ void RenderPipeline::CreateSpriteResources()
 
     m_Sprite.descSetLayout = m_Device->CreateDescriptorSetLayout({ samplerBinding });
 
-    // Descriptor pool for sampler (one per frame in flight)
+    // Descriptor pool for sampler (256 max sets for texture caching)
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 }
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256 }
     };
-    m_Sprite.descPool = m_Device->CreateDescriptorPool(poolSizes, 2);
-
-    // Allocate per-frame descriptor sets so we never update a set that is in flight
-    VkDescriptorSetLayout layouts[2] = { m_Sprite.descSetLayout, m_Sprite.descSetLayout };
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = m_Sprite.descPool;
-    allocInfo.descriptorSetCount = 2;
-    allocInfo.pSetLayouts = layouts;
-    if (vkAllocateDescriptorSets(dev, &allocInfo, m_Sprite.descSets.data()) != VK_SUCCESS) {
-        spdlog::error("Failed to allocate sprite descriptor sets");
-    }
+    m_Sprite.descPool = m_Device->CreateDescriptorPool(poolSizes, 256);
 
     // Pipeline layout
     VkPushConstantRange pushRange{};
@@ -222,6 +211,7 @@ void RenderPipeline::DestroySpriteResources()
     if (m_Sprite.indexMemory) vkFreeMemory(dev, m_Sprite.indexMemory, nullptr);
     delete m_Sprite.fallbackTexture;
     m_Sprite.fallbackTexture = nullptr;
+    m_Sprite.descSetCache.clear();
 }
 
 void RenderPipeline::Render(VkCommandBuffer cmd, Scene* scene)
@@ -361,21 +351,36 @@ void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
 
     if (!tex) tex = m_Sprite.fallbackTexture;
 
-    uint32_t frame = m_Device->GetCurrentFrameIndex();
+    // Cache one descriptor set per unique texture — write once, never update
+    auto it = m_Sprite.descSetCache.find(tex);
+    if (it == m_Sprite.descSetCache.end()) {
+        VkDescriptorSet newSet;
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_Sprite.descPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &m_Sprite.descSetLayout;
+        if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
+            spdlog::error("RenderSprite: failed to allocate descriptor set");
+            return;
+        }
 
-    // Update per-frame descriptor set with the sprite's texture
-    VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = m_Sprite.descSets[frame];
-    write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &imgInfo;
-    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+        VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = newSet;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo = &imgInfo;
+        vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+
+        m_Sprite.descSetCache[tex] = newSet;
+        it = m_Sprite.descSetCache.find(tex);
+    }
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        m_Sprite.pipelineLayout, 0, 1, &m_Sprite.descSets[frame], 0, nullptr);
+        m_Sprite.pipelineLayout, 0, 1, &it->second, 0, nullptr);
 
     SpritePushConstants push;
     push.mvp = mvp;
