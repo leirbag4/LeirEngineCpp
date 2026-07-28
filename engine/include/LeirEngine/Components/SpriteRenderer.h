@@ -6,6 +6,7 @@
 namespace Leir {
 
 class Texture2D;
+class SpriteSheet;
 class Material;
 
 class LEIR_API SpriteRenderer : public Component {
@@ -15,6 +16,12 @@ public:
 
     void SetTexture(Texture2D* texture) { m_Texture = texture; }
     Texture2D* GetTexture() const { return m_Texture; }
+
+    void SetSpriteSheet(SpriteSheet* sheet) { m_SpriteSheet = sheet; }
+    SpriteSheet* GetSpriteSheet() const { return m_SpriteSheet; }
+
+    void SetFrameIndex(int index) { m_FrameIndex = index; }
+    int GetFrameIndex() const { return m_FrameIndex; }
 
     void SetColor(const glm::vec4& color) { m_Color = color; }
     const glm::vec4& GetColor() const { return m_Color; }
@@ -29,6 +36,8 @@ public:
 
 private:
     Texture2D* m_Texture = nullptr;
+    SpriteSheet* m_SpriteSheet = nullptr;
+    int m_FrameIndex = 0;
     glm::vec4 m_Color = glm::vec4(1.0f);
     glm::vec2 m_Tiling = glm::vec2(1.0f);
     bool m_FlipX = false;

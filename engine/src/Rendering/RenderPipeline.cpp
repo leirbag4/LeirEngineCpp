@@ -3,6 +3,7 @@
 #include "LeirEngine/Rendering/Mesh.h"
 #include "LeirEngine/Rendering/Material.h"
 #include "LeirEngine/Rendering/Texture2D.h"
+#include "LeirEngine/Rendering/SpriteSheet.h"
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Components/MeshRenderer.h"
 #include "LeirEngine/Components/Camera.h"
@@ -348,11 +349,19 @@ void RenderPipeline::RenderOverlay(VkCommandBuffer cmd, Scene* scene)
 void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
     const glm::mat4& mvp)
 {
+    // Determine texture and UV rect
     auto* tex = renderer->GetTexture();
+    auto* sheet = renderer->GetSpriteSheet();
+    glm::vec4 uvRect = {0.0f, 0.0f, 1.0f, 1.0f};
+
+    if (sheet) {
+        tex = sheet->GetTexture();
+        uvRect = sheet->GetUVRect(renderer->GetFrameIndex());
+    }
+
     if (!tex) tex = m_Sprite.fallbackTexture;
+
     uint32_t frame = m_Device->GetCurrentFrameIndex();
-
-
 
     // Update per-frame descriptor set with the sprite's texture
     VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
@@ -371,6 +380,7 @@ void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
     SpritePushConstants push;
     push.mvp = mvp;
     push.color = renderer->GetColor();
+    push.uvRect = uvRect;
     vkCmdPushConstants(cmd, m_Sprite.pipelineLayout,
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         0, sizeof(SpritePushConstants), &push);

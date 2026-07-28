@@ -7,8 +7,10 @@ layout(set = 0, binding = 0) uniform sampler2D texSampler;
 layout(push_constant) uniform PushConstants {
     mat4 mvp;
     vec4 color;
+    vec4 uvRect;
 } push;
 
 void main() {
-    outColor = texture(texSampler, fragTexCoord) * push.color;
+    vec2 uv = push.uvRect.xy + fragTexCoord * push.uvRect.zw;
+    outColor = texture(texSampler, uv) * push.color;
 }

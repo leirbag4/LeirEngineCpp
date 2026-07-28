@@ -18,6 +18,7 @@ add_library(LeirEngine SHARED
     src/Components/MeshRenderer.cpp
     src/Components/SpriteRenderer.cpp
     src/Components/Camera.cpp
+    src/Rendering/SpriteSheet.cpp
     src/Components/Light.cpp
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp

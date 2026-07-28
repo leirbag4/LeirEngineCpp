@@ -15,6 +15,7 @@ class Camera;
 class Light;
 class Material;
 class SpriteRenderer;
+class SpriteSheet;
 class Texture2D;
 
 struct LEIR_API PushConstants {
@@ -48,6 +49,7 @@ struct LEIR_API SpriteVertex {
 struct LEIR_API SpritePushConstants {
     glm::mat4 mvp;
     glm::vec4 color;
+    glm::vec4 uvRect; // {u, v, w, h} in UV space
 };
 
 class LEIR_API RenderPipeline {
