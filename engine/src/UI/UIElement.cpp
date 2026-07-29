@@ -78,9 +78,11 @@ void UIElement::ComputeFreeLayout(const glm::vec2& availableSize)
             m_ComputedRect.z - m_Padding[0] - m_Padding[2],
             m_ComputedRect.w - m_Padding[1] - m_Padding[3]
         };
+        child->m_Rect.offset.left += m_ComputedRect.x;
+        child->m_Rect.offset.top += m_ComputedRect.y;
+        child->m_Rect.offset.right += m_ComputedRect.x;
+        child->m_Rect.offset.bottom += m_ComputedRect.y;
         child->ComputeLayout(childSize);
-        child->m_ComputedRect.x += m_ComputedRect.x;
-        child->m_ComputedRect.y += m_ComputedRect.y;
     }
 }
 
@@ -147,15 +149,13 @@ void UIElement::ComputeRowLayout(const glm::vec2& availableSize)
                 break;
         }
 
-        child->m_Rect.offset.left = cursorX;
-        child->m_Rect.offset.top = innerY;
-        child->m_Rect.offset.right = cursorX + childW;
-        child->m_Rect.offset.bottom = innerY + childH;
+        child->m_Rect.offset.left = cursorX + m_ComputedRect.x;
+        child->m_Rect.offset.top = innerY + m_ComputedRect.y;
+        child->m_Rect.offset.right = cursorX + childW + m_ComputedRect.x;
+        child->m_Rect.offset.bottom = innerY + childH + m_ComputedRect.y;
         child->m_Rect.anchor = AnchorSet::TopLeft();
 
         child->ComputeLayout({childW, childH});
-        child->m_ComputedRect.x += m_ComputedRect.x;
-        child->m_ComputedRect.y += m_ComputedRect.y;
         cursorX += childW + m_Spacing;
     }
 }
@@ -223,15 +223,13 @@ void UIElement::ComputeColumnLayout(const glm::vec2& availableSize)
                 break;
         }
 
-        child->m_Rect.offset.left = innerX;
-        child->m_Rect.offset.top = cursorY;
-        child->m_Rect.offset.right = innerX + childW;
-        child->m_Rect.offset.bottom = cursorY + childH;
+        child->m_Rect.offset.left = innerX + m_ComputedRect.x;
+        child->m_Rect.offset.top = cursorY + m_ComputedRect.y;
+        child->m_Rect.offset.right = innerX + childW + m_ComputedRect.x;
+        child->m_Rect.offset.bottom = cursorY + childH + m_ComputedRect.y;
         child->m_Rect.anchor = AnchorSet::TopLeft();
 
         child->ComputeLayout({childW, childH});
-        child->m_ComputedRect.x += m_ComputedRect.x;
-        child->m_ComputedRect.y += m_ComputedRect.y;
         cursorY += childH + m_Spacing;
     }
 }

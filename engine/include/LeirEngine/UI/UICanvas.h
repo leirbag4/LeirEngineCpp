@@ -32,11 +32,16 @@ public:
 
     UIElement* GetHoveredElement() const { return m_HoveredElement; }
 
+    void CapturePointer(UIElement* element) { m_CaptureElement = element; }
+    void ReleasePointer() { m_CaptureElement = nullptr; }
+    UIElement* GetCaptureElement() const { return m_CaptureElement; }
+
 private:
     float m_ScreenWidth = 1280.0f;
     float m_ScreenHeight = 720.0f;
     UIElement* m_FocusElement = nullptr;
     UIElement* m_HoveredElement = nullptr;
+    UIElement* m_CaptureElement = nullptr;
 
     void HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElement*& out);
     bool m_PointerDown = false;

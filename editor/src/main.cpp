@@ -32,6 +32,7 @@
 #include <LeirEngine/UI/UIRenderer.h>
 #include <LeirEngine/UI/UIViewportPanel.h>
 #include <LeirEngine/UI/UIDebugOverlay.h>
+#include "UI/UITestPanel.h"
 
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
@@ -294,6 +295,19 @@ protected:
 
         m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
 
+        // Test panel (floating over the viewport, centered)
+        m_TestPanel = new UITestPanel();
+        m_TestPanel->SetName("DebugTestPanel");
+        m_TestPanel->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+        m_TestPanel->GetRect().offset = {-150.0f, -125.0f, 150.0f, 125.0f};
+        m_TestPanel->SetFont(m_FontSmall.get());
+        root->AddChild(m_TestPanel);
+
+        m_TestPanel->SetTargetObject(
+            dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
+        m_TestPanel->SetCameraObject(
+            dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
+
         spdlog::info("Scene hierarchy created with viewport system");
     }
 
@@ -349,6 +363,9 @@ protected:
 
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
+
+        if (m_TestPanel)
+            m_TestPanel->Refresh();
     }
 
     void OnRender() override
@@ -406,6 +423,8 @@ private:
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::UIViewportPanel* m_ViewportPanel = nullptr;
     EditorCamera m_EditorCamera;
+
+    UITestPanel* m_TestPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 };

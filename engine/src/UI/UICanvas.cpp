@@ -80,10 +80,21 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 {
     glm::vec2 pos = e.position;
 
+    // If an element has captured the pointer, route everything to it
+    if (m_CaptureElement && e.action != EventAction::Press) {
+        if (e.action == EventAction::Move)
+            m_CaptureElement->OnPointerMove(pos);
+        else if (e.action == EventAction::Release) {
+            m_CaptureElement->OnPointerUp(pos);
+            m_CaptureElement = nullptr;
+        }
+        return;
+    }
+
     UIElement* hit = nullptr;
     HitTest(pos, hit);
 
-    // Hover tracking
+    // Hover tracking (only when no capture)
     if (hit != m_HoveredElement) {
         if (m_HoveredElement) {
             m_HoveredElement->OnPointerExit();
@@ -96,24 +107,34 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         }
     }
 
-    if (m_HoveredElement) {
+    if (m_HoveredElement && !m_CaptureElement) {
         m_HoveredElement->OnPointerMove(pos);
     }
 
     if (e.action == EventAction::Press) {
         m_PointerDown = true;
         if (hit) {
-            hit->OnPointerDown(pos);
-            SetFocus(hit);
+            // Propagate OnPointerDown up the parent chain if child returns false
+            UIElement* target = hit;
+            while (target && !target->OnPointerDown(pos))
+                target = target->GetParent();
+
+            if (target)
+                SetFocus(target);
+            else
+                SetFocus(hit);
         } else {
             ClearFocus();
         }
     }
 
-    if (e.action == EventAction::Release) {
+    if (e.action == EventAction::Release && !m_CaptureElement) {
         m_PointerDown = false;
-        if (hit)
-            hit->OnPointerUp(pos);
+        if (hit) {
+            UIElement* target = hit;
+            while (target && !target->OnPointerUp(pos))
+                target = target->GetParent();
+        }
     }
 }
 

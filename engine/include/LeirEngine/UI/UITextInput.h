@@ -34,18 +34,20 @@ public:
     void OnFocus() override;
     void OnBlur() override;
 
-private:
+protected:
     void InsertChar(uint32_t codepoint);
     void DeleteChar();
     void UpdateCursorPos();
 
     std::string m_Text;
-    std::string m_Placeholder;
     Font* m_Font = nullptr;
     std::function<void(const std::string&)> m_OnChange;
     int m_CursorPos = 0;
     bool m_Focused = false;
     bool m_Hovered = false;
+
+private:
+    std::string m_Placeholder;
 };
 
 } // namespace Leir

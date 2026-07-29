@@ -322,6 +322,13 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         const auto& cr = elem->GetComputedRect();
 
         bool isDebug = (elem->GetName().rfind("Debug", 0) == 0);
+        if (!isDebug) {
+            UIElement* p = elem->GetParent();
+            while (p) {
+                if (p->GetName().rfind("Debug", 0) == 0) { isDebug = true; break; }
+                p = p->GetParent();
+            }
+        }
 
         auto Batch = [&](Texture2D* t, const glm::vec4& r, const glm::vec4& u, const glm::vec4& c) {
             if (isDebug) BuildBatchDebug(t, r, u, c);

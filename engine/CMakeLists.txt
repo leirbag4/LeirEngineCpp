@@ -37,6 +37,7 @@ add_library(LeirEngine SHARED
     src/UI/UIPanel.cpp
     src/UI/UIRenderer.cpp
     src/UI/UITextInput.cpp
+    src/UI/UIFloatInput.cpp
     src/UI/UISlider.cpp
     src/UI/UIDebugOverlay.cpp
     src/UI/UIViewportPanel.cpp
