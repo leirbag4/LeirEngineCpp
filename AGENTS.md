@@ -82,7 +82,7 @@ cmake --build build/linux-debug
 - JSON via nlohmann/json (already a dependency)
 - Sections:
   - `window`: `width`, `height`, `fullscreen`, `vsync`
-  - `debug`: `ui_outlines` (toggles green UI bounding-box outlines)
+  - `debug`: `ui_outlines` (toggles green UI bounding-box outlines), `show_overlay` (toggles UIDebugOverlay)
 - If file doesn't exist, written with defaults on first `Load()` call
 - `LeirSettings::Get().Load()` called in `main()` before app creation
 - Editor reads settings for window size / fullscreen mode
@@ -138,9 +138,12 @@ engine/src/Input/
 ```
 glfwPollEvents()                          → callbacks push to EventQueue
 EventQueue::Get().Process()               → dispatch hooks + update poll state
-InputManager::GetInstance().Update()      → ResetFrame (saves current→previous for edge detection next frame)
-Scene::OnUpdate(dt) / OnUpdate(dt) / OnRender()
+Scene::OnUpdate(dt) / EditorApp::OnUpdate  → reads poll state (delta, scroll, edges)
+InputManager::GetInstance().Update()      → ResetFrame (saves current→previous for next frame)
+Scene::OnRender()
 ```
+- `EventQueue::Process()` calls `Keyboard::ProcessEvent()`, `Mouse::ProcessEvent()`, `Pointer::ProcessEvent()`, `Touch::ProcessEvent()`, `Mouse::ProcessScroll()` to update polling state per frame.
+- `InputManager::Update()` (ResetFrame) runs **after** `OnUpdate()` so `Mouse::GetDelta()`, `GetScrollDelta()`, `WasPressed/Released` are available during update.
 
 ### API Reference
 
@@ -242,6 +245,7 @@ using InputEvent = std::variant<KeyEvent, PointerEvent, CharEvent, ScrollEvent>;
   - KeyEvent → `SendKeyDown()` (focused element)
 - Called once after canvas creation: `m_Canvas->ConnectToInputSystem()`
 - `DisconnectFromInputSystem()` called in destructor (clears hooks)
+- `UICanvas::GetHoveredElement()` returns the deepest hovered element for editor viewport hit-testing
 - Old `UpdatePointer(pos, down, up)` replaced by `ProcessPointerEvent(const PointerEvent&)` which handles each event individually
 
 ### Event Flow Detail
@@ -300,3 +304,120 @@ Scene (owns objects, physics world, render queue)
 - `camelCase` for variables, parameters
 - Headers in `include/LeirEngine/<Module>/`, sources in `src/`
 - Each public header includes `Core/Export.h` for `LEIR_API`
+
+## UIRenderer Draw Layers
+
+The UI renderer draws in 3 phases (bottom to top):
+
+1. **Regular UI** — canvas background, panels (Hierarchy, Inspector), buttons, sliders, inputs, labels, debug outlines
+2. **Viewports** — `ViewportDraw` quads from `UIViewportPanel` (offscreen `RenderTexture`)
+3. **Debug overlay** — `UIDebugOverlay` panel + all children (FPS, mouse, buttons, keys, hover, event labels)
+
+Detection: elements whose `Name()` starts with `"Debug"` are routed to `BuildBatchDebug()` (separate `m_DebugVertices`/`m_DebugQuadTextures`). Everything else goes to `BuildBatch()`.
+
+Vertex buffer layout: `[regular UI vertices] [viewport vertices] [debug vertices]`
+
+```
+void UIRenderer::Flush(VkCommandBuffer cmd) {
+    // Layout: [regular UI] [viewport] [debug overlay]
+    // Draw:   1. regular quads (bottom)
+    //         2. viewport quads (middle)
+    //         3. debug quads (top)
+}
+```
+
+## RenderTexture System
+
+- `RenderTexture` class (`Rendering/RenderTexture.h/.cpp`) creates an offscreen render target with color + depth VkImage/VkImageView/VkFramebuffer/VkSampler.
+- Uses its own render pass compatible with swapchain 3D pass (both B8G8R8A8_SRGB + D32_SFLOAT), so existing pipelines work.
+- `BeginRender(VkCommandBuffer, VkClearValue, float depth)` — transitions images, begins pass
+- `EndRender(VkCommandBuffer)` — transitions back to shader-read optimal for sampling
+- `GetDescriptorInfo()` — for use as a sampled texture in UI
+
+```cpp
+m_ViewportRT = std::make_unique<RenderTexture>(device, width, height);
+m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
+
+// Frame:
+m_ViewportRT->BeginRender(cmd, clearColor, 1.0f);
+m_RenderPipeline->Render(cmd, scene);
+m_ViewportRT->EndRender(cmd);
+```
+
+## UIViewportPanel
+
+- `UIViewportPanel` (`UI/UIViewportPanel.h/.cpp`) — UI element that holds a `RenderTexture*`
+- Inherits from `UIElement` (not `UIPanel`), so it does NOT draw a background quad
+- `SetRenderTexture(RenderTexture*)` / `GetRenderTexture()`
+- `ScreenToViewport(float x, float y)` converts screen coords to viewport-local UV coords
+- Detected in `UIRenderer::Render()` via `dynamic_cast<UIViewportPanel*>`, creates a `ViewportDraw` entry
+
+## VulkanDevice Additions
+
+```cpp
+// In VulkanDevice:
+bool BeginFrame(bool skipRenderPass = false);   // skipRenderPass: don't start 3D render pass
+void BeginSwapchainOverlay();                     // transition swapchain + begin overlay pass
+```
+
+- `BeginFrame(true)` used by editor to skip the 3D scene render pass (renders to offscreen RT instead)
+- `BeginSwapchainOverlay()` transitions swapchain image and begins the overlay render pass — called after viewport rendering is complete, before UI rendering
+
+## Editor Layout
+
+```
+Canvas
+  └── root (UIPanel "EditorRoot", full screen, alpha 1.0)
+        ├── UIViewportPanel ("Viewport", anchor 0,0–1,1 offset 200,0–-220,-30)
+        ├── Hierarchy (UIPanel, anchor 0,0–0,1 offset 0,0–200,-30)
+        │     └── HierarchyTitle (UILabel)
+        ├── Inspector (UIPanel, anchor 1,0–1,1 offset -220,0–0,-30)
+        │     └── InspectorTitle (UILabel)
+        ├── BottomBar (UIImage, anchor 0,1–1,1 offset 0,-30–0,0)
+        └── StatusLabel (UILabel, anchor 0,1–0,1 offset 8,-28–600,0)
+[DebugOverlay panel added as sibling of root]
+```
+
+### EditorCamera
+
+```cpp
+struct EditorCamera {
+    float yaw = 0.0f;
+    float pitch = -20.0f;
+    float distance = 8.0f;
+    glm::vec3 target = {0.0f, 0.0f, 0.0f};
+
+    glm::vec3 GetPosition() const;  // spherical → cartesian
+    void Orbit(float dx, float dy); // left drag
+    void Pan(float dx, float dy);   // middle drag
+    void Zoom(float delta);         // scroll
+};
+```
+
+- Scene camera position/rotation synced from EditorCamera each frame
+- Only responds when hovered element is inside the ViewportPanel
+
+## OnRender Flow (Editor)
+
+```cpp
+void OnRender() override {
+    m_VulkanDevice->BeginFrame(true);             // skip 3D pass
+    m_ViewportRT->BeginRender(cmd, clear, 1.0f);  // offscreen render
+    m_RenderPipeline->Render(cmd, scene);
+    m_ViewportRT->EndRender(cmd);
+    m_VulkanDevice->BeginSwapchainOverlay();       // start overlay pass
+    m_UIRenderer->Render(cmd, m_Canvas.get());     // UI (3 layers)
+    m_VulkanDevice->EndFrame();
+}
+```
+
+## Previous Changes Summary
+
+- `Settings.h`: added `debug.show_overlay` field
+- `UICanvas::GetHoveredElement()` added for editor camera viewport detection
+- `Keyboard.h`: added `#include <string>` for `GetPressedKeysString()`
+- `EventQueue::Process()` now calls `Keyboard/Mouse/Pointer/Touch::ProcessEvent()` to update polling state each frame
+- `UIDebugOverlay`: event display duration increased from 1 frame to 120 frames (~2s)
+- `CoreApplication::Run()`: `InputManager::Update()` (ResetFrame) moved **after** `OnUpdate()` so delta/scroll/edge detection work during update
+- `UIRenderer`: `ViewportDraw` struct, `m_ViewportDraws`/`m_VpDescCache`, `BuildBatchDebug()` for 3-layer flush
+- `engine/CMakeLists.txt`: added `RenderTexture.cpp`, `UIViewportPanel.cpp`
