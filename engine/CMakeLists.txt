@@ -27,6 +27,7 @@ add_library(LeirEngine SHARED
     src/UI/UILabel.cpp
     src/UI/Font.cpp
     src/UI/UIButton.cpp
+    src/UI/UIPanel.cpp
     src/UI/UIRenderer.cpp
     src/UI/UITextInput.cpp
     src/UI/UISlider.cpp

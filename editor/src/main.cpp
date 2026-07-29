@@ -20,6 +20,7 @@
 
 #include <LeirEngine/UI/UICanvas.h>
 #include <LeirEngine/UI/UIImage.h>
+#include <LeirEngine/UI/UIPanel.h>
 #include <LeirEngine/UI/UILabel.h>
 #include <LeirEngine/UI/UIButton.h>
 #include <LeirEngine/UI/UISlider.h>
@@ -178,12 +179,13 @@ protected:
         m_Canvas->AddChild(title);
 
         // Panel with vertical layout
-        auto* panel = new Leir::UIElement();
+        auto* panel = new Leir::UIPanel();
         panel->SetName("Panel");
         panel->SetLayoutMode(Leir::LayoutMode::Column);
         panel->GetRect() = Leir::Rect2D::Absolute(20.0f, 60.0f, 300.0f, 300.0f);
         panel->SetPadding(8.0f, 8.0f, 8.0f, 8.0f);
         panel->SetSpacing(8.0f);
+        panel->SetColor({0.48f, 0.29f, 0.46f, 1.0f});
         m_Canvas->AddChild(panel);
 
         // Button

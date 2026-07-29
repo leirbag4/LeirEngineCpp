@@ -78,6 +78,8 @@ void UIElement::ComputeFreeLayout(const glm::vec2& availableSize)
             m_ComputedRect.w - m_Padding[1] - m_Padding[3]
         };
         child->ComputeLayout(childSize);
+        child->m_ComputedRect.x += m_ComputedRect.x;
+        child->m_ComputedRect.y += m_ComputedRect.y;
     }
 }
 
@@ -151,6 +153,8 @@ void UIElement::ComputeRowLayout(const glm::vec2& availableSize)
         child->m_Rect.anchor = AnchorSet::TopLeft();
 
         child->ComputeLayout({childW, childH});
+        child->m_ComputedRect.x += m_ComputedRect.x;
+        child->m_ComputedRect.y += m_ComputedRect.y;
         cursorX += childW + m_Spacing;
     }
 }
@@ -225,6 +229,8 @@ void UIElement::ComputeColumnLayout(const glm::vec2& availableSize)
         child->m_Rect.anchor = AnchorSet::TopLeft();
 
         child->ComputeLayout({childW, childH});
+        child->m_ComputedRect.x += m_ComputedRect.x;
+        child->m_ComputedRect.y += m_ComputedRect.y;
         cursorY += childH + m_Spacing;
     }
 }

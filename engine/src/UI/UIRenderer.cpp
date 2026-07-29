@@ -2,6 +2,7 @@
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/UILabel.h"
 #include "LeirEngine/UI/UIButton.h"
+#include "LeirEngine/UI/UIPanel.h"
 #include "LeirEngine/UI/UIImage.h"
 #include "LeirEngine/UI/UISlider.h"
 #include "LeirEngine/UI/UITextInput.h"
@@ -210,7 +211,9 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         if (!elem->IsActive()) continue;
         const auto& cr = elem->GetComputedRect();
 
-        if (auto* img = dynamic_cast<UIImage*>(elem)) {
+        if (auto* panel = dynamic_cast<UIPanel*>(elem)) {
+            BuildBatch(nullptr, cr, {0, 0, 1, 1}, panel->GetColor());
+        } else if (auto* img = dynamic_cast<UIImage*>(elem)) {
             Texture2D* tex = img->GetTexture();
             BuildBatch(tex, cr, {0, 0, 1, 1}, img->GetColor());
         } else if (auto* btn = dynamic_cast<UIButton*>(elem)) {
