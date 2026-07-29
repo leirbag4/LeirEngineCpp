@@ -6,8 +6,10 @@
 #include "LeirEngine/UI/UIImage.h"
 #include "LeirEngine/UI/UISlider.h"
 #include "LeirEngine/UI/UITextInput.h"
+#include "LeirEngine/UI/UIViewportPanel.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
+#include "LeirEngine/Rendering/RenderTexture.h"
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Rendering/Texture2D.h"
 #include "LeirEngine/Rendering/Image.h"
@@ -194,12 +196,84 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
         uint32_t vertOffset = (uint32_t)(qi * 4);
         vkCmdDraw(cmd, 4, 1, vertOffset, 0);
     }
+
+    FlushViewports(cmd);
+}
+
+VkDescriptorSet UIRenderer::GetOrCreateVpDescSet(RenderTexture* rt)
+{
+    auto it = m_VpDescCache.find(rt);
+    if (it != m_VpDescCache.end())
+        return it->second;
+
+    VkDescriptorSet newSet;
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = m_DescPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &m_DescSetLayout;
+    if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
+        spdlog::error("UIRenderer: failed to allocate viewport desc set");
+        return VK_NULL_HANDLE;
+    }
+    VkDescriptorImageInfo imgInfo = rt->GetDescriptorInfo();
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = newSet;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &imgInfo;
+    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    m_VpDescCache[rt] = newSet;
+    return newSet;
+}
+
+void UIRenderer::FlushViewports(VkCommandBuffer cmd)
+{
+    if (m_ViewportDraws.empty()) return;
+
+    VkDeviceSize totalVerts = m_Vertices.size() * sizeof(UIVertex);
+    VkDeviceSize vpVerts = m_ViewportDraws.size() * 4;
+    VkDeviceSize needed = totalVerts + vpVerts;
+    if (needed > (VkDeviceSize)m_MaxVertices * sizeof(UIVertex)) {
+        spdlog::warn("UIRenderer: viewport overflow");
+        m_ViewportDraws.clear();
+        return;
+    }
+
+    // Copy viewport vertices after regular vertices
+    void* data;
+    vkMapMemory(m_Device->GetDevice(), m_VertexMemory, totalVerts, vpVerts, 0, &data);
+    for (size_t i = 0; i < m_ViewportDraws.size(); ++i) {
+        memcpy((char*)data + i * 4 * sizeof(UIVertex), m_ViewportDraws[i].verts, 4 * sizeof(UIVertex));
+    }
+    vkUnmapMemory(m_Device->GetDevice(), m_VertexMemory);
+
+    VkExtent2D extent = m_Device->GetSwapchainExtent();
+    glm::vec2 screenSize = {(float)extent.width, (float)extent.height};
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+    VkBuffer vb[] = { m_VertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
+    vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2), &screenSize);
+
+    for (size_t i = 0; i < m_ViewportDraws.size(); ++i) {
+        VkDescriptorSet ds = GetOrCreateVpDescSet(m_ViewportDraws[i].texture);
+        if (ds == VK_NULL_HANDLE) continue;
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_PipelineLayout, 0, 1, &ds, 0, nullptr);
+        uint32_t vertOffset = (uint32_t)(m_Vertices.size() + i * 4);
+        vkCmdDraw(cmd, 4, 1, vertOffset, 0);
+    }
 }
 
 void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
 {
     m_Vertices.clear();
     m_QuadTextures.clear();
+    m_ViewportDraws.clear();
 
     if (!canvas || !canvas->IsActive()) return;
 
@@ -258,6 +332,17 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             BuildBatch(nullptr, handleRect, {0, 0, 1, 1}, slider->IsDragging()
                 ? glm::vec4{1.0f, 1.0f, 1.0f, 1.0f}
                 : glm::vec4{0.8f, 0.8f, 0.8f, 1.0f});
+        } else if (auto* vp = dynamic_cast<UIViewportPanel*>(elem)) {
+            if (vp->GetRenderTexture()) {
+                ViewportDraw vd;
+                float x0 = cr.x, y0 = cr.y, x1 = cr.x + cr.z, y1 = cr.y + cr.w;
+                vd.verts[0] = {{x0, y0}, {0, 0}, {1,1,1,1}};
+                vd.verts[1] = {{x1, y0}, {1, 0}, {1,1,1,1}};
+                vd.verts[2] = {{x0, y1}, {0, 1}, {1,1,1,1}};
+                vd.verts[3] = {{x1, y1}, {1, 1}, {1,1,1,1}};
+                vd.texture = vp->GetRenderTexture();
+                m_ViewportDraws.push_back(vd);
+            }
         } else if (auto* label = dynamic_cast<UILabel*>(elem)) {
             if (label->GetFont() && label->GetFont()->GetAtlasTexture()) {
                 for (const auto& gq : label->GetGlyphQuads()) {

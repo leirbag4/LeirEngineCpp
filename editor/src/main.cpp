@@ -8,6 +8,7 @@
 #include <LeirEngine/Scene/SceneManager.h>
 #include <LeirEngine/Rendering/VulkanDevice.h>
 #include <LeirEngine/Rendering/RenderPipeline.h>
+#include <LeirEngine/Rendering/RenderTexture.h>
 #include <LeirEngine/Rendering/Shader.h>
 #include <LeirEngine/Rendering/Mesh.h>
 #include <LeirEngine/Rendering/Material.h>
@@ -29,11 +30,51 @@
 #include <LeirEngine/UI/ScrollView.h>
 #include <LeirEngine/UI/Font.h>
 #include <LeirEngine/UI/UIRenderer.h>
+#include <LeirEngine/UI/UIViewportPanel.h>
 #include <LeirEngine/UI/UIDebugOverlay.h>
+
+#include <LeirEngine/Input/Keyboard.h>
+#include <LeirEngine/Input/Mouse.h>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include <spdlog/spdlog.h>
 
 #include <memory>
+
+struct EditorCamera {
+    float yaw = 0.0f;
+    float pitch = -20.0f;
+    float distance = 8.0f;
+    glm::vec3 target = {0.0f, 0.0f, 0.0f};
+
+    glm::vec3 GetPosition() const {
+        float r = distance * cos(glm::radians(pitch));
+        float y = distance * sin(glm::radians(pitch));
+        float x = r * sin(glm::radians(yaw));
+        float z = r * cos(glm::radians(yaw));
+        return target + glm::vec3(x, y, z);
+    }
+
+    void Orbit(float dx, float dy) {
+        yaw += dx * 0.5f;
+        pitch = glm::clamp(pitch + dy * 0.5f, -89.0f, 89.0f);
+    }
+
+    void Zoom(float delta) {
+        distance = glm::clamp(distance - delta * 2.0f, 1.0f, 50.0f);
+    }
+
+    void Pan(float dx, float dy) {
+        glm::vec3 forward = glm::normalize(target - GetPosition());
+        glm::vec3 right = glm::normalize(glm::cross(forward, {0,1,0}));
+        glm::vec3 up = glm::normalize(glm::cross(right, forward));
+        float speed = distance * 0.005f;
+        target += right * dx * speed + up * dy * speed;
+    }
+};
 
 class EditorApp : public Leir::CoreApplication {
 public:
@@ -75,7 +116,6 @@ protected:
 
         m_Material = std::make_shared<Leir::Material>(m_VulkanDevice.get(), m_Shader);
         m_Material->SetTexture("texSampler", m_WhiteTexture);
-        m_Material->RecreatePipeline(m_VulkanDevice->GetRenderPass());
 
         auto [verts, idxs] = Leir::Primitives::CreateCube();
         m_Mesh = std::make_shared<Leir::Mesh>(m_VulkanDevice.get(), verts, idxs);
@@ -85,11 +125,19 @@ protected:
         auto& scene = sceneManager.CreateScene("Main Scene");
         sceneManager.SetActiveScene(&scene);
 
-        // Camera
+        // Viewport size (80% of window width, full height minus bottom bar)
+        m_ViewportW = (uint32_t)(GetWidth() * 0.78f);
+        m_ViewportH = (uint32_t)(GetHeight() - 30);
+
+        // Create RenderTexture for the viewport
+        m_ViewportRT = std::make_unique<Leir::RenderTexture>(
+            m_VulkanDevice.get(), m_ViewportW, m_ViewportH);
+        m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
+
+        // Camera (will be driven by EditorCamera)
         auto* cameraObj = scene.CreateObject3D("Camera");
-        cameraObj->GetTransform().SetLocalPosition({0.0f, 2.0f, 5.0f});
         auto& camera = cameraObj->AddComponent<Leir::Camera>();
-        camera.SetPerspective(60.0f, (float)GetWidth() / (float)GetHeight(), 0.1f, 100.0f);
+        camera.SetPerspective(60.0f, (float)m_ViewportW / (float)m_ViewportH, 0.1f, 100.0f);
         camera.SetPrimary(true);
 
         // Light
@@ -113,7 +161,7 @@ protected:
         child->GetTransform().SetLocalPosition({2.0f, 1.0f, 0.0f});
         child->SetParent(cubeObj);
 
-        // Sprites (unchanged)
+        // Sprites
         auto* spriteObj = scene.CreateObject2D("TestSprite");
         spriteObj->GetTransform().SetLocalPosition(
             {GetWidth() * 0.5f, GetHeight() * 0.5f, 0.0f});
@@ -147,7 +195,6 @@ protected:
         // ---- UI System ----
         m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_VulkanDevice.get());
 
-        // Try loading a system font
         std::string fontPath;
         FILE* testFont = nullptr;
         if ((testFont = fopen("C:/Windows/Fonts/Arial.ttf", "rb")) != nullptr) {
@@ -165,114 +212,134 @@ protected:
 
         if (!fontPath.empty()) {
             m_Font = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 16);
-            m_FontTitle = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 22);
+            m_FontSmall = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 13);
         }
 
-        // Create canvas
         m_Canvas = std::make_unique<Leir::UICanvas>();
         m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
         m_Canvas->ConnectToInputSystem();
 
-        // Title
-        auto* title = new Leir::UILabel();
-        title->SetName("Title");
-        title->SetText("LeirEngine UI Demo");
-        title->SetFont(m_FontTitle.get());
-        title->GetRect().anchor = Leir::AnchorSet::TopLeft();
-        title->GetRect().offset = Leir::OffsetSet::All(10.0f);
-        title->GetRect().offset.right = 400.0f;
-        title->GetRect().offset.bottom = 50.0f;
-        m_Canvas->AddChild(title);
+        // ---- Editor Layout ----
+        // Root editor panel (full screen)
+        auto* root = new Leir::UIPanel();
+        root->SetName("EditorRoot");
+        root->SetColor({0.12f, 0.12f, 0.14f, 1.0f});
+        root->GetRect() = Leir::Rect2D::Absolute(0, 0, (float)GetWidth(), (float)GetHeight());
+        m_Canvas->AddChild(root);
 
-        // Panel with vertical layout
-        auto* panel = new Leir::UIPanel();
-        panel->SetName("Panel");
-        panel->SetLayoutMode(Leir::LayoutMode::Column);
-        panel->GetRect() = Leir::Rect2D::Absolute(20.0f, 60.0f, 300.0f, 300.0f);
-        panel->SetPadding(8.0f, 8.0f, 8.0f, 8.0f);
-        panel->SetSpacing(8.0f);
-        panel->SetColor({0.48f, 0.29f, 0.46f, 1.0f});
-        m_Canvas->AddChild(panel);
+        // Viewport panel (center-right area)
+        m_ViewportPanel = new Leir::UIViewportPanel();
+        m_ViewportPanel->SetName("Viewport");
+        m_ViewportPanel->SetRenderTexture(m_ViewportRT.get());
+        m_ViewportPanel->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
+        m_ViewportPanel->GetRect().offset = {200.0f, 0.0f, -220.0f, -30.0f};
+        root->AddChild(m_ViewportPanel);
 
-        // Button
-        auto* btn = new Leir::UIButton();
-        btn->SetName("ClickBtn");
-        btn->SetText("Click Me!");
-        btn->SetFont(m_Font.get());
-        btn->SetSizePolicy(Leir::SizePolicy::Fixed);
-        btn->SetColors(
-            {0.3f, 0.6f, 0.9f, 1.0f},
-            {0.4f, 0.7f, 1.0f, 1.0f},
-            {0.2f, 0.4f, 0.7f, 1.0f}
-        );
-        btn->SetOnClick([this]() {
-            spdlog::info("Button clicked!");
-        });
-        panel->AddChild(btn);
+        // Hierarchy panel (left)
+        auto* hierarchy = new Leir::UIPanel();
+        hierarchy->SetName("Hierarchy");
+        hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
+        hierarchy->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
+        hierarchy->GetRect().offset = {0.0f, 0.0f, 200.0f, -30.0f};
+        hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
+        hierarchy->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
+        hierarchy->SetSpacing(2.0f);
+        root->AddChild(hierarchy);
 
-        // Label
-        auto* label = new Leir::UILabel();
-        label->SetName("InfoLabel");
-        label->SetText("Hello from UILabel!\nMulti-line support.");
-        label->SetFont(m_Font.get());
-        label->SetColor({0.8f, 0.9f, 1.0f, 1.0f});
-        label->SetSizePolicy(Leir::SizePolicy::Fill);
-        panel->AddChild(label);
+        auto* hierarchyTitle = new Leir::UILabel();
+        hierarchyTitle->SetName("HierarchyTitle");
+        hierarchyTitle->SetText("-- Hierarchy --");
+        hierarchyTitle->SetFont(m_FontSmall.get());
+        hierarchyTitle->SetColor({0.7f, 0.7f, 0.7f, 1.0f});
+        hierarchyTitle->SetSizePolicy(Leir::SizePolicy::Fixed);
+        hierarchy->AddChild(hierarchyTitle);
 
-        // Slider
-        auto* slider = new Leir::UISlider();
-        slider->SetName("TestSlider");
-        slider->SetRange(0.0f, 100.0f);
-        slider->SetValue(50.0f);
-        slider->SetSizePolicy(Leir::SizePolicy::Fixed);
-        slider->SetOnChange([](float v) {
-            spdlog::info("Slider: {}", v);
-        });
-        panel->AddChild(slider);
+        // Inspector panel (right)
+        auto* inspector = new Leir::UIPanel();
+        inspector->SetName("Inspector");
+        inspector->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
+        inspector->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
+        inspector->GetRect().offset = {-220.0f, 0.0f, 0.0f, -30.0f};
+        inspector->SetLayoutMode(Leir::LayoutMode::Column);
+        inspector->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
+        inspector->SetSpacing(2.0f);
+        root->AddChild(inspector);
 
-        // Text input
-        auto* input = new Leir::UITextInput();
-        input->SetName("TextInput");
-        input->SetFont(m_Font.get());
-        input->SetPlaceholder("Type here...");
-        input->SetSizePolicy(Leir::SizePolicy::Fill);
-        panel->AddChild(input);
+        auto* inspectorTitle = new Leir::UILabel();
+        inspectorTitle->SetName("InspectorTitle");
+        inspectorTitle->SetText("-- Inspector --");
+        inspectorTitle->SetFont(m_FontSmall.get());
+        inspectorTitle->SetColor({0.7f, 0.7f, 0.7f, 1.0f});
+        inspectorTitle->SetSizePolicy(Leir::SizePolicy::Fixed);
+        inspector->AddChild(inspectorTitle);
 
-        // Bottom bar stretch across bottom
+        // Bottom bar
         auto* bottomBar = new Leir::UIImage();
         bottomBar->SetName("BottomBar");
-        bottomBar->GetRect().anchor = {0.0f, 1.0f, 1.0f, 1.0f}; // left=0, top=1, right=1, bottom=1
+        bottomBar->GetRect().anchor = {0.0f, 1.0f, 1.0f, 1.0f};
         bottomBar->GetRect().offset = {0.0f, -30.0f, 0.0f, 0.0f};
-        bottomBar->SetColor({0.1f, 0.1f, 0.15f, 1.0f});
-        m_Canvas->AddChild(bottomBar);
+        bottomBar->SetColor({0.1f, 0.1f, 0.12f, 1.0f});
+        root->AddChild(bottomBar);
 
         auto* statusLabel = new Leir::UILabel();
         statusLabel->SetName("StatusLabel");
-        statusLabel->SetText("UI System Online");
-        statusLabel->SetFont(m_Font.get());
+        statusLabel->SetText("Editor Online | Arrastra para orbitar, scroll para zoom");
+        statusLabel->SetFont(m_FontSmall.get());
         statusLabel->SetColor({0.5f, 0.8f, 0.5f, 1.0f});
-        statusLabel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f}; // bottom-left point anchor
-        statusLabel->GetRect().offset = {8.0f, -28.0f, 200.0f, 0.0f};
-        m_Canvas->AddChild(statusLabel);
+        statusLabel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
+        statusLabel->GetRect().offset = {8.0f, -28.0f, 600.0f, 0.0f};
+        root->AddChild(statusLabel);
 
         m_Canvas->UpdateLayout();
 
         m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
 
-        spdlog::info("Scene hierarchy created with Vulkan renderer + UI");
+        spdlog::info("Scene hierarchy created with viewport system");
     }
 
     void OnUpdate(float deltaTime) override
     {
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-        if (scene) {
-            auto* cube = scene->FindObjectByName("Cube");
-            if (cube) {
-                auto& t = cube->GetTransform();
-                t.SetLocalRotation(
-                    glm::quat(glm::vec3(0.0f, deltaTime * 0.5f, 0.0f)) * t.GetLocalRotation());
-            }
+        if (!scene) return;
+
+        // Editor camera controls (only when not interacting with UI)
+        auto* hovered = m_Canvas->GetHoveredElement();
+        bool inViewport = m_ViewportPanel && hovered &&
+            (hovered == m_ViewportPanel || hovered->GetParent() == m_ViewportPanel);
+
+        // Orbit: left mouse drag in viewport
+        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Left)) {
+            auto delta = Leir::Mouse::GetDelta();
+            m_EditorCamera.Orbit(delta.x, -delta.y);
         }
+
+        // Pan: middle mouse drag in viewport
+        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Middle)) {
+            auto delta = Leir::Mouse::GetDelta();
+            m_EditorCamera.Pan(-delta.x, -delta.y);
+        }
+
+        // Zoom: scroll in viewport
+        if (inViewport) {
+            float scroll = Leir::Mouse::GetScrollDelta();
+            if (scroll != 0.0f)
+                m_EditorCamera.Zoom(scroll);
+        }
+
+        // Apply editor camera to scene camera
+        auto* cameraObj = scene->FindObjectByName("Camera");
+        if (cameraObj) {
+            auto pos = m_EditorCamera.GetPosition();
+            glm::vec3 forward = glm::normalize(m_EditorCamera.target - pos);
+            glm::quat rot = glm::quatLookAt(forward, glm::vec3(0, 1, 0));
+            cameraObj->GetTransform().SetLocalPosition(pos);
+            cameraObj->GetTransform().SetLocalRotation(rot);
+        }
+
+        // Remove old rotation animation (the cube rotation was for demo;
+        // commented out so camera controls feel natural)
+        // auto* cube = scene->FindObjectByName("Cube");
+        // if (cube) { ... }
 
         // Update UI layout on resize
         if (m_Canvas) {
@@ -286,26 +353,33 @@ protected:
 
     void OnRender() override
     {
-        if (m_VulkanDevice && m_VulkanDevice->BeginFrame()) {
-            VkCommandBuffer cmd = m_VulkanDevice->GetCurrentCommandBuffer();
+        // BeginFrame(true) skips the swapchain 3D render pass
+        if (!m_VulkanDevice || !m_VulkanDevice->BeginFrame(true)) return;
 
-            auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+        VkCommandBuffer cmd = m_VulkanDevice->GetCurrentCommandBuffer();
+        auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+
+        // 1. Render 3D scene + sprites to offscreen RenderTexture
+        if (m_ViewportRT && scene) {
+            VkClearValue clearColor;
+            clearColor.color = { {0.15f, 0.15f, 0.2f, 1.0f} };
+            m_ViewportRT->BeginRender(cmd, clearColor, 1.0f);
             m_RenderPipeline->Render(cmd, scene);
-
-            m_VulkanDevice->BeginOverlay();
-            m_RenderPipeline->RenderOverlay(cmd, scene);
-
-            // Render UI overlay
-            if (m_UIRenderer && m_Canvas)
-                m_UIRenderer->Render(cmd, m_Canvas.get());
-
-            m_VulkanDevice->EndFrame();
+            m_ViewportRT->EndRender(cmd);
         }
+
+        // 2. Render UI to swapchain overlay directly
+        m_VulkanDevice->BeginSwapchainOverlay();
+        if (m_UIRenderer && m_Canvas)
+            m_UIRenderer->Render(cmd, m_Canvas.get());
+        m_VulkanDevice->EndFrame();
     }
 
     void OnShutdown() override
     {
         spdlog::info("Editor shutting down");
+        // Destroy viewport RT before VulkanDevice
+        m_ViewportRT.reset();
         auto& sm = Leir::SceneManager::GetInstance();
         sm.DestroyScene("Main Scene");
         sm.SetActiveScene(nullptr);
@@ -325,8 +399,15 @@ private:
     std::unique_ptr<Leir::UIRenderer> m_UIRenderer;
     std::unique_ptr<Leir::UICanvas> m_Canvas;
     std::unique_ptr<Leir::Font> m_Font;
-    std::unique_ptr<Leir::Font> m_FontTitle;
+    std::unique_ptr<Leir::Font> m_FontSmall;
     std::unique_ptr<Leir::UIDebugOverlay> m_DebugOverlay;
+
+    // Viewport system
+    std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
+    Leir::UIViewportPanel* m_ViewportPanel = nullptr;
+    EditorCamera m_EditorCamera;
+    uint32_t m_ViewportW = 800;
+    uint32_t m_ViewportH = 600;
 };
 
 int main()

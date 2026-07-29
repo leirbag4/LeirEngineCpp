@@ -10,11 +10,17 @@ namespace Leir {
 class VulkanDevice;
 class UICanvas;
 class Texture2D;
+class RenderTexture;
 
 struct LEIR_API UIVertex {
     glm::vec2 position;
     glm::vec2 texCoord;
     glm::vec4 color;
+};
+
+struct LEIR_API ViewportDraw {
+    UIVertex verts[4];
+    RenderTexture* texture;
 };
 
 class LEIR_API UIRenderer {
@@ -27,6 +33,9 @@ public:
 private:
     void BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color);
     void Flush(VkCommandBuffer cmd);
+    void FlushViewports(VkCommandBuffer cmd);
+
+    VkDescriptorSet GetOrCreateVpDescSet(RenderTexture* rt);
 
     VulkanDevice* m_Device;
 
@@ -42,6 +51,9 @@ private:
     std::vector<Texture2D*> m_QuadTextures;
     std::unordered_map<Texture2D*, VkDescriptorSet> m_DescCache;
     Texture2D* m_FallbackTex = nullptr;
+
+    std::vector<ViewportDraw> m_ViewportDraws;
+    std::unordered_map<RenderTexture*, VkDescriptorSet> m_VpDescCache;
 };
 
 } // namespace Leir

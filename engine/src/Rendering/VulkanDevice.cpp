@@ -631,7 +631,7 @@ void VulkanDevice::CreateSyncObjects()
 
 // ---- Frame Lifecycle ----
 
-bool VulkanDevice::BeginFrame()
+bool VulkanDevice::BeginFrame(bool skipRenderPass)
 {
     vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
@@ -654,33 +654,34 @@ bool VulkanDevice::BeginFrame()
     vkResetCommandBuffer(cmd, 0);
     vkBeginCommandBuffer(cmd, &beginInfo);
 
-    VkClearValue clearValues[2];
-    clearValues[0].color = { {0.15f, 0.15f, 0.2f, 1.0f} };
-    clearValues[1].depthStencil = { 1.0f, 0 };
-
-    VkRenderPassBeginInfo rpInfo{};
-    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpInfo.renderPass = m_RenderPass;
-    rpInfo.framebuffer = m_SwapchainFramebuffers[imageIndex];
-    rpInfo.renderArea.extent = m_SwapchainExtent;
-    rpInfo.clearValueCount = 2;
-    rpInfo.pClearValues = clearValues;
-
-    vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    // Store image index
-    VkViewport viewport{};
-    viewport.width = (float)m_SwapchainExtent.width;
-    viewport.height = (float)m_SwapchainExtent.height;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-    VkRect2D scissor{};
-    scissor.extent = m_SwapchainExtent;
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-
     m_CurrentImageIndex = imageIndex;
     m_InOverlay = false;
+
+    if (!skipRenderPass) {
+        VkClearValue clearValues[2];
+        clearValues[0].color = { {0.15f, 0.15f, 0.2f, 1.0f} };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        VkRenderPassBeginInfo rpInfo{};
+        rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpInfo.renderPass = m_RenderPass;
+        rpInfo.framebuffer = m_SwapchainFramebuffers[imageIndex];
+        rpInfo.renderArea.extent = m_SwapchainExtent;
+        rpInfo.clearValueCount = 2;
+        rpInfo.pClearValues = clearValues;
+
+        vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport viewport{};
+        viewport.width = (float)m_SwapchainExtent.width;
+        viewport.height = (float)m_SwapchainExtent.height;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.extent = m_SwapchainExtent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+    }
 
     return true;
 }
@@ -718,6 +719,56 @@ void VulkanDevice::BeginOverlay()
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // Flip viewport Y: screen coords (top-left origin) → NDC (bottom-left)
+    VkViewport viewport{};
+    viewport.x = 0;
+    viewport.y = (float)m_SwapchainExtent.height;
+    viewport.width = (float)m_SwapchainExtent.width;
+    viewport.height = -(float)m_SwapchainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.extent = m_SwapchainExtent;
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    m_InOverlay = true;
+}
+
+void VulkanDevice::BeginSwapchainOverlay()
+{
+    VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrame];
+
+    // Transition swapchain image to COLOR_ATTACHMENT_OPTIMAL
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = m_SwapchainImages[m_CurrentImageIndex];
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkRenderPassBeginInfo rpInfo{};
+    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rpInfo.renderPass = m_OverlayRenderPass;
+    rpInfo.framebuffer = m_OverlayFramebuffers[m_CurrentImageIndex];
+    rpInfo.renderArea.extent = m_SwapchainExtent;
+    rpInfo.clearValueCount = 0;
+    rpInfo.pClearValues = nullptr;
+    vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Flip viewport Y for screen-space coordinates
     VkViewport viewport{};
     viewport.x = 0;
     viewport.y = (float)m_SwapchainExtent.height;

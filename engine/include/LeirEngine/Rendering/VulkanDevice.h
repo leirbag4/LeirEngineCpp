@@ -39,8 +39,9 @@ public:
     ~VulkanDevice();
 
     // Frame lifecycle
-    bool BeginFrame();
+    bool BeginFrame(bool skipRenderPass = false);
     void BeginOverlay();
+    void BeginSwapchainOverlay();
     void EndFrame();
 
     // Helpers

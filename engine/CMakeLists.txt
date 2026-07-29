@@ -22,6 +22,7 @@ add_library(LeirEngine SHARED
     src/Rendering/Mesh.cpp
     src/Rendering/Material.cpp
     src/Rendering/RenderPipeline.cpp
+    src/Rendering/RenderTexture.cpp
     src/Components/MeshRenderer.cpp
     src/Components/SpriteRenderer.cpp
     src/Components/Camera.cpp
@@ -38,6 +39,7 @@ add_library(LeirEngine SHARED
     src/UI/UITextInput.cpp
     src/UI/UISlider.cpp
     src/UI/UIDebugOverlay.cpp
+    src/UI/UIViewportPanel.cpp
     src/UI/ScrollView.cpp
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp

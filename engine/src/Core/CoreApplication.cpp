@@ -59,12 +59,13 @@ void CoreApplication::Run()
         float deltaTime = static_cast<float>(currentTime - lastTime);
         lastTime = currentTime;
 
-        InputManager::GetInstance().Update();
-
         if (auto* scene = SceneManager::GetInstance().GetActiveScene())
             scene->OnUpdate(deltaTime);
 
         OnUpdate(deltaTime);
+
+        InputManager::GetInstance().Update();
+
         OnRender();
     }
 
