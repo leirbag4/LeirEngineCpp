@@ -135,7 +135,7 @@ void UIDebugOverlay::Update(float deltaTime)
 
     if (m_LastEventFrames < 120)
         m_LastEventFrames++;
-    if (m_LastEventFrames < 2) {
+    if (m_LastEventFrames < 120) {
         m_LastEventLabel->SetText("Event: " + m_LastEvent);
     } else {
         m_LastEventLabel->SetText("Event: --");
