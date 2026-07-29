@@ -135,69 +135,20 @@ void UIRenderer::BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm
     m_QuadTextures.push_back(texture ? texture : m_FallbackTex);
 }
 
-void UIRenderer::Flush(VkCommandBuffer cmd)
+void UIRenderer::BuildBatchDebug(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color)
 {
-    if (m_Vertices.empty()) return;
+    float x0 = rect.x;
+    float y0 = rect.y;
+    float x1 = rect.x + rect.z;
+    float y1 = rect.y + rect.w;
+    float u0 = uv.x, v0 = uv.y, u1 = uv.x + uv.z, v1 = uv.y + uv.w;
 
-    VkDeviceSize vbSize = m_Vertices.size() * sizeof(UIVertex);
-    if ((int)m_Vertices.size() > m_MaxVertices) {
-        spdlog::warn("UIRenderer: overflow {} > {}", m_Vertices.size(), m_MaxVertices);
-        m_Vertices.clear();
-        m_QuadTextures.clear();
-        return;
-    }
+    m_DebugVertices.push_back({{x0, y0}, {u0, v0}, color});
+    m_DebugVertices.push_back({{x1, y0}, {u1, v0}, color});
+    m_DebugVertices.push_back({{x0, y1}, {u0, v1}, color});
+    m_DebugVertices.push_back({{x1, y1}, {u1, v1}, color});
 
-    void* data;
-    vkMapMemory(m_Device->GetDevice(), m_VertexMemory, 0, vbSize, 0, &data);
-    memcpy(data, m_Vertices.data(), (size_t)vbSize);
-    vkUnmapMemory(m_Device->GetDevice(), m_VertexMemory);
-
-    VkExtent2D extent = m_Device->GetSwapchainExtent();
-    glm::vec2 screenSize = {(float)extent.width, (float)extent.height};
-
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
-    VkBuffer vb[] = { m_VertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
-    vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2), &screenSize);
-
-    // Draw quad by quad for simplicity (no index buffer needed)
-    for (size_t qi = 0; qi < m_QuadTextures.size(); ++qi) {
-        Texture2D* tex = m_QuadTextures[qi];
-
-        auto it = m_DescCache.find(tex);
-        if (it == m_DescCache.end()) {
-            VkDescriptorSet newSet;
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = m_DescPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &m_DescSetLayout;
-            if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-                spdlog::error("UIRenderer: failed to allocate desc set");
-                continue;
-            }
-            VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = newSet;
-            write.dstBinding = 0;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            write.pImageInfo = &imgInfo;
-            vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-            m_DescCache[tex] = newSet;
-            it = m_DescCache.find(tex);
-        }
-
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_PipelineLayout, 0, 1, &it->second, 0, nullptr);
-
-        uint32_t vertOffset = (uint32_t)(qi * 4);
-        vkCmdDraw(cmd, 4, 1, vertOffset, 0);
-    }
-
-    FlushViewports(cmd);
+    m_DebugQuadTextures.push_back(texture ? texture : m_FallbackTex);
 }
 
 VkDescriptorSet UIRenderer::GetOrCreateVpDescSet(RenderTexture* rt)
@@ -229,25 +180,41 @@ VkDescriptorSet UIRenderer::GetOrCreateVpDescSet(RenderTexture* rt)
     return newSet;
 }
 
-void UIRenderer::FlushViewports(VkCommandBuffer cmd)
+void UIRenderer::Flush(VkCommandBuffer cmd)
 {
-    if (m_ViewportDraws.empty()) return;
+    size_t regCount = m_QuadTextures.size();
+    size_t vpCount = m_ViewportDraws.size();
+    size_t dbgCount = m_DebugQuadTextures.size();
 
-    VkDeviceSize totalVerts = m_Vertices.size() * sizeof(UIVertex);
-    VkDeviceSize vpVerts = m_ViewportDraws.size() * 4;
-    VkDeviceSize needed = totalVerts + vpVerts;
-    if (needed > (VkDeviceSize)m_MaxVertices * sizeof(UIVertex)) {
-        spdlog::warn("UIRenderer: viewport overflow");
+    size_t totalVerts = m_Vertices.size() + vpCount * 4 + m_DebugVertices.size();
+    if (totalVerts == 0) return;
+    if ((int)totalVerts > m_MaxVertices) {
+        spdlog::warn("UIRenderer: overflow");
+        m_Vertices.clear(); m_QuadTextures.clear();
         m_ViewportDraws.clear();
+        m_DebugVertices.clear(); m_DebugQuadTextures.clear();
         return;
     }
 
-    // Copy viewport vertices after regular vertices
+    VkDeviceSize regBytes = m_Vertices.size() * sizeof(UIVertex);
+    VkDeviceSize vpBytes = vpCount * 4 * sizeof(UIVertex);
+    VkDeviceSize dbgBytes = m_DebugVertices.size() * sizeof(UIVertex);
+    VkDeviceSize totalBytes = regBytes + vpBytes + dbgBytes;
+
     void* data;
-    vkMapMemory(m_Device->GetDevice(), m_VertexMemory, totalVerts, vpVerts, 0, &data);
-    for (size_t i = 0; i < m_ViewportDraws.size(); ++i) {
-        memcpy((char*)data + i * 4 * sizeof(UIVertex), m_ViewportDraws[i].verts, 4 * sizeof(UIVertex));
-    }
+    vkMapMemory(m_Device->GetDevice(), m_VertexMemory, 0, totalBytes, 0, &data);
+
+    // Layout: [regular UI] [viewport] [debug overlay]
+    if (!m_Vertices.empty())
+        memcpy(data, m_Vertices.data(), (size_t)regBytes);
+
+    for (size_t i = 0; i < vpCount; ++i)
+        memcpy((char*)data + regBytes + i * 4 * sizeof(UIVertex),
+               m_ViewportDraws[i].verts, 4 * sizeof(UIVertex));
+
+    if (!m_DebugVertices.empty())
+        memcpy((char*)data + regBytes + vpBytes, m_DebugVertices.data(), (size_t)dbgBytes);
+
     vkUnmapMemory(m_Device->GetDevice(), m_VertexMemory);
 
     VkExtent2D extent = m_Device->GetSwapchainExtent();
@@ -259,13 +226,79 @@ void UIRenderer::FlushViewports(VkCommandBuffer cmd)
     vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
     vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2), &screenSize);
 
-    for (size_t i = 0; i < m_ViewportDraws.size(); ++i) {
+    // 1. Regular UI (bottom layer)
+    for (size_t qi = 0; qi < regCount; ++qi) {
+        Texture2D* tex = m_QuadTextures[qi];
+        auto it = m_DescCache.find(tex);
+        if (it == m_DescCache.end()) {
+            VkDescriptorSet newSet;
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = m_DescPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &m_DescSetLayout;
+            if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
+                spdlog::error("UIRenderer: failed to allocate desc set");
+                continue;
+            }
+            VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = newSet;
+            write.dstBinding = 0;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            write.pImageInfo = &imgInfo;
+            vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+            m_DescCache[tex] = newSet;
+            it = m_DescCache.find(tex);
+        }
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_PipelineLayout, 0, 1, &it->second, 0, nullptr);
+        vkCmdDraw(cmd, 4, 1, (uint32_t)(qi * 4), 0);
+    }
+
+    // 2. Viewports (middle layer)
+    uint32_t vpBase = (uint32_t)(regCount * 4);
+    for (size_t i = 0; i < vpCount; ++i) {
         VkDescriptorSet ds = GetOrCreateVpDescSet(m_ViewportDraws[i].texture);
         if (ds == VK_NULL_HANDLE) continue;
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             m_PipelineLayout, 0, 1, &ds, 0, nullptr);
-        uint32_t vertOffset = (uint32_t)(m_Vertices.size() + i * 4);
-        vkCmdDraw(cmd, 4, 1, vertOffset, 0);
+        vkCmdDraw(cmd, 4, 1, vpBase + (uint32_t)(i * 4), 0);
+    }
+
+    // 3. Debug overlay (top layer)
+    uint32_t dbgBase = vpBase + (uint32_t)(vpCount * 4);
+    for (size_t qi = 0; qi < dbgCount; ++qi) {
+        Texture2D* tex = m_DebugQuadTextures[qi];
+        auto it = m_DescCache.find(tex);
+        if (it == m_DescCache.end()) {
+            VkDescriptorSet newSet;
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = m_DescPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &m_DescSetLayout;
+            if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
+                spdlog::error("UIRenderer: failed to allocate debug desc set");
+                continue;
+            }
+            VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = newSet;
+            write.dstBinding = 0;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            write.pImageInfo = &imgInfo;
+            vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+            m_DescCache[tex] = newSet;
+            it = m_DescCache.find(tex);
+        }
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_PipelineLayout, 0, 1, &it->second, 0, nullptr);
+        vkCmdDraw(cmd, 4, 1, dbgBase + (uint32_t)(qi * 4), 0);
     }
 }
 
@@ -274,6 +307,8 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
     m_Vertices.clear();
     m_QuadTextures.clear();
     m_ViewportDraws.clear();
+    m_DebugVertices.clear();
+    m_DebugQuadTextures.clear();
 
     if (!canvas || !canvas->IsActive()) return;
 
@@ -286,22 +321,27 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         if (!elem->IsActive()) continue;
         const auto& cr = elem->GetComputedRect();
 
+        bool isDebug = (elem->GetName().rfind("Debug", 0) == 0);
+
+        auto Batch = [&](Texture2D* t, const glm::vec4& r, const glm::vec4& u, const glm::vec4& c) {
+            if (isDebug) BuildBatchDebug(t, r, u, c);
+            else BuildBatch(t, r, u, c);
+        };
+
         if (auto* panel = dynamic_cast<UIPanel*>(elem)) {
-            BuildBatch(nullptr, cr, {0, 0, 1, 1}, panel->GetColor());
+            Batch(nullptr, cr, {0, 0, 1, 1}, panel->GetColor());
         } else if (auto* img = dynamic_cast<UIImage*>(elem)) {
             Texture2D* tex = img->GetTexture();
-            BuildBatch(tex, cr, {0, 0, 1, 1}, img->GetColor());
+            Batch(tex, cr, {0, 0, 1, 1}, img->GetColor());
         } else if (auto* btn = dynamic_cast<UIButton*>(elem)) {
-            // Background
             glm::vec4 bgColor;
             switch (btn->GetState()) {
                 case ButtonState::Normal:  bgColor = btn->GetBgNormal(); break;
                 case ButtonState::Hovered: bgColor = btn->GetBgHover(); break;
                 case ButtonState::Pressed: bgColor = btn->GetBgPressed(); break;
             }
-            BuildBatch(nullptr, cr, {0, 0, 1, 1}, bgColor);
+            Batch(nullptr, cr, {0, 0, 1, 1}, bgColor);
 
-            // Text
             if (btn->GetFont() && !btn->GetText().empty()) {
                 float lineH = btn->GetFont()->GetLineHeight();
                 float ascender = btn->GetFont()->GetAscender();
@@ -311,25 +351,22 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
                     glm::vec4 textRect = {cr.x + 6.0f + r.x, baselineY + r.y, r.z, r.w};
-                    BuildBatch(btn->GetFont()->GetAtlasTexture(), textRect, uv, btn->GetTextColor());
+                    Batch(btn->GetFont()->GetAtlasTexture(), textRect, uv, btn->GetTextColor());
                 }
             }
         } else if (auto* slider = dynamic_cast<UISlider*>(elem)) {
-            // Track background
-            BuildBatch(nullptr, cr, {0, 0, 1, 1}, {0.2f, 0.2f, 0.2f, 1.0f});
+            Batch(nullptr, cr, {0, 0, 1, 1}, {0.2f, 0.2f, 0.2f, 1.0f});
 
-            // Filled portion
             float handleT = slider->HandlePos();
             float fillW = cr.z * handleT;
             if (fillW > 0) {
                 glm::vec4 fillRect = {cr.x, cr.y, fillW, cr.w};
-                BuildBatch(nullptr, fillRect, {0, 0, 1, 1}, {0.4f, 0.6f, 1.0f, 1.0f});
+                Batch(nullptr, fillRect, {0, 0, 1, 1}, {0.4f, 0.6f, 1.0f, 1.0f});
             }
 
-            // Handle
             float hx = cr.x + cr.z * handleT - 4.0f;
             glm::vec4 handleRect = {hx, cr.y - 2.0f, 8.0f, cr.w + 4.0f};
-            BuildBatch(nullptr, handleRect, {0, 0, 1, 1}, slider->IsDragging()
+            Batch(nullptr, handleRect, {0, 0, 1, 1}, slider->IsDragging()
                 ? glm::vec4{1.0f, 1.0f, 1.0f, 1.0f}
                 : glm::vec4{0.8f, 0.8f, 0.8f, 1.0f});
         } else if (auto* vp = dynamic_cast<UIViewportPanel*>(elem)) {
@@ -349,14 +386,12 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                     glm::vec4 r = gq.rect;
                     r.x += cr.x;
                     r.y += cr.y;
-                    BuildBatch(label->GetFont()->GetAtlasTexture(), r, gq.uv, gq.color);
+                    Batch(label->GetFont()->GetAtlasTexture(), r, gq.uv, gq.color);
                 }
             }
         } else if (auto* input = dynamic_cast<UITextInput*>(elem)) {
-            // Background
-            BuildBatch(nullptr, cr, {0, 0, 1, 1}, {0.15f, 0.15f, 0.15f, 1.0f});
+            Batch(nullptr, cr, {0, 0, 1, 1}, {0.15f, 0.15f, 0.15f, 1.0f});
 
-            // Text
             if (input->GetFont()) {
                 std::string displayText = input->GetText().empty() ? input->GetPlaceholder() : input->GetText();
                 glm::vec4 textColor = input->GetText().empty()
@@ -371,7 +406,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
                     glm::vec4 textRect = {cr.x + 4.0f + r.x, baselineY + r.y, r.z, r.w};
-                    BuildBatch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+                    Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
                 }
             }
         }
@@ -379,13 +414,12 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         if (LeirSettings::Get().debug.ui_outlines) {
             static const glm::vec4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
             float t = 2.0f;
-            BuildBatch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
-            BuildBatch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
-            BuildBatch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
-            BuildBatch(nullptr, {cr.x + cr.z - t, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
+            Batch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
+            Batch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
+            Batch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
+            Batch(nullptr, {cr.x + cr.z - t, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
         }
 
-        // Children (depth-first: push children in reverse so first child is drawn first)
         for (auto it = elem->GetChildren().rbegin(); it != elem->GetChildren().rend(); ++it) {
             stack.push_back(*it);
         }

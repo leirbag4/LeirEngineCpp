@@ -32,8 +32,8 @@ public:
 
 private:
     void BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color);
+    void BuildBatchDebug(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color);
     void Flush(VkCommandBuffer cmd);
-    void FlushViewports(VkCommandBuffer cmd);
 
     VkDescriptorSet GetOrCreateVpDescSet(RenderTexture* rt);
 
@@ -54,6 +54,9 @@ private:
 
     std::vector<ViewportDraw> m_ViewportDraws;
     std::unordered_map<RenderTexture*, VkDescriptorSet> m_VpDescCache;
+
+    std::vector<UIVertex> m_DebugVertices;
+    std::vector<Texture2D*> m_DebugQuadTextures;
 };
 
 } // namespace Leir
