@@ -12,13 +12,14 @@ target_link_libraries(LeirEngineEditor
         LeirEngine
 )
 
-if(WIN32)
-    add_custom_command(TARGET LeirEngineEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:LeirEngine>"
-            "$<TARGET_FILE_DIR:LeirEngineEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:LeirEngineEditor>/assets"
-    )
-endif()
+add_custom_command(TARGET LeirEngineEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:LeirEngine>"
+        "$<TARGET_FILE_DIR:LeirEngineEditor>"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:LeirEngineEditor>/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/leir_settings.json"
+        "$<TARGET_FILE_DIR:LeirEngineEditor>/leir_settings.json"
+)

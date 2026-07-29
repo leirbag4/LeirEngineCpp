@@ -1,6 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
+#include "LeirEngine/Input/InputEvent.h"
 
 namespace Leir {
 
@@ -17,8 +18,12 @@ public:
 
     bool HitTest(const glm::vec2& screenPos, UIElement*& outElement);
 
-    // Input dispatch (call every frame)
-    void UpdatePointer(const glm::vec2& screenPos, bool pointerDown, bool pointerUp);
+    // Connect to EventQueue for automatic input dispatch
+    void ConnectToInputSystem();
+    void DisconnectFromInputSystem();
+
+    // Input dispatch
+    void ProcessPointerEvent(const PointerEvent& e);
     void SetFocus(UIElement* element);
     UIElement* GetFocus() const { return m_FocusElement; }
     void ClearFocus() { SetFocus(nullptr); }
@@ -32,6 +37,7 @@ private:
     UIElement* m_HoveredElement = nullptr;
 
     void HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElement*& out);
+    bool m_PointerDown = false;
 };
 
 } // namespace Leir

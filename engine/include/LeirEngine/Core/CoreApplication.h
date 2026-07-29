@@ -8,7 +8,7 @@ namespace Leir {
 
 class LEIR_API CoreApplication {
 public:
-    CoreApplication(const char* title, int width, int height);
+    CoreApplication(const char* title, int width, int height, bool fullscreen = false);
     virtual ~CoreApplication();
 
     void Run();

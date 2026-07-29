@@ -15,7 +15,7 @@
 #include <LeirEngine/Physics/PhysicsWorld.h>
 #include <LeirEngine/Physics/RigidBody.h>
 #include <LeirEngine/Physics/Collider.h>
-#include <LeirEngine/Input/InputManager.h>
+#include <LeirEngine/Input/Mouse.h>
 
 #include <spdlog/spdlog.h>
 
@@ -141,10 +141,8 @@ protected:
         if (!scene) return;
 
         // ---- Orbit Camera ----
-        auto& input = Leir::InputManager::GetInstance();
-
-        if (input.IsMouseButtonDown(Leir::MouseButton::Left)) {
-            glm::vec2 mouseDelta = input.GetMouseDelta();
+        if (Leir::Mouse::IsDown(Leir::PointerButton::Left)) {
+            glm::vec2 mouseDelta = Leir::Mouse::GetDelta();
             m_OrbitYaw += mouseDelta.x * 0.005f;
             m_OrbitPitch = glm::clamp(
                 m_OrbitPitch + mouseDelta.y * 0.005f,
@@ -153,7 +151,7 @@ protected:
         }
 
         m_OrbitDistance = glm::clamp(
-            m_OrbitDistance - input.GetScrollDelta() * 0.5f,
+            m_OrbitDistance - Leir::Mouse::GetScrollDelta() * 0.5f,
             3.0f, 30.0f
         );
 

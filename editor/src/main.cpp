@@ -1,4 +1,5 @@
 #include <LeirEngine/Core/CoreApplication.h>
+#include <LeirEngine/Core/Settings.h>
 #include <LeirEngine/Core/CoreObject.h>
 #include <vector>
 #include <LeirEngine/Objects/Object3D.h>
@@ -36,7 +37,10 @@
 class EditorApp : public Leir::CoreApplication {
 public:
     EditorApp()
-        : CoreApplication("LeirEngine Editor", 1280, 720)
+        : CoreApplication("LeirEngine Editor",
+              Leir::LeirSettings::Get().window.width,
+              Leir::LeirSettings::Get().window.height,
+              Leir::LeirSettings::Get().window.fullscreen)
     {
     }
 
@@ -166,6 +170,7 @@ protected:
         // Create canvas
         m_Canvas = std::make_unique<Leir::UICanvas>();
         m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
+        m_Canvas->ConnectToInputSystem();
 
         // Title
         auto* title = new Leir::UILabel();
@@ -322,6 +327,8 @@ private:
 int main()
 {
     spdlog::set_level(spdlog::level::trace);
+
+    Leir::LeirSettings::Get().Load();
 
     EditorApp app;
     app.Run();

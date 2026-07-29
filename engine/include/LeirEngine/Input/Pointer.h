@@ -1,0 +1,25 @@
+#pragma once
+#include "LeirEngine/Input/PointerButton.h"
+#include "LeirEngine/Input/InputEvent.h"
+#include "LeirEngine/Core/Export.h"
+#include <glm/glm.hpp>
+
+namespace Leir {
+
+struct LEIR_API Pointer {
+    static bool IsDown(PointerButton btn = PointerButton::Primary);
+    static bool AreDown(PointerButton btns);
+    static bool IsUp(PointerButton btn = PointerButton::Primary);
+    static bool WasPressed(PointerButton btn = PointerButton::Primary);
+    static bool WasReleased(PointerButton btn = PointerButton::Primary);
+
+    static float GetX();
+    static float GetY();
+    static glm::vec2 GetPos();
+    static glm::vec2 GetDelta();
+
+    static void ProcessEvent(const PointerEvent& e);
+    static void ResetFrame();
+};
+
+} // namespace Leir

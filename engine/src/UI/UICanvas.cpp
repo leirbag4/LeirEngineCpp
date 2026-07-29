@@ -1,4 +1,5 @@
 #include "LeirEngine/UI/UICanvas.h"
+#include "LeirEngine/Input/EventQueue.h"
 #include <spdlog/spdlog.h>
 
 namespace Leir {
@@ -10,7 +11,33 @@ UICanvas::UICanvas()
     m_Rect.offset = {};
 }
 
-UICanvas::~UICanvas() = default;
+UICanvas::~UICanvas()
+{
+    DisconnectFromInputSystem();
+}
+
+void UICanvas::ConnectToInputSystem()
+{
+    auto& eq = EventQueue::Get();
+
+    eq.SetPointerHook([this](const PointerEvent& e) {
+        ProcessPointerEvent(e);
+    });
+
+    eq.SetCharHook([this](const CharEvent& e) {
+        SendTextInput(e.codepoint);
+    });
+
+    eq.SetKeyHook([this](const KeyEvent& e) {
+        if (e.action == EventAction::Press || e.action == EventAction::Repeat)
+            SendKeyDown(static_cast<int>(e.key));
+    });
+}
+
+void UICanvas::DisconnectFromInputSystem()
+{
+    EventQueue::Get().ClearHooks();
+}
 
 void UICanvas::SetScreenSize(float width, float height)
 {
@@ -39,7 +66,6 @@ void UICanvas::HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElem
     bool inside = pos.x >= r.x && pos.x <= r.x + r.z &&
                   pos.y >= r.y && pos.y <= r.y + r.w;
 
-    // Check children first (front-to-back: reverse order)
     const auto& children = element->GetChildren();
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
         HitTestRecursive(*it, pos, out);
@@ -50,10 +76,12 @@ void UICanvas::HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElem
         out = element;
 }
 
-void UICanvas::UpdatePointer(const glm::vec2& screenPos, bool pointerDown, bool pointerUp)
+void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 {
+    glm::vec2 pos = e.position;
+
     UIElement* hit = nullptr;
-    HitTest(screenPos, hit);
+    HitTest(pos, hit);
 
     // Hover tracking
     if (hit != m_HoveredElement) {
@@ -64,26 +92,28 @@ void UICanvas::UpdatePointer(const glm::vec2& screenPos, bool pointerDown, bool 
         m_HoveredElement = hit;
         if (m_HoveredElement) {
             m_HoveredElement->SetHovered(true);
-            m_HoveredElement->OnPointerEnter(screenPos);
+            m_HoveredElement->OnPointerEnter(pos);
         }
     }
 
     if (m_HoveredElement) {
-        m_HoveredElement->OnPointerMove(screenPos);
+        m_HoveredElement->OnPointerMove(pos);
     }
 
-    if (pointerDown) {
+    if (e.action == EventAction::Press) {
+        m_PointerDown = true;
         if (hit) {
-            hit->OnPointerDown(screenPos);
+            hit->OnPointerDown(pos);
             SetFocus(hit);
         } else {
             ClearFocus();
         }
     }
 
-    if (pointerUp) {
+    if (e.action == EventAction::Release) {
+        m_PointerDown = false;
         if (hit)
-            hit->OnPointerUp(screenPos);
+            hit->OnPointerUp(pos);
     }
 }
 

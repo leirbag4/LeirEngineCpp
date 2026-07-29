@@ -1,5 +1,6 @@
 add_library(LeirEngine SHARED
     src/Core/CoreApplication.cpp
+    src/Core/Settings.cpp
     src/Core/CoreObject.cpp
     src/Core/Component.cpp
     src/Core/Transform.cpp
@@ -9,6 +10,11 @@ add_library(LeirEngine SHARED
     src/Objects/Object3D.cpp
     src/Objects/Object2D.cpp
     src/Input/InputManager.cpp
+    src/Input/EventQueue.cpp
+    src/Input/Keyboard.cpp
+    src/Input/Mouse.cpp
+    src/Input/Touch.cpp
+    src/Input/Pointer.cpp
     src/Rendering/VulkanDevice.cpp
     src/Rendering/Shader.cpp
     src/Rendering/Image.cpp

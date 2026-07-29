@@ -1,4 +1,9 @@
 #include "LeirEngine/Input/InputManager.h"
+#include "LeirEngine/Input/EventQueue.h"
+#include "LeirEngine/Input/Keyboard.h"
+#include "LeirEngine/Input/Mouse.h"
+#include "LeirEngine/Input/Touch.h"
+#include "LeirEngine/Input/Pointer.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -14,118 +19,114 @@ InputManager& InputManager::GetInstance()
 void InputManager::Init(GLFWwindow* window)
 {
     m_Window = window;
+
+    double x, y;
+    glfwGetCursorPos(window, &x, &y);
+    m_LastMousePos = { static_cast<float>(x), static_cast<float>(y) };
+
     glfwSetKeyCallback(window, KeyCallback);
+    glfwSetCharCallback(window, CharCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
+    glfwSetCursorPosCallback(window, CursorPosCallback);
     glfwSetScrollCallback(window, ScrollCallback);
 }
 
 void InputManager::Shutdown()
 {
     m_Window = nullptr;
-    m_CurrentKeys.clear();
-    m_PreviousKeys.clear();
-    m_CurrentMouse.clear();
-    m_PreviousMouse.clear();
 }
 
 void InputManager::Update()
 {
-    m_PreviousKeys = m_CurrentKeys;
-    m_PreviousMouse = m_CurrentMouse;
-
-    double x, y;
-    glfwGetCursorPos(m_Window, &x, &y);
-    glm::vec2 newPos{static_cast<float>(x), static_cast<float>(y)};
-    m_MouseDelta = newPos - m_MousePosition;
-    m_MousePosition = newPos;
-
-    m_ScrollDelta = 0.0f;
+    // Reset frame state for all polling classes
+    Keyboard::ResetFrame();
+    Mouse::ResetFrame();
+    Touch::ResetFrame();
+    Pointer::ResetFrame();
 }
-
-bool InputManager::IsKeyDown(KeyCode key) const
-{
-    auto it = m_CurrentKeys.find(static_cast<int32_t>(key));
-    return it != m_CurrentKeys.end() && it->second;
-}
-
-bool InputManager::IsKeyPressed(KeyCode key) const
-{
-    int32_t k = static_cast<int32_t>(key);
-    auto cur = m_CurrentKeys.find(k);
-    auto prev = m_PreviousKeys.find(k);
-    bool curDown = cur != m_CurrentKeys.end() && cur->second;
-    bool prevDown = prev != m_PreviousKeys.end() && prev->second;
-    return curDown && !prevDown;
-}
-
-bool InputManager::IsKeyReleased(KeyCode key) const
-{
-    int32_t k = static_cast<int32_t>(key);
-    auto cur = m_CurrentKeys.find(k);
-    auto prev = m_PreviousKeys.find(k);
-    bool curDown = cur != m_CurrentKeys.end() && cur->second;
-    bool prevDown = prev != m_PreviousKeys.end() && prev->second;
-    return !curDown && prevDown;
-}
-
-bool InputManager::IsMouseButtonDown(MouseButton button) const
-{
-    auto it = m_CurrentMouse.find(static_cast<int32_t>(button));
-    return it != m_CurrentMouse.end() && it->second;
-}
-
-bool InputManager::IsMouseButtonPressed(MouseButton button) const
-{
-    int32_t b = static_cast<int32_t>(button);
-    auto cur = m_CurrentMouse.find(b);
-    auto prev = m_PreviousMouse.find(b);
-    bool curDown = cur != m_CurrentMouse.end() && cur->second;
-    bool prevDown = prev != m_PreviousMouse.end() && prev->second;
-    return curDown && !prevDown;
-}
-
-bool InputManager::IsMouseButtonReleased(MouseButton button) const
-{
-    int32_t b = static_cast<int32_t>(button);
-    auto cur = m_CurrentMouse.find(b);
-    auto prev = m_PreviousMouse.find(b);
-    bool curDown = cur != m_CurrentMouse.end() && cur->second;
-    bool prevDown = prev != m_PreviousMouse.end() && prev->second;
-    return !curDown && prevDown;
-}
-
-glm::vec2 InputManager::GetMousePosition() const { return m_MousePosition; }
-glm::vec2 InputManager::GetMouseDelta() const { return m_MouseDelta; }
-float InputManager::GetScrollDelta() const { return m_ScrollDelta; }
 
 // --- Callbacks ---
 
 void InputManager::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    (void)scancode;
-    (void)mods;
-    auto& inst = GetInstance();
-    if (action == GLFW_PRESS)
-        inst.m_CurrentKeys[key] = true;
-    else if (action == GLFW_RELEASE)
-        inst.m_CurrentKeys[key] = false;
+    (void)window;
+    EventAction evAction = EventAction::Press;
+    if (action == GLFW_RELEASE) evAction = EventAction::Release;
+    else if (action == GLFW_REPEAT) evAction = EventAction::Repeat;
+
+    KeyEvent e;
+    e.key = static_cast<Key>(key);
+    e.scancode = scancode;
+    e.action = evAction;
+    e.mods = mods;
+
+    EventQueue::Get().Push(e);
+}
+
+void InputManager::CharCallback(GLFWwindow* window, unsigned int codepoint)
+{
+    (void)window;
+    CharEvent e;
+    e.codepoint = codepoint;
+    EventQueue::Get().Push(e);
 }
 
 void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+    (void)window;
     (void)mods;
+
+    PointerButton btn = PointerButton::None;
+    switch (button) {
+        case GLFW_MOUSE_BUTTON_LEFT:   btn = PointerButton::Left;   break;
+        case GLFW_MOUSE_BUTTON_RIGHT:  btn = PointerButton::Right;  break;
+        case GLFW_MOUSE_BUTTON_MIDDLE: btn = PointerButton::Middle; break;
+        case GLFW_MOUSE_BUTTON_4:      btn = PointerButton::Extra1; break;
+        case GLFW_MOUSE_BUTTON_5:      btn = PointerButton::Extra2; break;
+        default: return;
+    }
+
     auto& inst = GetInstance();
-    if (action == GLFW_PRESS)
-        inst.m_CurrentMouse[button] = true;
-    else if (action == GLFW_RELEASE)
-        inst.m_CurrentMouse[button] = false;
+    double x, y;
+    glfwGetCursorPos(inst.m_Window, &x, &y);
+
+    PointerEvent e;
+    e.source = PointerSource::Mouse;
+    e.pointerId = 0;
+    e.position = { static_cast<float>(x), static_cast<float>(y) };
+    e.delta = e.position - inst.m_LastMousePos;
+    e.button = btn;
+    e.action = (action == GLFW_PRESS) ? EventAction::Press : EventAction::Release;
+    e.pressure = 1.0f;
+
+    EventQueue::Get().Push(e);
+}
+
+void InputManager::CursorPosCallback(GLFWwindow* window, double x, double y)
+{
+    auto& inst = GetInstance();
+    glm::vec2 newPos{ static_cast<float>(x), static_cast<float>(y) };
+
+    PointerEvent e;
+    e.source = PointerSource::Mouse;
+    e.pointerId = 0;
+    e.position = newPos;
+    e.delta = newPos - inst.m_LastMousePos;
+    e.button = PointerButton::None;
+    e.action = EventAction::Move;
+    e.pressure = 1.0f;
+
+    inst.m_LastMousePos = newPos;
+    EventQueue::Get().Push(e);
 }
 
 void InputManager::ScrollCallback(GLFWwindow* window, double xOffset, double yOffset)
 {
-    (void)xOffset;
-    auto& inst = GetInstance();
-    inst.m_ScrollDelta = static_cast<float>(yOffset);
+    (void)window;
+
+    ScrollEvent e;
+    e.offset = { static_cast<float>(xOffset), static_cast<float>(yOffset) };
+    EventQueue::Get().Push(e);
 }
 
 } // namespace Leir

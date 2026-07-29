@@ -1,5 +1,6 @@
 #include "LeirEngine/Core/CoreApplication.h"
 #include "LeirEngine/Input/InputManager.h"
+#include "LeirEngine/Input/EventQueue.h"
 #include "LeirEngine/Scene/SceneManager.h"
 
 #define GLFW_INCLUDE_VULKAN
@@ -10,7 +11,7 @@
 
 namespace Leir {
 
-CoreApplication::CoreApplication(const char* title, int width, int height)
+CoreApplication::CoreApplication(const char* title, int width, int height, bool fullscreen)
     : m_Width(width)
     , m_Height(height)
 {
@@ -22,7 +23,8 @@ CoreApplication::CoreApplication(const char* title, int width, int height)
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    m_Window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+    GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+    m_Window = glfwCreateWindow(width, height, title, monitor, nullptr);
     if (!m_Window) {
         spdlog::critical("Failed to create GLFW window");
         glfwTerminate();
@@ -50,6 +52,8 @@ void CoreApplication::Run()
     double lastTime = glfwGetTime();
     while (m_Running && !glfwWindowShouldClose(m_Window)) {
         glfwPollEvents();
+
+        EventQueue::Get().Process();
 
         double currentTime = glfwGetTime();
         float deltaTime = static_cast<float>(currentTime - lastTime);
