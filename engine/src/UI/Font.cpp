@@ -5,6 +5,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
+#include <cstdio>
 #include <spdlog/spdlog.h>
 
 namespace Leir {
@@ -12,8 +13,8 @@ namespace Leir {
 Font::Font(VulkanDevice* device, const std::string& ttfPath, int fontSize)
     : m_Device(device), m_FontSize(fontSize)
 {
-    FILE* f = nullptr;
-    if (fopen_s(&f, ttfPath.c_str(), "rb") != 0 || !f) {
+    FILE* f = fopen(ttfPath.c_str(), "rb");
+    if (!f) {
         spdlog::error("Font: failed to open {}", ttfPath);
         m_LineHeight = (float)fontSize;
         m_Ascender = (float)fontSize;
