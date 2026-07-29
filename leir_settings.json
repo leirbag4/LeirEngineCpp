@@ -6,6 +6,7 @@
         "vsync": true
     },
     "debug": {
-        "ui_outlines": true
+        "ui_outlines": true,
+        "show_overlay": true
     }
 }

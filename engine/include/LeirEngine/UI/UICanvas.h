@@ -30,6 +30,8 @@ public:
     void SendTextInput(uint32_t codepoint);
     void SendKeyDown(int key);
 
+    UIElement* GetHoveredElement() const { return m_HoveredElement; }
+
 private:
     float m_ScreenWidth = 1280.0f;
     float m_ScreenHeight = 720.0f;

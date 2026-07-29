@@ -20,6 +20,7 @@ public:
 
     struct {
         bool ui_outlines = false;
+        bool show_overlay = true;
     } debug;
 
 private:

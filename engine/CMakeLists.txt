@@ -37,6 +37,7 @@ add_library(LeirEngine SHARED
     src/UI/UIRenderer.cpp
     src/UI/UITextInput.cpp
     src/UI/UISlider.cpp
+    src/UI/UIDebugOverlay.cpp
     src/UI/ScrollView.cpp
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp

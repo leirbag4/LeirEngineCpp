@@ -29,6 +29,7 @@
 #include <LeirEngine/UI/ScrollView.h>
 #include <LeirEngine/UI/Font.h>
 #include <LeirEngine/UI/UIRenderer.h>
+#include <LeirEngine/UI/UIDebugOverlay.h>
 
 #include <spdlog/spdlog.h>
 
@@ -256,13 +257,13 @@ protected:
 
         m_Canvas->UpdateLayout();
 
+        m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
+
         spdlog::info("Scene hierarchy created with Vulkan renderer + UI");
     }
 
     void OnUpdate(float deltaTime) override
     {
-        (void)deltaTime;
-
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (scene) {
             auto* cube = scene->FindObjectByName("Cube");
@@ -278,6 +279,9 @@ protected:
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
             m_Canvas->UpdateLayout();
         }
+
+        if (m_DebugOverlay)
+            m_DebugOverlay->Update(deltaTime);
     }
 
     void OnRender() override
@@ -322,6 +326,7 @@ private:
     std::unique_ptr<Leir::UICanvas> m_Canvas;
     std::unique_ptr<Leir::Font> m_Font;
     std::unique_ptr<Leir::Font> m_FontTitle;
+    std::unique_ptr<Leir::UIDebugOverlay> m_DebugOverlay;
 };
 
 int main()
