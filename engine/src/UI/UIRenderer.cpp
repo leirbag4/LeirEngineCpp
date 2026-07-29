@@ -225,11 +225,14 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
 
             // Text
             if (btn->GetFont() && !btn->GetText().empty()) {
+                float lineH = btn->GetFont()->GetLineHeight();
+                float ascender = btn->GetFont()->GetAscender();
+                float baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
                 auto rawQuads = btn->GetFont()->LayoutText(btn->GetText(), cr.z - 12.0f);
                 for (size_t i = 0; i < rawQuads.size(); i += 2) {
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
-                    glm::vec4 textRect = {cr.x + 6.0f + r.x, cr.y + 5.0f + r.y, r.z, r.w};
+                    glm::vec4 textRect = {cr.x + 6.0f + r.x, baselineY + r.y, r.z, r.w};
                     BuildBatch(btn->GetFont()->GetAtlasTexture(), textRect, uv, btn->GetTextColor());
                 }
             }
@@ -268,11 +271,14 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                     ? glm::vec4{0.5f, 0.5f, 0.5f, 1.0f}
                     : glm::vec4{1.0f, 1.0f, 1.0f, 1.0f};
 
+                float lineH = input->GetFont()->GetLineHeight();
+                float ascender = input->GetFont()->GetAscender();
+                float baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
                 auto rawQuads = input->GetFont()->LayoutText(displayText, cr.z - 8.0f);
                 for (size_t i = 0; i < rawQuads.size(); i += 2) {
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
-                    glm::vec4 textRect = {cr.x + 4.0f + r.x, cr.y + 4.0f + r.y, r.z, r.w};
+                    glm::vec4 textRect = {cr.x + 4.0f + r.x, baselineY + r.y, r.z, r.w};
                     BuildBatch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
                 }
             }

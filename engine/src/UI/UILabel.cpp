@@ -60,7 +60,7 @@ void UILabel::Rebuild()
         alignX = contentW - blockW;
 
     float offsetX = cr.x + alignX;
-    float offsetY = cr.y;
+    float offsetY = cr.y + (m_Font ? m_Font->GetAscender() : 0.0f);
 
     for (size_t i = 0; i < rawQuads.size(); i += 2) {
         const auto& rect = rawQuads[i];
