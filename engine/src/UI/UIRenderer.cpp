@@ -13,6 +13,7 @@
 #include "LeirEngine/Rendering/Image.h"
 
 #include <spdlog/spdlog.h>
+#include <fstream>
 
 namespace Leir {
 
@@ -287,9 +288,38 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             }
         }
 
+        // Debug: draw outline around every element
+        static const glm::vec4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
+        float t = 2.0f;
+        BuildBatch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
+        BuildBatch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
+        BuildBatch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
+        BuildBatch(nullptr, {cr.x + cr.z - t, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
+
         // Children (depth-first: push children in reverse so first child is drawn first)
         for (auto it = elem->GetChildren().rbegin(); it != elem->GetChildren().rend(); ++it) {
             stack.push_back(*it);
+        }
+    }
+
+    // First frame: write element positions to file
+    static bool firstFrame = true;
+    if (firstFrame) {
+        firstFrame = false;
+        std::ofstream log("ui_debug.log");
+        if (log.is_open()) {
+            std::vector<UIElement*> logStack = { canvas };
+            while (!logStack.empty()) {
+                UIElement* elem = logStack.back();
+                logStack.pop_back();
+                if (!elem->IsActive()) continue;
+                const auto& cr = elem->GetComputedRect();
+                log << elem->GetName() << ": cr=("
+                    << cr.x << "," << cr.y << "," << cr.z << "," << cr.w << ")\n";
+                for (auto it = elem->GetChildren().rbegin(); it != elem->GetChildren().rend(); ++it)
+                    logStack.push_back(*it);
+            }
+            log.close();
         }
     }
 
