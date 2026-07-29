@@ -145,13 +145,13 @@ protected:
         // Try loading a system font
         std::string fontPath;
         FILE* testFont = nullptr;
-        if (fopen_s(&testFont, "C:/Windows/Fonts/Arial.ttf", "rb") == 0 && testFont) {
+        if ((testFont = fopen("C:/Windows/Fonts/Arial.ttf", "rb")) != nullptr) {
             fclose(testFont);
             fontPath = "C:/Windows/Fonts/Arial.ttf";
-        } else if (fopen_s(&testFont, "C:/Windows/Fonts/segoeui.ttf", "rb") == 0 && testFont) {
+        } else if ((testFont = fopen("C:/Windows/Fonts/segoeui.ttf", "rb")) != nullptr) {
             fclose(testFont);
             fontPath = "C:/Windows/Fonts/segoeui.ttf";
-        } else if (fopen_s(&testFont, "C:/Windows/Fonts/consola.ttf", "rb") == 0 && testFont) {
+        } else if ((testFont = fopen("C:/Windows/Fonts/consola.ttf", "rb")) != nullptr) {
             fclose(testFont);
             fontPath = "C:/Windows/Fonts/consola.ttf";
         } else {
