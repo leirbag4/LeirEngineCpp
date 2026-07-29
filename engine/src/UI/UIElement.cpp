@@ -1,4 +1,5 @@
 #include "LeirEngine/UI/UIElement.h"
+#include <algorithm>
 
 namespace Leir {
 

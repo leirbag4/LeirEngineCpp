@@ -261,7 +261,10 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         } else if (auto* label = dynamic_cast<UILabel*>(elem)) {
             if (label->GetFont() && label->GetFont()->GetAtlasTexture()) {
                 for (const auto& gq : label->GetGlyphQuads()) {
-                    BuildBatch(label->GetFont()->GetAtlasTexture(), gq.rect, gq.uv, gq.color);
+                    glm::vec4 r = gq.rect;
+                    r.x += cr.x;
+                    r.y += cr.y;
+                    BuildBatch(label->GetFont()->GetAtlasTexture(), r, gq.uv, gq.color);
                 }
             }
         } else if (auto* input = dynamic_cast<UITextInput*>(elem)) {

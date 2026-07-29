@@ -36,7 +36,6 @@ void UILabel::Rebuild()
 
     const auto& cr = GetComputedRect();
     float contentW = cr.z;
-    float contentH = cr.w;
 
     auto rawQuads = m_Font->LayoutText(m_Text, m_WordWrap ? contentW : 0.0f);
 
@@ -59,8 +58,8 @@ void UILabel::Rebuild()
     else if (m_Alignment == Alignment::Right)
         alignX = contentW - blockW;
 
-    float offsetX = cr.x + alignX;
-    float offsetY = cr.y + (m_Font ? m_Font->GetAscender() : 0.0f);
+    float offsetX = alignX;
+    float offsetY = (m_Font ? m_Font->GetAscender() : 0.0f);
 
     for (size_t i = 0; i < rawQuads.size(); i += 2) {
         const auto& rect = rawQuads[i];
