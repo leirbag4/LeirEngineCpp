@@ -34,7 +34,7 @@ void UITextInput::OnPointerExit()
 
 bool UITextInput::OnPointerDown(const Vector2& pos)
 {
-    spdlog::trace("[TextInput '{}'] OnPointerDown", GetName().c_str());
+    spdlog::trace("[TextInput '{}'] OnPointerDown frame={}", GetName().c_str(), m_FrameCounter);
     ResetCaretBlink();
     if (m_Font) {
         const auto& cr = GetComputedRect();
@@ -45,7 +45,20 @@ bool UITextInput::OnPointerDown(const Vector2& pos)
     } else {
         m_CursorPos = (int)m_Text.size();
     }
+
+    // Double-click detection: two clicks within ~30 frames at nearby position
     bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
+    int framesSinceLast = m_FrameCounter - m_LastClickFrame;
+    if (framesSinceLast < 0) framesSinceLast += 60;
+    bool doubleClick = !shift && m_LastClickPos >= 0 && framesSinceLast < 30;
+    m_LastClickFrame = m_FrameCounter;
+    m_LastClickPos = m_CursorPos;
+
+    if (doubleClick) {
+        SelectWordAt(m_CursorPos);
+        m_Dragging = false;
+        return true;
+    }
     if (shift) {
         if (m_SelectionStart < 0)
             m_SelectionStart = m_CursorPos;
@@ -120,17 +133,31 @@ bool UITextInput::OnKeyDown(int key)
         return true;
     }
     if (key == static_cast<int>(Key::Left)) {
-        if (!shift) ClearSelection();
-        else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
-        if (m_CursorPos > 0)
-            m_CursorPos--;
+        if (ctrl) {
+            int b = FindPrevWordBoundary(m_CursorPos);
+            if (shift && m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+            if (!shift) ClearSelection();
+            m_CursorPos = b;
+        } else {
+            if (!shift) ClearSelection();
+            else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+            if (m_CursorPos > 0)
+                m_CursorPos--;
+        }
         return true;
     }
     if (key == static_cast<int>(Key::Right)) {
-        if (!shift) ClearSelection();
-        else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
-        if (m_CursorPos < (int)m_Text.size())
-            m_CursorPos++;
+        if (ctrl) {
+            int b = FindNextWordBoundary(m_CursorPos);
+            if (shift && m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+            if (!shift) ClearSelection();
+            m_CursorPos = b;
+        } else {
+            if (!shift) ClearSelection();
+            else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+            if (m_CursorPos < (int)m_Text.size())
+                m_CursorPos++;
+        }
         return true;
     }
     if (key == static_cast<int>(Key::Home)) {
@@ -273,6 +300,60 @@ int UITextInput::GetCharIndexAtX(float localX) const
 void UITextInput::UpdateCursorPos()
 {
     m_CursorPos = (int)m_Text.size();
+}
+
+int UITextInput::ClassifyChar(char c)
+{
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') return 0;
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_') return 1;
+    return 2;
+}
+
+void UITextInput::SelectWordAt(int pos)
+{
+    if (pos <= 0 || pos > (int)m_Text.size()) return;
+    char c = m_Text[pos - 1];
+    int cls = ClassifyChar(c);
+    if (cls == 0) return;
+
+    int start = pos - 1;
+    while (start > 0 && ClassifyChar(m_Text[start - 1]) == cls)
+        start--;
+
+    int end = pos;
+    while (end < (int)m_Text.size() && ClassifyChar(m_Text[end]) == cls)
+        end++;
+
+    m_SelectionStart = start;
+    m_CursorPos = end;
+}
+
+int UITextInput::FindPrevWordBoundary(int from) const
+{
+    if (from <= 0) return 0;
+    int i = from - 1;
+    while (i >= 0 && ClassifyChar(m_Text[i]) == 0)
+        i--;
+    if (i < 0) return 0;
+    int cls = ClassifyChar(m_Text[i]);
+    while (i >= 0 && ClassifyChar(m_Text[i]) == cls)
+        i--;
+    return i + 1;
+}
+
+int UITextInput::FindNextWordBoundary(int from) const
+{
+    if (from >= (int)m_Text.size()) return (int)m_Text.size();
+    int i = from;
+    if (i < (int)m_Text.size() && ClassifyChar(m_Text[i]) != 0) {
+        int cls = ClassifyChar(m_Text[i]);
+        while (i < (int)m_Text.size() && ClassifyChar(m_Text[i]) == cls)
+            i++;
+    }
+    while (i < (int)m_Text.size() && ClassifyChar(m_Text[i]) == 0)
+        i++;
+    return i;
 }
 
 } // namespace Leir

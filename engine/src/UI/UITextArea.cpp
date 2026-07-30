@@ -205,8 +205,22 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
         m_CursorPos = (int)m_Text.size();
     }
 
-    bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
-    if (shift) {
+    // Double-click detection
+    int framesSinceLast = m_FrameCounter - m_LastClickFrame;
+    if (framesSinceLast < 0) framesSinceLast += 60;
+    bool noShift = !Keyboard::IsDown(Key::LeftShift) && !Keyboard::IsDown(Key::RightShift);
+    bool doubleClick = noShift && m_LastClickPos >= 0 && framesSinceLast < 30;
+    m_LastClickFrame = m_FrameCounter;
+    m_LastClickPos = m_CursorPos;
+
+    if (doubleClick) {
+        SelectWordAt(m_CursorPos);
+        m_Dragging = false;
+        return true;
+    }
+
+    bool shiftDown = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
+    if (shiftDown) {
         if (m_SelectionStart < 0)
             m_SelectionStart = m_CursorPos;
     } else {

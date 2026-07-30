@@ -37,7 +37,7 @@ public:
     int GetSelEnd() const { return m_SelectionStart > m_CursorPos ? m_SelectionStart : m_CursorPos; }
     bool IsCaretVisible() const { return m_Focused && (m_CaretCounter / 30) % 2 == 0; }
     void ResetCaretBlink() { m_CaretCounter = 0; }
-    void TickCaret() { m_CaretCounter = (m_CaretCounter + 1) % 60; }
+    void TickCaret() { m_CaretCounter = (m_CaretCounter + 1) % 60; m_FrameCounter++; }
 
     Vector2 GetMinSize() const override;
 
@@ -59,6 +59,9 @@ protected:
     void DeleteSelection();
     void ClearSelection() { m_SelectionStart = -1; }
     void CaptureDragPointer();
+    void SelectWordAt(int pos);
+    int FindPrevWordBoundary(int from) const;
+    int FindNextWordBoundary(int from) const;
 
     std::string m_Text;
     Font* m_Font = nullptr;
@@ -68,11 +71,16 @@ protected:
     bool m_Focused = false;
     bool m_Hovered = false;
     bool m_Dragging = false;
+    int m_CaretCounter = 0;
+    int m_FrameCounter = 0;
+    int m_LastClickFrame = -30;
+    int m_LastClickPos = -1;
 
 private:
+    static int ClassifyChar(char c);
+
     std::string m_Placeholder;
     Vector4 m_TextColor = {1.0f, 1.0f, 1.0f, 1.0f};
-    int m_CaretCounter = 0;
 };
 
 } // namespace Leir
