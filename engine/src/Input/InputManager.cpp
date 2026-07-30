@@ -105,7 +105,7 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
 void InputManager::CursorPosCallback(GLFWwindow* window, double x, double y)
 {
     auto& inst = GetInstance();
-    glm::vec2 newPos{ static_cast<float>(x), static_cast<float>(y) };
+    Vector2 newPos{ static_cast<float>(x), static_cast<float>(y) };
 
     PointerEvent e;
     e.source = PointerSource::Mouse;

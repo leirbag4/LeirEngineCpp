@@ -59,39 +59,39 @@ void RigidBody::SetType(RigidBodyType type) {
 
 // ---- Velocity ----
 
-void RigidBody::SetLinearVelocity(const glm::vec3& velocity) {
+void RigidBody::SetLinearVelocity(const Vector3& velocity) {
     if (!HasBody()) return;
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     bodyInterface.SetLinearVelocity(JPH::BodyID(m_BodyID), PhysicsConv::ToJolt(velocity));
 }
 
-glm::vec3 RigidBody::GetLinearVelocity() const {
-    if (!HasBody()) return glm::vec3(0.0f);
+Vector3 RigidBody::GetLinearVelocity() const {
+    if (!HasBody()) return Vector3::Zero();
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     return PhysicsConv::ToGLM(bodyInterface.GetLinearVelocity(JPH::BodyID(m_BodyID)));
 }
 
-void RigidBody::SetAngularVelocity(const glm::vec3& velocity) {
+void RigidBody::SetAngularVelocity(const Vector3& velocity) {
     if (!HasBody()) return;
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     bodyInterface.SetAngularVelocity(JPH::BodyID(m_BodyID), PhysicsConv::ToJolt(velocity));
 }
 
-glm::vec3 RigidBody::GetAngularVelocity() const {
-    if (!HasBody()) return glm::vec3(0.0f);
+Vector3 RigidBody::GetAngularVelocity() const {
+    if (!HasBody()) return Vector3::Zero();
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     return PhysicsConv::ToGLM(bodyInterface.GetAngularVelocity(JPH::BodyID(m_BodyID)));
 }
 
 // ---- Forces ----
 
-void RigidBody::AddForce(const glm::vec3& force) {
+void RigidBody::AddForce(const Vector3& force) {
     if (!HasBody()) return;
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     bodyInterface.AddForce(JPH::BodyID(m_BodyID), PhysicsConv::ToJolt(force));
 }
 
-void RigidBody::AddTorque(const glm::vec3& torque) {
+void RigidBody::AddTorque(const Vector3& torque) {
     if (!HasBody()) return;
     auto& bodyInterface = PhysicsWorld::GetInstance().GetBodyInterface();
     bodyInterface.AddTorque(JPH::BodyID(m_BodyID), PhysicsConv::ToJolt(torque));

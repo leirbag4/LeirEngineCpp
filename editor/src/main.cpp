@@ -39,10 +39,6 @@
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/quaternion.hpp>
-
 #include <spdlog/spdlog.h>
 
 #include <memory>
@@ -115,7 +111,7 @@ protected:
         auto* lightObj = scene.CreateObject3D("Light");
         lightObj->GetTransform().SetLocalPosition({2.0f, 4.0f, -2.0f});
         lightObj->GetTransform().SetLocalRotation(
-            glm::quat(glm::vec3(glm::radians(-45.0f), glm::radians(30.0f), 0.0f)));
+            Leir::Quaternion::Euler(-45.0f, 30.0f, 0.0f));
         auto& light = lightObj->AddComponent<Leir::Light>();
         light.SetType(Leir::LightType::Directional);
         light.SetColor({1.0f, 0.95f, 0.9f});
@@ -326,7 +322,7 @@ protected:
                 // escena → EditorCamera (panel edits)
                 auto& t = cameraObj->GetTransform();
                 auto pos = t.GetLocalPosition();
-                auto euler = glm::degrees(glm::eulerAngles(glm::quat(t.GetLocalRotation())));
+                auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
                 m_EditorCamera.SetPosition(pos);
                 m_EditorCamera.SetYaw(euler.y);
                 m_EditorCamera.SetPitch(euler.x);

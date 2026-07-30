@@ -103,22 +103,31 @@ Cada wrapper tiene `operator glm::*()` implícito, así que la migración es gra
 
 ### Paso 7 — UI/
 
-- [ ] **Paso 7a** — Rect2D.h: usar `Rect` internamente o reemplazar `glm::vec2/4`
-- [ ] **Paso 7b** — UIElement.h: `glm::vec2/4` → `Vector2/4`
-- [ ] **Paso 7c** — UICanvas.h: `glm::vec2` → `Vector2`
-- [ ] **Paso 7d** — UILabel.h: `glm::vec4` → `Vector4`
-- [ ] **Paso 7e** — UIRenderer.h: `glm::vec2` → `Vector2`, `glm::vec4` → `Vector4`
-- [ ] **Paso 7f** — Fuentes de UI (UIElement.cpp, UIRenderer.cpp, etc.)
+- [x] **Paso 7a** — Rect2D.h: `glm::vec2/4` → `Vector2/4`
+- [x] **Paso 7b** — UIElement.h: `glm::vec2/4` → `Vector2/4`
+- [x] **Paso 7c** — UICanvas.h: `glm::vec2` → `Vector2`
+- [x] **Paso 7d** — UILabel.h: `glm::vec4/2` → `Vector4/2`
+- [x] **Paso 7e** — UIRenderer.h/.cpp: `glm::vec2/4` → `Vector2/4`
+- [x] **Paso 7f** — UIButton.h/.cpp: `glm::vec2/4` → `Vector2/4`
+- [x] **Paso 7g** — UITextInput.h/.cpp: `glm::vec2` → `Vector2`
+- [x] **Paso 7h** — UISlider.h/.cpp: `glm::vec2` → `Vector2`
+- [x] **Paso 7i** — UIImage.h/.cpp: `glm::vec2` → `Vector2`
+- [x] **Paso 7j** — UIViewportPanel.h/.cpp: `glm::vec2` → `Vector2`
+- [x] **Paso 7k** — ScrollView.h/.cpp: `glm::vec2` → `Vector2`
+- [x] **Paso 7l** — Font.h/.cpp: `glm::vec2/4` → `Vector2/4`
+- [x] **Paso 7m** — UIDebugOverlay.h: quitar `#include <glm/glm.hpp>`
+- [x] **Paso 7n** — UIPanel.h: quitar `#include <glm/glm.hpp>`
+- [x] **Paso 7o** — UIElement.cpp, UICanvas.cpp, UILabel.cpp: `glm::vec2/4` → `Vector2/4`
 
 ### Paso 8 — Editor
 
-- [ ] **Paso 8a** — EditorCamera.h/.cpp: `glm::vec3` → `Vector3`, `glm::quat` → `Quaternion`
-- [ ] **Paso 8b** — main.cpp: migrar todo
-- [ ] **Paso 8c** — UITestPanel.h/.cpp: migrar
-- [ ] **Paso 8d** — CameraTestPanel.h/.cpp: migrar
+- [x] **Paso 8a** — EditorCamera.h/.cpp: `glm::vec3/quat` → `Vector3/Quaternion`
+- [x] **Paso 8b** — main.cpp: migrar rotaciones y sync camera
 
 ### Paso 9 — Limpieza
 
-- [ ] Remover `#include <glm/...>` directos de headers públicos (los wrappers lo incluyen internamente)
-- [ ] Quitar `GLM_ENABLE_EXPERIMENTAL` de archivos que ya usan wrappers
-- [ ] Verificar que no queden referencias directas a `glm::` en public headers
+- [x] **Paso 9a** — Remover `#include <glm/...>` de VulkanDevice.h, RenderTexture.h (no usan GLM)
+- [x] **Paso 9b** — InputManager.h: `glm::vec2` → `Vector2`
+- [x] **Paso 9c** — Physics: RigidBody.h/.cpp + Collider.h/.cpp `glm::vec3` → `Vector3`
+- [x] **Paso 9d** — PhysicsConversions.h: `glm::vec3/quat` → `Vector3/Quaternion`, quitar dependencia GLM
+- [x] **Paso 9e** — Frustum.h: reemplazar `glm::mat4/make_mat4` → `Matrix4x4::operator()`

@@ -3,7 +3,7 @@
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/PointerButton.h"
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 
 struct GLFWwindow;
 
@@ -32,7 +32,7 @@ private:
     static void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
 
     GLFWwindow* m_Window = nullptr;
-    glm::vec2 m_LastMousePos{ 0.0f };
+    Vector2 m_LastMousePos{ 0.0f, 0.0f };
 };
 
 } // namespace Leir

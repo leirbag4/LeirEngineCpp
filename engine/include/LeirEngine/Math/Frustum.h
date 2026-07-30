@@ -11,32 +11,31 @@ struct Frustum {
 
     Frustum() = default;
 
-    void Update(const Matrix4x4& viewProj) {
-        glm::mat4 vp = glm::make_mat4(viewProj.Data());
+    void Update(const Matrix4x4& vp) {
         // Left
         planes[Left] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0])),
-            vp[3][3] + vp[3][0]);
+            Vector3(vp(0, 3) + vp(0, 0), vp(1, 3) + vp(1, 0), vp(2, 3) + vp(2, 0)),
+            vp(3, 3) + vp(3, 0));
         // Right
         planes[Right] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0])),
-            vp[3][3] - vp[3][0]);
+            Vector3(vp(0, 3) - vp(0, 0), vp(1, 3) - vp(1, 0), vp(2, 3) - vp(2, 0)),
+            vp(3, 3) - vp(3, 0));
         // Bottom
         planes[Bottom] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1])),
-            vp[3][3] + vp[3][1]);
+            Vector3(vp(0, 3) + vp(0, 1), vp(1, 3) + vp(1, 1), vp(2, 3) + vp(2, 1)),
+            vp(3, 3) + vp(3, 1));
         // Top
         planes[Top] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1])),
-            vp[3][3] - vp[3][1]);
+            Vector3(vp(0, 3) - vp(0, 1), vp(1, 3) - vp(1, 1), vp(2, 3) - vp(2, 1)),
+            vp(3, 3) - vp(3, 1));
         // Near
         planes[Near] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2])),
-            vp[3][3] + vp[3][2]);
+            Vector3(vp(0, 3) + vp(0, 2), vp(1, 3) + vp(1, 2), vp(2, 3) + vp(2, 2)),
+            vp(3, 3) + vp(3, 2));
         // Far
         planes[Far] = Plane(
-            Vector3::FromGLM(glm::vec3(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2])),
-            vp[3][3] - vp[3][2]);
+            Vector3(vp(0, 3) - vp(0, 2), vp(1, 3) - vp(1, 2), vp(2, 3) - vp(2, 2)),
+            vp(3, 3) - vp(3, 2));
     }
 
     bool Intersects(const Bounds& bounds) const {

@@ -2,9 +2,7 @@
 
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/Core/Export.h"
-
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include "LeirEngine/Math/Vector3.h"
 
 namespace Leir {
 
@@ -38,14 +36,14 @@ public:
     void SetAngularDamping(float damping) { m_AngularDamping = damping; }
     float GetAngularDamping() const { return m_AngularDamping; }
 
-    void SetLinearVelocity(const glm::vec3& velocity);
-    glm::vec3 GetLinearVelocity() const;
+    void SetLinearVelocity(const Vector3& velocity);
+    Vector3 GetLinearVelocity() const;
 
-    void SetAngularVelocity(const glm::vec3& velocity);
-    glm::vec3 GetAngularVelocity() const;
+    void SetAngularVelocity(const Vector3& velocity);
+    Vector3 GetAngularVelocity() const;
 
-    void AddForce(const glm::vec3& force);
-    void AddTorque(const glm::vec3& torque);
+    void AddForce(const Vector3& force);
+    void AddTorque(const Vector3& torque);
 
     uint32_t GetBodyID() const { return m_BodyID; }
     bool HasBody() const { return m_BodyID != 0; }

@@ -2,7 +2,7 @@
 
 namespace Leir {
 
-void Collider::SetBox(const glm::vec3& halfExtents) {
+void Collider::SetBox(const Vector3& halfExtents) {
     m_ShapeType = ColliderType::Box;
     m_HalfExtents = halfExtents;
 }
