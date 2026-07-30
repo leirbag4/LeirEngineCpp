@@ -45,14 +45,13 @@ bool UIFloatInput::OnKeyDown(int key)
         return true;
     }
 
-    spdlog::trace("[FloatInput] KeyDown key={} (not handled)", key);
-    return false;
+    spdlog::trace("[FloatInput] KeyDown key={}, forwarding to base", key);
+    return UITextInput::OnKeyDown(key);
 }
 
 void UIFloatInput::OnFocus()
 {
-    spdlog::trace("[FloatInput] OnFocus (was focused={})", m_Focused);
-    m_Focused = true;
+    spdlog::trace("[FloatInput] OnFocus");
     UITextInput::OnFocus();
 }
 
@@ -60,7 +59,6 @@ void UIFloatInput::OnBlur()
 {
     spdlog::trace("[FloatInput] OnBlur (was focused={})", m_Focused);
     if (m_Focused) {
-        m_Focused = false;
         CommitValue();
     }
     UITextInput::OnBlur();

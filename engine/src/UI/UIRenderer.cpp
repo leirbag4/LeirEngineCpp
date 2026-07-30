@@ -6,6 +6,7 @@
 #include "LeirEngine/UI/UIImage.h"
 #include "LeirEngine/UI/UISlider.h"
 #include "LeirEngine/UI/UITextInput.h"
+#include "LeirEngine/UI/UITextArea.h"
 #include "LeirEngine/UI/UIViewportPanel.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
@@ -399,21 +400,46 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         } else if (auto* input = dynamic_cast<UITextInput*>(elem)) {
             Batch(nullptr, cr, {0, 0, 1, 1}, {0.15f, 0.15f, 0.15f, 1.0f});
 
+            input->TickCaret();
+
             if (input->GetFont()) {
                 std::string displayText = input->GetText().empty() ? input->GetPlaceholder() : input->GetText();
                 Vector4 textColor = input->GetText().empty()
                     ? Vector4{0.5f, 0.5f, 0.5f, 1.0f}
-                    : Vector4{1.0f, 1.0f, 1.0f, 1.0f};
+                    : input->GetTextColor();
 
                 float lineH = input->GetFont()->GetLineHeight();
                 float ascender = input->GetFont()->GetAscender();
-                float baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
+                float textX0 = cr.x + 4.0f;
+
+                auto* textArea = dynamic_cast<UITextArea*>(elem);
+                float baselineY, caretY;
+                if (textArea) {
+                    baselineY = cr.y + 4.0f + ascender;
+                    caretY = cr.y + 4.0f + textArea->GetCursorLine() * lineH;
+                } else {
+                    baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
+                    caretY = cr.y + (cr.w - lineH) * 0.5f;
+                }
+
+                if (input->IsFocused() && input->HasSelection()) {
+                    float sx = textX0 + input->GetCursorXAt(input->GetSelBegin());
+                    float ex = textX0 + input->GetCursorXAt(input->GetSelEnd());
+                    Batch(nullptr, {sx, caretY, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                }
+
                 auto rawQuads = input->GetFont()->LayoutText(displayText, cr.z - 8.0f);
                 for (size_t i = 0; i < rawQuads.size(); i += 2) {
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
-                    Vector4 textRect = {cr.x + 4.0f + r.x, baselineY + r.y, r.z, r.w};
+                    Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
                     Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+                }
+
+                if (input->IsCaretVisible()) {
+                    float cursorX = input->GetCursorX();
+                    float caretX = textX0 + cursorX;
+                    Batch(nullptr, {caretX, caretY, 1.0f, lineH}, {0,0,1,1}, {1.0f, 1.0f, 1.0f, 1.0f});
                 }
             }
         }

@@ -24,7 +24,6 @@ private:
     void CommitValue();
 
     float m_Value = 0.0f;
-    bool m_Focused = false;
     std::function<void(float)> m_OnValueChanged;
 };
 

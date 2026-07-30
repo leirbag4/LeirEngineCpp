@@ -34,6 +34,7 @@
 #include <LeirEngine/UI/UIDebugOverlay.h>
 #include "UI/UITestPanel.h"
 #include "UI/CameraTestPanel.h"
+#include "UI/DebugTextPanel.h"
 #include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
@@ -283,6 +284,14 @@ protected:
         m_CameraTestPanel->SetCameraObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
 
+        // Debug Text Panel (on the left side of viewport, below TestPanel)
+        m_DebugTextPanel = new DebugTextPanel();
+        m_DebugTextPanel->SetName("DebugTextPanel");
+        m_DebugTextPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
+        m_DebugTextPanel->GetRect().offset = {210.0f, -430.0f, 490.0f, -270.0f};
+        m_DebugTextPanel->SetFont(m_FontSmall.get());
+        root->AddChild(m_DebugTextPanel);
+
         // Sync scene camera from EditorCamera initial position
         auto* camObj = scene.FindObjectByName("Camera");
         if (camObj) {
@@ -342,6 +351,8 @@ protected:
             m_TestPanel->Refresh();
         if (m_CameraTestPanel)
             m_CameraTestPanel->Refresh();
+        if (m_DebugTextPanel)
+            m_DebugTextPanel->Refresh();
     }
 
     void OnRender() override
@@ -402,6 +413,7 @@ private:
 
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;
+    DebugTextPanel* m_DebugTextPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 };
