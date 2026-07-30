@@ -1,7 +1,7 @@
 #pragma once
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/PointerButton.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 #include <variant>
 #include <cstdint>
 
@@ -31,8 +31,8 @@ struct KeyEvent {
 struct PointerEvent {
     PointerSource source = PointerSource::Mouse;
     int pointerId = 0;
-    glm::vec2 position{ 0.0f };
-    glm::vec2 delta{ 0.0f };
+    Vector2 position{ 0.0f, 0.0f };
+    Vector2 delta{ 0.0f, 0.0f };
     PointerButton button = PointerButton::None;
     EventAction action = EventAction::Press;
     float pressure = 1.0f;
@@ -44,7 +44,7 @@ struct CharEvent {
 };
 
 struct ScrollEvent {
-    glm::vec2 offset{ 0.0f };
+    Vector2 offset{ 0.0f, 0.0f };
 };
 
 using InputEvent = std::variant<KeyEvent, PointerEvent, CharEvent, ScrollEvent>;

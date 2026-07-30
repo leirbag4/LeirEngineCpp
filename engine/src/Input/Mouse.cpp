@@ -5,8 +5,8 @@ namespace Leir {
 struct MouseState {
     bool current[16] = {};
     bool previous[16] = {};
-    glm::vec2 position{ 0.0f };
-    glm::vec2 delta{ 0.0f };
+    Vector2 position{ 0.0f, 0.0f };
+    Vector2 delta{ 0.0f, 0.0f };
     float scrollDelta = 0.0f;
 
     static MouseState& Get()
@@ -46,8 +46,8 @@ bool Mouse::WasReleased(PointerButton btn)
 
 float Mouse::GetX() { return MouseState::Get().position.x; }
 float Mouse::GetY() { return MouseState::Get().position.y; }
-glm::vec2 Mouse::GetPos() { return MouseState::Get().position; }
-glm::vec2 Mouse::GetDelta() { return MouseState::Get().delta; }
+Vector2 Mouse::GetPos() { return MouseState::Get().position; }
+Vector2 Mouse::GetDelta() { return MouseState::Get().delta; }
 float Mouse::GetScrollDelta() { return MouseState::Get().scrollDelta; }
 
 void Mouse::ProcessEvent(const PointerEvent& e)
@@ -75,7 +75,7 @@ void Mouse::ResetFrame()
     auto& state = MouseState::Get();
     for (int i = 0; i < 16; ++i)
         state.previous[i] = state.current[i];
-    state.delta = { 0.0f, 0.0f };
+    state.delta = Vector2{ 0.0f, 0.0f };
     state.scrollDelta = 0.0f;
 }
 

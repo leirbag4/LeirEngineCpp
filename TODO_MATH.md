@@ -95,11 +95,11 @@ Cada wrapper tiene `operator glm::*()` implícito, así que la migración es gra
 
 ### Paso 6 — Input/
 
-- [ ] **Paso 6a** — Mouse.h: `glm::vec2` → `Vector2`
-- [ ] **Paso 6b** — Mouse.cpp: implementación
-- [ ] **Paso 6c** — Touch.h: `glm::vec2` → `Vector2`
-- [ ] **Paso 6d** — Pointer.h: `glm::vec2` → `Vector2`
-- [ ] **Paso 6e** — InputEvent.h: `glm::vec2 pos/delta` → `Vector2`
+- [x] **Paso 6a** — Mouse.h: `glm::vec2` → `Vector2`
+- [x] **Paso 6b** — Mouse.cpp: implementación
+- [x] **Paso 6c** — Touch.h: `glm::vec2` → `Vector2`
+- [x] **Paso 6d** — Pointer.h: `glm::vec2` → `Vector2`
+- [x] **Paso 6e** — InputEvent.h: `glm::vec2 pos/delta` → `Vector2`
 
 ### Paso 7 — UI/
 

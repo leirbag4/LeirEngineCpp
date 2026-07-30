@@ -8,8 +8,8 @@ namespace Leir {
 struct PointerState {
     PointerButton current = PointerButton::None;
     PointerButton previous = PointerButton::None;
-    glm::vec2 position{ 0.0f };
-    glm::vec2 delta{ 0.0f };
+    Vector2 position{ 0.0f, 0.0f };
+    Vector2 delta{ 0.0f, 0.0f };
 
     static PointerState& Get()
     {
@@ -59,8 +59,8 @@ bool Pointer::WasReleased(PointerButton btn)
 
 float Pointer::GetX() { return PointerState::Get().position.x; }
 float Pointer::GetY() { return PointerState::Get().position.y; }
-glm::vec2 Pointer::GetPos() { return PointerState::Get().position; }
-glm::vec2 Pointer::GetDelta() { return PointerState::Get().delta; }
+Vector2 Pointer::GetPos() { return PointerState::Get().position; }
+Vector2 Pointer::GetDelta() { return PointerState::Get().delta; }
 
 void Pointer::ProcessEvent(const PointerEvent& e)
 {
@@ -84,7 +84,7 @@ void Pointer::ResetFrame()
 {
     auto& state = PointerState::Get();
     state.previous = state.current;
-    state.delta = { 0.0f, 0.0f };
+    state.delta = Vector2{ 0.0f, 0.0f };
 }
 
 } // namespace Leir

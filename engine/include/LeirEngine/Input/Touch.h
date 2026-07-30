@@ -2,15 +2,15 @@
 #include "LeirEngine/Input/PointerButton.h"
 #include "LeirEngine/Input/InputEvent.h"
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 #include <vector>
 
 namespace Leir {
 
 struct LEIR_API TouchFinger {
     int id = 0;
-    glm::vec2 position{ 0.0f };
-    glm::vec2 delta{ 0.0f };
+    Vector2 position{ 0.0f, 0.0f };
+    Vector2 delta{ 0.0f, 0.0f };
     float pressure = 1.0f;
     bool down = false;
     bool pressed = false;

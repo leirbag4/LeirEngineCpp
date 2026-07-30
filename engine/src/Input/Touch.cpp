@@ -106,7 +106,7 @@ void Touch::ResetFrame()
     for (auto& f : state.fingers) {
         f.pressed = false;
         f.released = false;
-        f.delta = { 0.0f, 0.0f };
+        f.delta = Vector2{ 0.0f, 0.0f };
     }
 }
 

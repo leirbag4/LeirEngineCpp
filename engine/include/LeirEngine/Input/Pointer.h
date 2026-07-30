@@ -2,7 +2,7 @@
 #include "LeirEngine/Input/PointerButton.h"
 #include "LeirEngine/Input/InputEvent.h"
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 
 namespace Leir {
 
@@ -15,8 +15,8 @@ struct LEIR_API Pointer {
 
     static float GetX();
     static float GetY();
-    static glm::vec2 GetPos();
-    static glm::vec2 GetDelta();
+    static Vector2 GetPos();
+    static Vector2 GetDelta();
 
     static void ProcessEvent(const PointerEvent& e);
     static void ResetFrame();
