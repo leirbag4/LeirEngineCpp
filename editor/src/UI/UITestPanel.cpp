@@ -91,24 +91,6 @@ UITestPanel::UITestPanel()
         m_Target->GetTransform().SetLocalScale(s);
     });
 
-    // ---- Camera Position ----
-    m_CamTitle = makeTitle("Camera");
-    auto* camRow = makeRow();
-    AddField(camRow, "X:", m_CamPosX, [this](float v) {
-        if (!m_Camera) return;
-        auto p = m_Camera->GetTransform().GetLocalPosition(); p.x = v;
-        m_Camera->GetTransform().SetLocalPosition(p);
-    });
-    AddField(camRow, "Y:", m_CamPosY, [this](float v) {
-        if (!m_Camera) return;
-        auto p = m_Camera->GetTransform().GetLocalPosition(); p.y = v;
-        m_Camera->GetTransform().SetLocalPosition(p);
-    });
-    AddField(camRow, "Z:", m_CamPosZ, [this](float v) {
-        if (!m_Camera) return;
-        auto p = m_Camera->GetTransform().GetLocalPosition(); p.z = v;
-        m_Camera->GetTransform().SetLocalPosition(p);
-    });
 }
 
 UITestPanel::~UITestPanel() = default;
@@ -144,11 +126,6 @@ void UITestPanel::SetTargetObject(Leir::Object3D* obj)
     m_Target = obj;
 }
 
-void UITestPanel::SetCameraObject(Leir::Object3D* cam)
-{
-    m_Camera = cam;
-}
-
 void UITestPanel::Refresh()
 {
     if (m_Target) {
@@ -167,14 +144,6 @@ void UITestPanel::Refresh()
         m_ScaleX->SetValue(scale.x);
         m_ScaleY->SetValue(scale.y);
         m_ScaleZ->SetValue(scale.z);
-    }
-
-    if (m_Camera) {
-        auto& t = m_Camera->GetTransform();
-        auto pos = t.GetLocalPosition();
-        m_CamPosX->SetValue(pos.x);
-        m_CamPosY->SetValue(pos.y);
-        m_CamPosZ->SetValue(pos.z);
     }
 }
 

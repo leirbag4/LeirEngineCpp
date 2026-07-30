@@ -33,6 +33,8 @@
 #include <LeirEngine/UI/UIViewportPanel.h>
 #include <LeirEngine/UI/UIDebugOverlay.h>
 #include "UI/UITestPanel.h"
+#include "UI/CameraTestPanel.h"
+#include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
@@ -44,38 +46,6 @@
 #include <spdlog/spdlog.h>
 
 #include <memory>
-
-struct EditorCamera {
-    float yaw = 0.0f;
-    float pitch = -20.0f;
-    float distance = 8.0f;
-    glm::vec3 target = {0.0f, 0.0f, 0.0f};
-
-    glm::vec3 GetPosition() const {
-        float r = distance * cos(glm::radians(pitch));
-        float y = distance * sin(glm::radians(pitch));
-        float x = r * sin(glm::radians(yaw));
-        float z = r * cos(glm::radians(yaw));
-        return target + glm::vec3(x, y, z);
-    }
-
-    void Orbit(float dx, float dy) {
-        yaw += dx * 0.5f;
-        pitch = glm::clamp(pitch + dy * 0.5f, -89.0f, 89.0f);
-    }
-
-    void Zoom(float delta) {
-        distance = glm::clamp(distance - delta * 2.0f, 1.0f, 50.0f);
-    }
-
-    void Pan(float dx, float dy) {
-        glm::vec3 forward = glm::normalize(target - GetPosition());
-        glm::vec3 right = glm::normalize(glm::cross(forward, {0,1,0}));
-        glm::vec3 up = glm::normalize(glm::cross(right, forward));
-        float speed = distance * 0.005f;
-        target += right * dx * speed + up * dy * speed;
-    }
-};
 
 class EditorApp : public Leir::CoreApplication {
 public:
@@ -284,7 +254,7 @@ protected:
 
         auto* statusLabel = new Leir::UILabel();
         statusLabel->SetName("StatusLabel");
-        statusLabel->SetText("Editor Online | Arrastra para orbitar, scroll para zoom");
+        statusLabel->SetText("Editor Online | Click der. + WASD para camara libre");
         statusLabel->SetFont(m_FontSmall.get());
         statusLabel->SetColor({0.5f, 0.8f, 0.5f, 1.0f});
         statusLabel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -295,18 +265,33 @@ protected:
 
         m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
 
-        // Test panel (floating over the viewport, centered)
+        // Test panel (bottom-left inside viewport)
         m_TestPanel = new UITestPanel();
         m_TestPanel->SetName("DebugTestPanel");
-        m_TestPanel->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
-        m_TestPanel->GetRect().offset = {-150.0f, -125.0f, 150.0f, 125.0f};
+        m_TestPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
+        m_TestPanel->GetRect().offset = {210.0f, -260.0f, 490.0f, -30.0f};
         m_TestPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_TestPanel);
 
         m_TestPanel->SetTargetObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
-        m_TestPanel->SetCameraObject(
+
+        // Camera Test panel (bottom-right inside viewport)
+        m_CameraTestPanel = new CameraTestPanel();
+        m_CameraTestPanel->SetName("DebugCameraPanel");
+        m_CameraTestPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
+        m_CameraTestPanel->GetRect().offset = {-510.0f, -200.0f, -230.0f, -30.0f};
+        m_CameraTestPanel->SetFont(m_FontSmall.get());
+        root->AddChild(m_CameraTestPanel);
+
+        m_CameraTestPanel->SetCameraObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
+
+        // Sync EditorCamera initial state from scene camera
+        auto* camObj = scene.FindObjectByName("Camera");
+        if (camObj) {
+            m_EditorCamera.SetPosition(camObj->GetTransform().GetLocalPosition());
+        }
 
         spdlog::info("Scene hierarchy created with viewport system");
     }
@@ -316,44 +301,22 @@ protected:
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 
-        // Editor camera controls (only when not interacting with UI)
+        // Editor camera controls (right-click + WASD free-fly)
         auto* hovered = m_Canvas->GetHoveredElement();
         bool inViewport = m_ViewportPanel && hovered &&
             (hovered == m_ViewportPanel || hovered->GetParent() == m_ViewportPanel);
 
-        // Orbit: left mouse drag in viewport
-        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Left)) {
-            auto delta = Leir::Mouse::GetDelta();
-            m_EditorCamera.Orbit(delta.x, -delta.y);
+        // Right-click yaw/pitch + WASDQE movement (only in viewport)
+        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right)) {
+            m_EditorCamera.Update(deltaTime);
         }
 
-        // Pan: middle mouse drag in viewport
-        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Middle)) {
-            auto delta = Leir::Mouse::GetDelta();
-            m_EditorCamera.Pan(-delta.x, -delta.y);
-        }
-
-        // Zoom: scroll in viewport
-        if (inViewport) {
-            float scroll = Leir::Mouse::GetScrollDelta();
-            if (scroll != 0.0f)
-                m_EditorCamera.Zoom(scroll);
-        }
-
-        // Apply editor camera to scene camera
+        // Sync scene camera from EditorCamera
         auto* cameraObj = scene->FindObjectByName("Camera");
         if (cameraObj) {
-            auto pos = m_EditorCamera.GetPosition();
-            glm::vec3 forward = glm::normalize(m_EditorCamera.target - pos);
-            glm::quat rot = glm::quatLookAt(forward, glm::vec3(0, 1, 0));
-            cameraObj->GetTransform().SetLocalPosition(pos);
-            cameraObj->GetTransform().SetLocalRotation(rot);
+            cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
+            cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
         }
-
-        // Remove old rotation animation (the cube rotation was for demo;
-        // commented out so camera controls feel natural)
-        // auto* cube = scene->FindObjectByName("Cube");
-        // if (cube) { ... }
 
         // Update UI layout on resize
         if (m_Canvas) {
@@ -366,6 +329,8 @@ protected:
 
         if (m_TestPanel)
             m_TestPanel->Refresh();
+        if (m_CameraTestPanel)
+            m_CameraTestPanel->Refresh();
     }
 
     void OnRender() override
@@ -425,6 +390,7 @@ private:
     EditorCamera m_EditorCamera;
 
     UITestPanel* m_TestPanel = nullptr;
+    CameraTestPanel* m_CameraTestPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 };

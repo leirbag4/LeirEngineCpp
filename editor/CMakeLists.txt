@@ -1,7 +1,9 @@
 add_executable(LeirEngineEditor
     src/main.cpp
+    src/Camera/EditorCamera.cpp
     src/UI/UIDragFloatInput.cpp
     src/UI/UITestPanel.cpp
+    src/UI/CameraTestPanel.cpp
 )
 
 target_include_directories(LeirEngineEditor
