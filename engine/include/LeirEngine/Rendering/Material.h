@@ -1,9 +1,10 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Math/Vector3.h"
+#include "LeirEngine/Math/Vector4.h"
 
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
 #include <memory>
 #include <string>
 
@@ -19,10 +20,10 @@ public:
     ~Material();
 
     void SetTexture(const std::string& name, std::shared_ptr<Texture2D> texture);
-    void SetColor(const glm::vec4& color) { m_Color = color; }
-    glm::vec4 GetColor() const { return m_Color; }
+    void SetColor(const Vector4& color) { m_Color = color; }
+    Vector4 GetColor() const { return m_Color; }
     void SetFloat(const std::string& name, float value);
-    void SetVec3(const std::string& name, const glm::vec3& value);
+    void SetVec3(const std::string& name, const Vector3& value);
 
     void Bind(VkCommandBuffer cmd, VkPipelineLayout layout) const;
 
@@ -44,7 +45,7 @@ private:
 
     VulkanDevice* m_Device;
     std::shared_ptr<Shader> m_Shader;
-    glm::vec4 m_Color{1.0f};
+    Vector4 m_Color{1.0f, 1.0f, 1.0f, 1.0f};
 
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;

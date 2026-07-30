@@ -1,6 +1,6 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector4.h"
 
 namespace Leir {
 
@@ -12,7 +12,7 @@ public:
     ~SpriteSheet() = default;
 
     int GetFrameCount() const;
-    glm::vec4 GetUVRect(int frameIndex) const;
+    Vector4 GetUVRect(int frameIndex) const;
 
     Texture2D* GetTexture() const { return m_Texture; }
     int GetFrameWidth() const { return m_FrameWidth; }

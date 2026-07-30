@@ -58,17 +58,17 @@ UITestPanel::UITestPanel()
     auto* rotRow = makeRow();
     AddField(rotRow, "X:", m_RotX, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.x = v;
+        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.x = v;
         m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
     });
     AddField(rotRow, "Y:", m_RotY, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.y = v;
+        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.y = v;
         m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
     });
     AddField(rotRow, "Z:", m_RotZ, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.z = v;
+        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.z = v;
         m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
     });
 
@@ -135,7 +135,7 @@ void UITestPanel::Refresh()
         m_PosY->SetValue(pos.y);
         m_PosZ->SetValue(pos.z);
 
-        auto euler = glm::degrees(glm::eulerAngles(t.GetLocalRotation()));
+        auto euler = glm::degrees(glm::eulerAngles(glm::quat(t.GetLocalRotation())));
         m_RotX->SetValue(euler.x);
         m_RotY->SetValue(euler.y);
         m_RotZ->SetValue(euler.z);

@@ -1,7 +1,5 @@
 #include "LeirEngine/Core/Transform.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 
 namespace Leir {
@@ -21,19 +19,19 @@ Transform::~Transform()
 
 // --- Local space setters ---
 
-void Transform::SetLocalPosition(const glm::vec3& position)
+void Transform::SetLocalPosition(const Vector3& position)
 {
     m_LocalPosition = position;
     MarkDirty();
 }
 
-void Transform::SetLocalRotation(const glm::quat& rotation)
+void Transform::SetLocalRotation(const Quaternion& rotation)
 {
     m_LocalRotation = rotation;
     MarkDirty();
 }
 
-void Transform::SetLocalScale(const glm::vec3& scale)
+void Transform::SetLocalScale(const Vector3& scale)
 {
     m_LocalScale = scale;
     MarkDirty();
@@ -41,19 +39,19 @@ void Transform::SetLocalScale(const glm::vec3& scale)
 
 // --- World space getters (computed lazily) ---
 
-glm::vec3 Transform::GetWorldPosition() const
+Vector3 Transform::GetWorldPosition() const
 {
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldPosition;
 }
 
-glm::quat Transform::GetWorldRotation() const
+Quaternion Transform::GetWorldRotation() const
 {
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldRotation;
 }
 
-glm::vec3 Transform::GetWorldScale() const
+Vector3 Transform::GetWorldScale() const
 {
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldScale;
@@ -61,91 +59,93 @@ glm::vec3 Transform::GetWorldScale() const
 
 // --- World space setters ---
 
-void Transform::SetWorldPosition(const glm::vec3& position)
+void Transform::SetWorldPosition(const Vector3& position)
 {
     if (!m_Parent) {
         SetLocalPosition(position);
         return;
     }
-    // Convert world position to local
-    glm::mat4 parentWorld = m_Parent->GetLocalToWorldMatrix();
-    glm::mat4 parentInverse = glm::inverse(parentWorld);
-    glm::vec3 localPos = glm::vec3(parentInverse * glm::vec4(position, 1.0f));
+    Matrix4x4 parentWorld = m_Parent->GetLocalToWorldMatrix();
+    Matrix4x4 parentInverse = parentWorld.Inverse();
+    Vector3 localPos = parentInverse.MultiplyPoint3x4(position);
     SetLocalPosition(localPos);
 }
 
-void Transform::SetWorldRotation(const glm::quat& rotation)
+void Transform::SetWorldRotation(const Quaternion& rotation)
 {
     if (!m_Parent) {
         SetLocalRotation(rotation);
         return;
     }
-    glm::quat parentRot = m_Parent->GetWorldRotation();
-    glm::quat localRot = glm::inverse(parentRot) * rotation;
+    Quaternion parentRot = m_Parent->GetWorldRotation();
+    Quaternion localRot = parentRot.Inverse() * rotation;
     SetLocalRotation(localRot);
 }
 
-void Transform::SetWorldScale(const glm::vec3& scale)
+void Transform::SetWorldScale(const Vector3& scale)
 {
     if (!m_Parent) {
         SetLocalScale(scale);
         return;
     }
-    glm::vec3 parentScale = m_Parent->GetWorldScale();
-    SetLocalScale(scale / parentScale);
+    Vector3 parentScale = m_Parent->GetWorldScale();
+    SetLocalScale(Vector3(scale.x / parentScale.x,
+                          scale.y / parentScale.y,
+                          scale.z / parentScale.z));
 }
 
 // --- Convenience ---
 
-void Transform::Translate(const glm::vec3& delta)
+void Transform::Translate(const Vector3& delta)
 {
     SetLocalPosition(m_LocalPosition + delta);
 }
 
-void Transform::Rotate(float angle, const glm::vec3& axis)
+void Transform::Rotate(float angle, const Vector3& axis)
 {
-    SetLocalRotation(glm::rotate(m_LocalRotation, angle, axis));
+    SetLocalRotation(m_LocalRotation * Quaternion::AngleAxis(angle, axis));
 }
 
-void Transform::Scale(const glm::vec3& factor)
+void Transform::Scale(const Vector3& factor)
 {
-    SetLocalScale(m_LocalScale * factor);
+    SetLocalScale(Vector3(
+        m_LocalScale.x * factor.x,
+        m_LocalScale.y * factor.y,
+        m_LocalScale.z * factor.z
+    ));
 }
 
-glm::vec3 Transform::GetForward() const
+Vector3 Transform::GetForward() const
 {
-    return GetWorldRotation() * glm::vec3(0.0f, 0.0f, -1.0f);
+    return GetWorldRotation() * Vector3::Forward();
 }
 
-glm::vec3 Transform::GetRight() const
+Vector3 Transform::GetRight() const
 {
-    return GetWorldRotation() * glm::vec3(1.0f, 0.0f, 0.0f);
+    return GetWorldRotation() * Vector3::Right();
 }
 
-glm::vec3 Transform::GetUp() const
+Vector3 Transform::GetUp() const
 {
-    return GetWorldRotation() * glm::vec3(0.0f, 1.0f, 0.0f);
+    return GetWorldRotation() * Vector3::Up();
 }
 
 // --- Matrices ---
 
-glm::mat4 Transform::GetLocalMatrix() const
+Matrix4x4 Transform::GetLocalMatrix() const
 {
-    glm::mat4 mat = glm::translate(glm::mat4(1.0f), m_LocalPosition);
-    mat *= glm::mat4_cast(m_LocalRotation);
-    mat = glm::scale(mat, m_LocalScale);
-    return mat;
+    return Matrix4x4::TRS(m_LocalPosition, m_LocalRotation, m_LocalScale);
 }
 
-glm::mat4 Transform::GetLocalToWorldMatrix() const
+Matrix4x4 Transform::GetLocalToWorldMatrix() const
 {
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldMatrix;
 }
 
-glm::mat4 Transform::GetWorldToLocalMatrix() const
+Matrix4x4 Transform::GetWorldToLocalMatrix() const
 {
-    return glm::inverse(GetLocalToWorldMatrix());
+    return GetLocalToWorldMatrix().Inverse();
 }
 
 // --- Parent / Child ---
@@ -155,8 +155,8 @@ void Transform::SetParent(Transform* parent, bool worldPositionStays)
     if (m_Parent == parent)
         return;
 
-    glm::vec3 worldPos, worldScale;
-    glm::quat worldRot;
+    Vector3 worldPos, worldScale;
+    Quaternion worldRot;
 
     if (worldPositionStays) {
         worldPos = GetWorldPosition();
@@ -224,10 +224,13 @@ void Transform::UpdateWorldMatrix() const
     } else {
         m_WorldMatrix = m_Parent->GetLocalToWorldMatrix() * GetLocalMatrix();
 
-        // Chain transforms without decomposing the matrix
         m_WorldRotation = m_Parent->GetWorldRotation() * m_LocalRotation;
-        m_WorldPosition = glm::vec3(m_Parent->GetLocalToWorldMatrix() * glm::vec4(m_LocalPosition, 1.0f));
-        m_WorldScale = m_Parent->GetWorldScale() * m_LocalScale;
+        m_WorldPosition = m_Parent->GetLocalToWorldMatrix().MultiplyPoint3x4(m_LocalPosition);
+        m_WorldScale = Vector3(
+            m_Parent->GetWorldScale().x * m_LocalScale.x,
+            m_Parent->GetWorldScale().y * m_LocalScale.y,
+            m_Parent->GetWorldScale().z * m_LocalScale.z
+        );
     }
 
     m_Dirty = false;

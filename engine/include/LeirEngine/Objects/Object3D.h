@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/CoreObject.h"
+#include "LeirEngine/Math/Vector3.h"
 
 namespace Leir {
 
@@ -10,13 +11,13 @@ public:
     ~Object3D() override = default;
 
     // Bounding box (world-space AABB — updated from transform)
-    void SetBounds(const glm::vec3& min, const glm::vec3& max);
-    glm::vec3 GetBoundsMin() const { return m_BoundsMin; }
-    glm::vec3 GetBoundsMax() const { return m_BoundsMax; }
+    void SetBounds(const Vector3& min, const Vector3& max);
+    Vector3 GetBoundsMin() const { return m_BoundsMin; }
+    Vector3 GetBoundsMax() const { return m_BoundsMax; }
 
 private:
-    glm::vec3 m_BoundsMin{-0.5f};
-    glm::vec3 m_BoundsMax{0.5f};
+    Vector3 m_BoundsMin{-0.5f, -0.5f, -0.5f};
+    Vector3 m_BoundsMax{0.5f, 0.5f, 0.5f};
 };
 
 } // namespace Leir

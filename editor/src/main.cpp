@@ -326,7 +326,7 @@ protected:
                 // escena → EditorCamera (panel edits)
                 auto& t = cameraObj->GetTransform();
                 auto pos = t.GetLocalPosition();
-                auto euler = glm::degrees(glm::eulerAngles(t.GetLocalRotation()));
+                auto euler = glm::degrees(glm::eulerAngles(glm::quat(t.GetLocalRotation())));
                 m_EditorCamera.SetPosition(pos);
                 m_EditorCamera.SetYaw(euler.y);
                 m_EditorCamera.SetPitch(euler.x);

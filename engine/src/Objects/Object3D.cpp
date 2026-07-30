@@ -7,7 +7,7 @@ Object3D::Object3D(const std::string& name)
 {
 }
 
-void Object3D::SetBounds(const glm::vec3& min, const glm::vec3& max)
+void Object3D::SetBounds(const Vector3& min, const Vector3& max)
 {
     m_BoundsMin = min;
     m_BoundsMax = max;

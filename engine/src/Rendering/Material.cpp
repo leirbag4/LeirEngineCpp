@@ -46,7 +46,7 @@ void Material::SetFloat(const std::string& name, float value)
     (void)value;
 }
 
-void Material::SetVec3(const std::string& name, const glm::vec3& value)
+void Material::SetVec3(const std::string& name, const Vector3& value)
 {
     (void)name;
     (void)value;

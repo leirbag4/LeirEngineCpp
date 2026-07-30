@@ -15,12 +15,12 @@
 
 #include <spdlog/spdlog.h>
 #include <cstring>
-#include <glm/gtc/matrix_transform.hpp>
+
 
 namespace Leir {
 
 static const int RENDER_FRAMES_IN_FLIGHT = 2;
-static const size_t UBO_SIZE = sizeof(glm::mat4);
+static const size_t UBO_SIZE = sizeof(Matrix4x4);
 
 // ---- SpriteVertex ----
 
@@ -192,7 +192,7 @@ void RenderPipeline::CreateSpriteResources()
     vkDestroyShaderModule(dev, fragMod, nullptr);
 
     // Create a 1x1 white fallback texture for sprites without a texture
-    Image fallbackImage(1, 1, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    Image fallbackImage(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     m_Sprite.fallbackTexture = new Texture2D(m_Device, fallbackImage);
 
     spdlog::info("Sprite pipeline created");
@@ -257,7 +257,7 @@ void RenderPipeline::Render(VkCommandBuffer cmd, Scene* scene)
         return;
 
     primaryCamera->RecalculateViewMatrix();
-    glm::mat4 viewProj = primaryCamera->GetViewProjectionMatrix();
+    Matrix4x4 viewProj = primaryCamera->GetViewProjectionMatrix();
 
     PushConstants push{};
     if (primaryLight) {
@@ -278,7 +278,7 @@ void RenderPipeline::Render(VkCommandBuffer cmd, Scene* scene)
         if (!mesh || !material)
             continue;
 
-        push.color = material ? material->GetColor() : glm::vec4(1.0f);
+        push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 
         RenderMeshRenderer(cmd, renderer, viewProj,
             obj->GetTransform().GetLocalToWorldMatrix(), push);
@@ -295,7 +295,7 @@ void RenderPipeline::RenderOverlay(VkCommandBuffer cmd, Scene* scene)
     // Build sorted list of visible sprites
     struct SpriteDraw {
         SpriteRenderer* renderer;
-        glm::mat4 world;
+        Matrix4x4 world;
         int sortingLayer;
         int orderInLayer;
     };
@@ -321,7 +321,7 @@ void RenderPipeline::RenderOverlay(VkCommandBuffer cmd, Scene* scene)
     // Orthographic projection: maps pixel coords to clip space (y-down)
     float w = (float)m_Device->GetSwapchainExtent().width;
     float h = (float)m_Device->GetSwapchainExtent().height;
-    glm::mat4 ortho = glm::ortho(0.0f, w, h, 0.0f, -1.0f, 1.0f);
+    Matrix4x4 ortho = Matrix4x4::Ortho(0.0f, w, h, 0.0f, -1.0f, 1.0f);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Sprite.pipeline);
 
@@ -331,18 +331,18 @@ void RenderPipeline::RenderOverlay(VkCommandBuffer cmd, Scene* scene)
     vkCmdBindIndexBuffer(cmd, m_Sprite.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     for (auto& draw : draws) {
-        glm::mat4 mvp = ortho * draw.world;
+        Matrix4x4 mvp = ortho * draw.world;
         RenderSprite(cmd, draw.renderer, mvp);
     }
 }
 
 void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
-    const glm::mat4& mvp)
+    const Matrix4x4& mvp)
 {
     // Determine texture and UV rect
     auto* tex = renderer->GetTexture();
     auto* sheet = renderer->GetSpriteSheet();
-    glm::vec4 uvRect = {0.0f, 0.0f, 1.0f, 1.0f};
+    Vector4 uvRect = {0.0f, 0.0f, 1.0f, 1.0f};
 
     if (sheet) {
         tex = sheet->GetTexture();
@@ -394,7 +394,7 @@ void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
 }
 
 void RenderPipeline::RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* renderer,
-    const glm::mat4& viewProj, const glm::mat4& model,
+    const Matrix4x4& viewProj, const Matrix4x4& model,
     const PushConstants& push)
 {
     auto material = renderer->GetMaterial();

@@ -1,4 +1,5 @@
 #include "LeirEngine/Rendering/Image.h"
+#include "LeirEngine/Math/Mathf.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -34,15 +35,15 @@ Image::Image(const std::string& path)
     spdlog::info("Image loaded: {} ({}x{})", path, m_Width, m_Height);
 }
 
-Image::Image(uint32_t width, uint32_t height, const glm::vec4& color)
+Image::Image(uint32_t width, uint32_t height, const Vector4& color)
     : m_Width(width)
     , m_Height(height)
 {
     m_Data.resize(width * height * 4);
-    unsigned char r = (unsigned char)(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
-    unsigned char g = (unsigned char)(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
-    unsigned char b = (unsigned char)(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
-    unsigned char a = (unsigned char)(glm::clamp(color.a, 0.0f, 1.0f) * 255.0f);
+    unsigned char r = (unsigned char)(Mathf::Clamp(color.x, 0.0f, 1.0f) * 255.0f);
+    unsigned char g = (unsigned char)(Mathf::Clamp(color.y, 0.0f, 1.0f) * 255.0f);
+    unsigned char b = (unsigned char)(Mathf::Clamp(color.z, 0.0f, 1.0f) * 255.0f);
+    unsigned char a = (unsigned char)(Mathf::Clamp(color.w, 0.0f, 1.0f) * 255.0f);
 
     for (size_t i = 0; i < m_Data.size(); i += 4) {
         m_Data[i + 0] = r;
@@ -52,7 +53,7 @@ Image::Image(uint32_t width, uint32_t height, const glm::vec4& color)
     }
 }
 
-glm::vec4 Image::GetPixel(int x, int y) const
+Vector4 Image::GetPixel(int x, int y) const
 {
     if (x < 0 || x >= (int)m_Width || y < 0 || y >= (int)m_Height)
         return {0.0f, 0.0f, 0.0f, 1.0f};
@@ -66,16 +67,16 @@ glm::vec4 Image::GetPixel(int x, int y) const
     };
 }
 
-void Image::SetPixel(int x, int y, const glm::vec4& color)
+void Image::SetPixel(int x, int y, const Vector4& color)
 {
     if (x < 0 || x >= (int)m_Width || y < 0 || y >= (int)m_Height)
         return;
 
     size_t idx = ((size_t)y * m_Width + (size_t)x) * 4;
-    m_Data[idx + 0] = (unsigned char)(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
-    m_Data[idx + 1] = (unsigned char)(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
-    m_Data[idx + 2] = (unsigned char)(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
-    m_Data[idx + 3] = (unsigned char)(glm::clamp(color.a, 0.0f, 1.0f) * 255.0f);
+    m_Data[idx + 0] = (unsigned char)(Mathf::Clamp(color.x, 0.0f, 1.0f) * 255.0f);
+    m_Data[idx + 1] = (unsigned char)(Mathf::Clamp(color.y, 0.0f, 1.0f) * 255.0f);
+    m_Data[idx + 2] = (unsigned char)(Mathf::Clamp(color.z, 0.0f, 1.0f) * 255.0f);
+    m_Data[idx + 3] = (unsigned char)(Mathf::Clamp(color.w, 0.0f, 1.0f) * 255.0f);
 }
 
 void Image::SavePNG(const std::string& path) const
@@ -90,7 +91,7 @@ void Image::SavePNG(const std::string& path) const
 
 std::unique_ptr<Image> Image::Clone() const
 {
-    auto clone = std::make_unique<Image>(m_Width, m_Height, glm::vec4{0.0f, 0.0f, 0.0f, 1.0f});
+    auto clone = std::make_unique<Image>(m_Width, m_Height, Vector4{0.0f, 0.0f, 0.0f, 1.0f});
     clone->m_Data = m_Data;
     clone->m_Channels = m_Channels;
     return clone;

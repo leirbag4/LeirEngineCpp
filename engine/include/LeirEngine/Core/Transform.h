@@ -1,9 +1,9 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
-
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include "LeirEngine/Math/Vector3.h"
+#include "LeirEngine/Math/Quaternion.h"
+#include "LeirEngine/Math/Matrix4x4.h"
 #include <vector>
 
 namespace Leir {
@@ -16,36 +16,36 @@ public:
     ~Transform();
 
     // --- Local space ---
-    void SetLocalPosition(const glm::vec3& position);
-    void SetLocalRotation(const glm::quat& rotation);
-    void SetLocalScale(const glm::vec3& scale);
+    void SetLocalPosition(const Vector3& position);
+    void SetLocalRotation(const Quaternion& rotation);
+    void SetLocalScale(const Vector3& scale);
 
-    const glm::vec3& GetLocalPosition() const { return m_LocalPosition; }
-    const glm::quat& GetLocalRotation() const { return m_LocalRotation; }
-    const glm::vec3& GetLocalScale() const { return m_LocalScale; }
+    const Vector3& GetLocalPosition() const { return m_LocalPosition; }
+    const Quaternion& GetLocalRotation() const { return m_LocalRotation; }
+    const Vector3& GetLocalScale() const { return m_LocalScale; }
 
     // --- World space ---
-    glm::vec3 GetWorldPosition() const;
-    glm::quat GetWorldRotation() const;
-    glm::vec3 GetWorldScale() const;
+    Vector3 GetWorldPosition() const;
+    Quaternion GetWorldRotation() const;
+    Vector3 GetWorldScale() const;
 
-    void SetWorldPosition(const glm::vec3& position);
-    void SetWorldRotation(const glm::quat& rotation);
-    void SetWorldScale(const glm::vec3& scale);
+    void SetWorldPosition(const Vector3& position);
+    void SetWorldRotation(const Quaternion& rotation);
+    void SetWorldScale(const Vector3& scale);
 
     // --- Convenience ---
-    void Translate(const glm::vec3& delta);
-    void Rotate(float angle, const glm::vec3& axis);
-    void Scale(const glm::vec3& factor);
+    void Translate(const Vector3& delta);
+    void Rotate(float angle, const Vector3& axis);
+    void Scale(const Vector3& factor);
 
-    glm::vec3 GetForward() const;
-    glm::vec3 GetRight() const;
-    glm::vec3 GetUp() const;
+    Vector3 GetForward() const;
+    Vector3 GetRight() const;
+    Vector3 GetUp() const;
 
     // --- Matrices ---
-    glm::mat4 GetLocalToWorldMatrix() const;
-    glm::mat4 GetWorldToLocalMatrix() const;
-    glm::mat4 GetLocalMatrix() const;
+    Matrix4x4 GetLocalToWorldMatrix() const;
+    Matrix4x4 GetWorldToLocalMatrix() const;
+    Matrix4x4 GetLocalMatrix() const;
 
     // --- Parent / Child ---
     void SetParent(Transform* parent, bool worldPositionStays = true);
@@ -65,14 +65,14 @@ private:
     void UpdateWorldMatrix() const;
     void UpdateWorldFromLocal() const;
 
-    glm::vec3 m_LocalPosition{0.0f};
-    glm::quat m_LocalRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec3 m_LocalScale{1.0f};
+    Vector3 m_LocalPosition{0.0f, 0.0f, 0.0f};
+    Quaternion m_LocalRotation{0.0f, 0.0f, 0.0f, 1.0f};
+    Vector3 m_LocalScale{1.0f, 1.0f, 1.0f};
 
-    mutable glm::vec3 m_WorldPosition{0.0f};
-    mutable glm::quat m_WorldRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    mutable glm::vec3 m_WorldScale{1.0f};
-    mutable glm::mat4 m_WorldMatrix{1.0f};
+    mutable Vector3 m_WorldPosition{0.0f, 0.0f, 0.0f};
+    mutable Quaternion m_WorldRotation{0.0f, 0.0f, 0.0f, 1.0f};
+    mutable Vector3 m_WorldScale{1.0f, 1.0f, 1.0f};
+    mutable Matrix4x4 m_WorldMatrix;
     mutable bool m_Dirty = true;
 
     Transform* m_Parent = nullptr;

@@ -1,7 +1,10 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector3.h"
+#include "LeirEngine/Math/Vector4.h"
+#include "LeirEngine/Math/Matrix4x4.h"
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
 #include <array>
 #include <memory>
 #include <unordered_map>
@@ -20,18 +23,18 @@ class SpriteSheet;
 class Texture2D;
 
 struct LEIR_API PushConstants {
-    glm::vec3 lightDir = {0.0f, -1.0f, 0.0f};
+    Vector3 lightDir = {0.0f, -1.0f, 0.0f};
     float pad0 = 0.0f;
-    glm::vec3 lightColor = {1.0f, 1.0f, 1.0f};
+    Vector3 lightColor = {1.0f, 1.0f, 1.0f};
     float pad1 = 0.0f;
-    glm::vec3 ambientColor = {0.2f, 0.2f, 0.3f};
+    Vector3 ambientColor = {0.2f, 0.2f, 0.3f};
     float pad2 = 0.0f;
-    glm::vec4 color = {1.0f, 1.0f, 1.0f, 1.0f};
-    glm::mat4 model = glm::mat4(1.0f);
+    Vector4 color = {1.0f, 1.0f, 1.0f, 1.0f};
+    Matrix4x4 model;
 };
 
 struct LEIR_API PerMeshUBO {
-    glm::mat4 viewProjection;
+    Matrix4x4 viewProjection;
 };
 
 struct UBOBuffer {
@@ -40,17 +43,17 @@ struct UBOBuffer {
 };
 
 struct LEIR_API SpriteVertex {
-    glm::vec2 position;
-    glm::vec2 texCoord;
+    Vector2 position;
+    Vector2 texCoord;
 
     static VkVertexInputBindingDescription GetBindingDescription();
     static std::vector<VkVertexInputAttributeDescription> GetAttributeDescriptions();
 };
 
 struct LEIR_API SpritePushConstants {
-    glm::mat4 mvp;
-    glm::vec4 color;
-    glm::vec4 uvRect; // {u, v, w, h} in UV space
+    Matrix4x4 mvp;
+    Vector4 color;
+    Vector4 uvRect; // {u, v, w, h} in UV space
 };
 
 class LEIR_API RenderPipeline {
@@ -63,13 +66,13 @@ public:
 
 private:
     void RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* renderer,
-        const glm::mat4& viewProj, const glm::mat4& model,
+        const Matrix4x4& viewProj, const Matrix4x4& model,
         const PushConstants& push);
 
     void CreateSpriteResources();
     void DestroySpriteResources();
     void RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
-        const glm::mat4& mvp);
+        const Matrix4x4& mvp);
 
     VulkanDevice* m_Device;
     std::vector<UBOBuffer> m_UBOBuffers;

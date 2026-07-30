@@ -4,7 +4,7 @@
 
 namespace Leir {
 
-glm::vec3 Light::GetDirection() const
+Vector3 Light::GetDirection() const
 {
     return GetOwner()->GetTransform().GetForward();
 }

@@ -17,7 +17,7 @@ int SpriteSheet::GetFrameCount() const
     return m_Columns * m_Rows;
 }
 
-glm::vec4 SpriteSheet::GetUVRect(int frameIndex) const
+Vector4 SpriteSheet::GetUVRect(int frameIndex) const
 {
     if (frameIndex < 0 || frameIndex >= GetFrameCount())
         frameIndex = 0;

@@ -1,6 +1,6 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector4.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -10,11 +10,11 @@ namespace Leir {
 class LEIR_API Image {
 public:
     Image(const std::string& path);
-    Image(uint32_t width, uint32_t height, const glm::vec4& color = {1.0f, 1.0f, 1.0f, 1.0f});
+    Image(uint32_t width, uint32_t height, const Vector4& color = {1.0f, 1.0f, 1.0f, 1.0f});
     ~Image() = default;
 
-    glm::vec4 GetPixel(int x, int y) const;
-    void SetPixel(int x, int y, const glm::vec4& color);
+    Vector4 GetPixel(int x, int y) const;
+    void SetPixel(int x, int y, const Vector4& color);
 
     const unsigned char* GetData() const { return m_Data.data(); }
     unsigned char* GetData() { return m_Data.data(); }

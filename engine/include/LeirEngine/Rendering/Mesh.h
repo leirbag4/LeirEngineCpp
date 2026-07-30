@@ -1,9 +1,10 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Math/Vector3.h"
+#include "LeirEngine/Math/Vector2.h"
 
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
 #include <vector>
 #include <cstdint>
 
@@ -12,9 +13,9 @@ namespace Leir {
 class VulkanDevice;
 
 struct LEIR_API Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 texCoord;
+    Vector3 position;
+    Vector3 normal;
+    Vector2 texCoord;
 
     static VkVertexInputBindingDescription GetBindingDescription();
     static std::vector<VkVertexInputAttributeDescription> GetAttributeDescriptions();

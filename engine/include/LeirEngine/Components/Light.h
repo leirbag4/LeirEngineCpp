@@ -1,7 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector3.h"
 
 namespace Leir {
 
@@ -18,8 +18,8 @@ public:
     void SetType(LightType type) { m_Type = type; }
     LightType GetType() const { return m_Type; }
 
-    void SetColor(const glm::vec3& color) { m_Color = color; }
-    const glm::vec3& GetColor() const { return m_Color; }
+    void SetColor(const Vector3& color) { m_Color = color; }
+    const Vector3& GetColor() const { return m_Color; }
 
     void SetIntensity(float intensity) { m_Intensity = intensity; }
     float GetIntensity() const { return m_Intensity; }
@@ -32,11 +32,11 @@ public:
         m_SpotOuterAngle = outerDeg;
     }
 
-    glm::vec3 GetDirection() const;
+    Vector3 GetDirection() const;
 
 private:
     LightType m_Type = LightType::Directional;
-    glm::vec3 m_Color{1.0f};
+    Vector3 m_Color{1.0f, 1.0f, 1.0f};
     float m_Intensity = 1.0f;
     float m_Range = 10.0f;
     float m_SpotInnerAngle = 30.0f;

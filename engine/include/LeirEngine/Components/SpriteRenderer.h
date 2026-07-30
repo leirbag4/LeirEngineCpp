@@ -1,7 +1,8 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Core/Component.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector4.h"
 
 namespace Leir {
 
@@ -23,11 +24,11 @@ public:
     void SetFrameIndex(int index) { m_FrameIndex = index; }
     int GetFrameIndex() const { return m_FrameIndex; }
 
-    void SetColor(const glm::vec4& color) { m_Color = color; }
-    const glm::vec4& GetColor() const { return m_Color; }
+    void SetColor(const Vector4& color) { m_Color = color; }
+    const Vector4& GetColor() const { return m_Color; }
 
-    void SetTiling(const glm::vec2& tiling) { m_Tiling = tiling; }
-    const glm::vec2& GetTiling() const { return m_Tiling; }
+    void SetTiling(const Vector2& tiling) { m_Tiling = tiling; }
+    const Vector2& GetTiling() const { return m_Tiling; }
 
     void SetFlipX(bool flip) { m_FlipX = flip; }
     bool GetFlipX() const { return m_FlipX; }
@@ -38,8 +39,8 @@ private:
     Texture2D* m_Texture = nullptr;
     SpriteSheet* m_SpriteSheet = nullptr;
     int m_FrameIndex = 0;
-    glm::vec4 m_Color = glm::vec4(1.0f);
-    glm::vec2 m_Tiling = glm::vec2(1.0f);
+    Vector4 m_Color{1.0f, 1.0f, 1.0f, 1.0f};
+    Vector2 m_Tiling{1.0f, 1.0f};
     bool m_FlipX = false;
     bool m_FlipY = false;
 };

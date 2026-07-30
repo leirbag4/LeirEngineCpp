@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstddef>
 
-#include <glm/gtc/constants.hpp>
+#include "LeirEngine/Math/Mathf.h"
 
 namespace Leir {
 
@@ -165,18 +165,18 @@ std::pair<std::vector<Vertex>, std::vector<uint32_t>> CreateSphere(int sectors, 
     std::vector<uint32_t> indices;
 
     for (int j = 0; j <= stacks; ++j) {
-        float theta = (float)j / (float)stacks * glm::pi<float>();
+        float theta = (float)j / (float)stacks * Mathf::PI;
         float sinTheta = sin(theta);
         float cosTheta = cos(theta);
 
         for (int i = 0; i <= sectors; ++i) {
-            float phi = (float)i / (float)sectors * 2.0f * glm::pi<float>();
+            float phi = (float)i / (float)sectors * 2.0f * Mathf::PI;
             float sinPhi = sin(phi);
             float cosPhi = cos(phi);
 
-            glm::vec3 normal = { sinTheta * cosPhi, cosTheta, sinTheta * sinPhi };
-            glm::vec3 position = normal * 0.5f;
-            glm::vec2 texCoord = { (float)i / (float)sectors, (float)j / (float)stacks };
+            Vector3 normal = { sinTheta * cosPhi, cosTheta, sinTheta * sinPhi };
+            Vector3 position = normal * 0.5f;
+            Vector2 texCoord = { (float)i / (float)sectors, (float)j / (float)stacks };
 
             vertices.push_back({position, normal, texCoord});
         }

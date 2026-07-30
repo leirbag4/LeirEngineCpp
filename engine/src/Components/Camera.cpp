@@ -2,8 +2,6 @@
 #include "LeirEngine/Core/CoreObject.h"
 #include "LeirEngine/Core/Transform.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 namespace Leir {
 
 void Camera::SetPerspective(float fovDegrees, float aspect, float nearPlane, float farPlane)
@@ -13,8 +11,8 @@ void Camera::SetPerspective(float fovDegrees, float aspect, float nearPlane, flo
     m_Aspect = aspect;
     m_Near = nearPlane;
     m_Far = farPlane;
-    m_ProjectionMatrix = glm::perspective(glm::radians(fovDegrees), aspect, nearPlane, farPlane);
-    m_ProjectionMatrix[1][1] *= -1.0f;
+    m_ProjectionMatrix = Matrix4x4::Perspective(fovDegrees, aspect, nearPlane, farPlane);
+    m_ProjectionMatrix(1, 1) *= -1.0f;
 }
 
 void Camera::SetOrthographic(float size, float aspect, float nearPlane, float farPlane)
@@ -26,13 +24,13 @@ void Camera::SetOrthographic(float size, float aspect, float nearPlane, float fa
     m_Far = farPlane;
 
     float half = size * 0.5f;
-    m_ProjectionMatrix = glm::ortho(-half * aspect, half * aspect, -half, half, nearPlane, farPlane);
+    m_ProjectionMatrix = Matrix4x4::Ortho(-half * aspect, half * aspect, -half, half, nearPlane, farPlane);
 }
 
 void Camera::RecalculateViewMatrix()
 {
     Transform& transform = GetOwner()->GetTransform();
-    m_ViewMatrix = glm::lookAt(
+    m_ViewMatrix = Matrix4x4::LookAt(
         transform.GetWorldPosition(),
         transform.GetWorldPosition() + transform.GetForward(),
         transform.GetUp()
