@@ -190,8 +190,10 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
             else if ((cp & 0xF0) == 0xE0 && idx + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[idx+1] & 0x3F) << 6) | (m_Text[idx+2] & 0x3F); step = 3; }
             else { ++i; continue; }
 
-            auto& g = m_Font->GetGlyphInfo(cp);
-            float nextX = x + g.advance;
+            if (cp == '\n') { x = 0.0f; i += step; continue; }
+
+            float advance = (cp == ' ') ? m_Font->GetSpaceWidth() : m_Font->GetGlyphInfo(cp).advance;
+            float nextX = x + advance;
             if (localX < nextX) {
                 col = (localX - x < nextX - localX) ? i : i + step;
                 break;

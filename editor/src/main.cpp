@@ -35,6 +35,7 @@
 #include "UI/UITestPanel.h"
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
+#include "UI/TextAreaDebugPanel.h"
 #include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
@@ -284,6 +285,14 @@ protected:
         m_CameraTestPanel->SetCameraObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
 
+        // TextArea Debug Panel (top-right, above CameraTestPanel)
+        m_TextAreaDebugPanel = new TextAreaDebugPanel();
+        m_TextAreaDebugPanel->SetName("DebugTextAreaPanel");
+        m_TextAreaDebugPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
+        m_TextAreaDebugPanel->GetRect().offset = {-510.0f, -400.0f, -230.0f, -210.0f};
+        m_TextAreaDebugPanel->SetFont(m_FontSmall.get());
+        root->AddChild(m_TextAreaDebugPanel);
+
         // Debug Text Panel (on the left side of viewport, below TestPanel)
         m_DebugTextPanel = new DebugTextPanel();
         m_DebugTextPanel->SetName("DebugTextPanel");
@@ -353,6 +362,8 @@ protected:
             m_CameraTestPanel->Refresh();
         if (m_DebugTextPanel)
             m_DebugTextPanel->Refresh();
+        if (m_TextAreaDebugPanel)
+            m_TextAreaDebugPanel->Refresh();
     }
 
     void OnRender() override
@@ -414,6 +425,7 @@ private:
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;
     DebugTextPanel* m_DebugTextPanel = nullptr;
+    TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 };

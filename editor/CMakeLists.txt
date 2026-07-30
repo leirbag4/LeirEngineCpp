@@ -5,6 +5,7 @@ add_executable(LeirEngineEditor
     src/UI/UITestPanel.cpp
     src/UI/CameraTestPanel.cpp
     src/UI/DebugTextPanel.cpp
+    src/UI/TextAreaDebugPanel.cpp
 )
 
 target_include_directories(LeirEngineEditor

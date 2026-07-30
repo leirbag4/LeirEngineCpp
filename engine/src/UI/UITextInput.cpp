@@ -267,6 +267,7 @@ float UITextInput::GetCursorXAt(int charIndex) const
         else if ((cp & 0xE0) == 0xC0 && i + 1 < (int)m_Text.size()) { cp = ((cp & 0x1F) << 6) | (m_Text[i+1] & 0x3F); i += 2; }
         else if ((cp & 0xF0) == 0xE0 && i + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[i+1] & 0x3F) << 6) | (m_Text[i+2] & 0x3F); i += 3; }
         else { ++i; continue; }
+        if (cp == '\n') { x = 0.0f; continue; }
         if (cp == ' ') { x += m_Font->GetSpaceWidth(); continue; }
         auto& g = m_Font->GetGlyphInfo(cp);
         x += g.advance;
@@ -287,11 +288,12 @@ int UITextInput::GetCharIndexAtX(float localX) const
         else if ((cp & 0xF0) == 0xE0 && i + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[i+1] & 0x3F) << 6) | (m_Text[i+2] & 0x3F); step = 3; }
         else { ++i; ++charIdx; continue; }
 
+        if (cp == '\n') { x = 0.0f; i += step; ++charIdx; continue; }
+
         auto& g = m_Font->GetGlyphInfo(cp);
         float advance = (cp == ' ') ? m_Font->GetSpaceWidth() : g.advance;
         float nextX = x + advance;
         if (localX < nextX) {
-            // Return the closer edge
             return (localX - x < nextX - localX) ? charIdx : charIdx + 1;
         }
         x = nextX;
