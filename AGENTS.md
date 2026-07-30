@@ -374,28 +374,75 @@ Canvas
         ├── Inspector (UIPanel, anchor 1,0–1,1 offset -220,0–0,-30)
         │     └── InspectorTitle (UILabel)
         ├── BottomBar (UIImage, anchor 0,1–1,1 offset 0,-30–0,0)
-        └── StatusLabel (UILabel, anchor 0,1–0,1 offset 8,-28–600,0)
+        ├── StatusLabel (UILabel, anchor 0,1–0,1 offset 8,-28–600,0)
+        ├── UITestPanel ("DebugTestPanel", bottom-left inside viewport)
+        │     └── fields: Position X/Y/Z, Rotation X/Y/Z, Scale X/Y/Z → Cube
+        └── CameraTestPanel ("DebugCameraPanel", bottom-right inside viewport)
+              └── fields: Position X/Y/Z, Rotation X/Y/Z → Camera
 [DebugOverlay panel added as sibling of root]
 ```
 
 ### EditorCamera
 
-```cpp
-struct EditorCamera {
-    float yaw = 0.0f;
-    float pitch = -20.0f;
-    float distance = 8.0f;
-    glm::vec3 target = {0.0f, 0.0f, 0.0f};
+`editor/src/Camera/EditorCamera.h/.cpp` — free-fly camera class replacing the old inline struct.
 
-    glm::vec3 GetPosition() const;  // spherical → cartesian
-    void Orbit(float dx, float dy); // left drag
-    void Pan(float dx, float dy);   // middle drag
-    void Zoom(float delta);         // scroll
+```cpp
+class EditorCamera {
+public:
+    EditorCamera();
+    void Update(float deltaTime);
+    glm::vec3 GetPosition() const;
+    float GetYaw() const;
+    float GetPitch() const;
+    glm::vec3 GetForward() const;
+    glm::vec3 GetRight() const;
+    glm::quat GetRotation() const;
+    void SetPosition(const glm::vec3& pos);
+    void SetYaw(float y);
+    void SetPitch(float p);
+private:
+    glm::vec3 m_Position = {0.0f, 2.0f, 4.0f};
+    float m_Yaw = 0.0f;
+    float m_Pitch = -20.0f;
 };
 ```
 
-- Scene camera position/rotation synced from EditorCamera each frame
-- Only responds when hovered element is inside the ViewportPanel
+**Controls** (only when viewport is hovered and the respective button is held):
+
+| Input | Action |
+|---|---|
+| Right-click + drag | Yaw/Pitch |
+| Middle-click + drag | Pan (horizontal: camera right, vertical: world Y) |
+| W/S | Move forward/backward (camera forward) |
+| A/D | Move left/right (camera right) |
+| E/Q | Move up/down (world Y) |
+| Shift | 3x movement speed |
+
+**Update** reads `Mouse::IsDown(Right/Middle)`, `Mouse::GetDelta()`, and `Keyboard::IsDown(W/A/S/D/Q/E/Shift)` directly.
+
+### Camera Sync (bidirectional)
+
+In `EditorApp::OnUpdate`:
+
+```cpp
+if (rightDown || middleDown)
+    m_EditorCamera.Update(deltaTime);
+
+if (cameraObj) {
+    if (cameraControlled) {
+        // EditorCamera → scene camera
+        cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
+        cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
+    } else {
+        // scene camera → EditorCamera (panel edits flow back)
+        auto pos = t.GetLocalPosition();
+        auto euler = glm::degrees(glm::eulerAngles(t.GetLocalRotation()));
+        m_EditorCamera.SetPosition(pos);
+        m_EditorCamera.SetYaw(euler.y);     // Y euler → yaw
+        m_EditorCamera.SetPitch(euler.x);   // X euler → pitch
+    }
+}
+```
 
 ## OnRender Flow (Editor)
 
@@ -411,6 +458,104 @@ void OnRender() override {
 }
 ```
 
+## UI Widgets
+
+### UIFloatInput (`engine/include/LeirEngine/UI/UIFloatInput.h`)
+
+Inherits `UITextInput`, filters input to `[0-9]` `+` `-` `.`, commits on Enter/Blur.
+
+```cpp
+class UIFloatInput : public UITextInput {
+    void SetValue(float v);
+    float GetValue() const;
+    void SetOnValueChanged(std::function<void(float)>);
+    bool OnTextInput(uint32_t codepoint) override;
+    bool OnKeyDown(int key) override;
+    void OnFocus() override;
+    void OnBlur() override;
+};
+```
+
+### UIDragFloatInput (`editor/src/UI/UIDragFloatInput.h/.cpp`)
+
+Inherits `UIPanel` (gray background), contains `UILabel` + `UIFloatInput` in a Row layout. Drag-to-change on the label area.
+
+```cpp
+class UIDragFloatInput : public UIPanel {
+    void SetLabel(const std::string& text);
+    void SetValue(float v);
+    float GetValue() const;
+    void SetOnValueChanged(std::function<void(float)>);
+    bool OnPointerDown(const glm::vec2& pos) override;   // starts drag on label hit
+    void OnPointerMove(const glm::vec2& pos) override;    // delta → value
+    bool OnPointerUp(const glm::vec2& pos) override;      // ends drag
+};
+```
+- Drag captures pointer via `UICanvas::CapturePointer()` (routes all Move/Release to the drag element)
+- Sensitivity: 100 pixels = 1.0 unit
+
+### UITestPanel / CameraTestPanel (`editor/src/UI/`)
+
+- `UITestPanel` — floating panel with Position/Rotation/Scale fields bound to Cube transform
+- `CameraTestPanel` — floating panel with Position/Rotation fields bound to Camera transform
+- Each field has an `OnValueChanged` callback that writes directly to the `Object3D::Transform` (immediate mode)
+- `Refresh()` reads from the scene object and updates input values every frame
+- Both panels start with `"Debug"` in their name so the whole subtree routes to the debug overlay layer
+
+## Layout System
+
+### Parent position propagation
+
+In `UIElement::ComputeFreeLayout/ComputeRowLayout/ComputeColumnLayout`, the parent's `m_ComputedRect.x/y` is added to each child's `m_Rect.offset` **before** calling `child->ComputeLayout()`. This ensures grandchildren inherit the full absolute position chain — labels and inputs inside nested layouts (e.g., `UIDragFloatInput` inside a Row inside a `UITestPanel`) are positioned correctly.
+
+### Debug overlay detection in UIRenderer
+
+An element is routed to `BuildBatchDebug()` (debug overlay layer) if its own name or any ancestor's name starts with `"Debug"`. This is checked by walking the parent chain in `Render()` before batching.
+
+## UICanvas Event Propagation
+
+### Pointer event propagation
+
+`ProcessPointerEvent` propagates `OnPointerDown`/`OnPointerUp` up the parent chain when the deepest child returns `false`:
+
+```cpp
+UIElement* target = hit;
+while (target && !target->OnPointerDown(pos))
+    target = target->GetParent();
+```
+
+### Pointer capture
+
+`CapturePointer(UIElement*)` / `ReleasePointer()` — when an element captures the pointer, all subsequent Move/Release events are routed directly to it without hit-testing. Used by `UIDragFloatInput` during drag.
+
+```cpp
+// Capture in OnPointerDown:
+Leir::UIElement* e = this;
+while (e) {
+    auto* c = dynamic_cast<Leir::UICanvas*>(e);
+    if (c) { c->CapturePointer(this); break; }
+    e = e->GetParent();
+}
+
+// In ProcessPointerEvent:
+if (m_CaptureElement && e.action != EventAction::Press) {
+    if (e.action == EventAction::Move)
+        m_CaptureElement->OnPointerMove(pos);
+    else if (e.action == EventAction::Release) {
+        m_CaptureElement->OnPointerUp(pos);
+        m_CaptureElement = nullptr;
+    }
+    return;
+}
+```
+
+### Focus management
+
+- `SetFocus(UIElement*)` — calls `OnBlur()` on old focus, `OnFocus()` on new
+- `ClearFocus()` — clears focus
+- `SendTextInput(uint32_t codepoint)` — forwards char to `m_FocusElement->OnTextInput()`
+- `SendKeyDown(int key)` — forwards key to `m_FocusElement->OnKeyDown()`
+
 ## Previous Changes Summary
 
 - `Settings.h`: added `debug.show_overlay` field
@@ -421,3 +566,13 @@ void OnRender() override {
 - `CoreApplication::Run()`: `InputManager::Update()` (ResetFrame) moved **after** `OnUpdate()` so delta/scroll/edge detection work during update
 - `UIRenderer`: `ViewportDraw` struct, `m_ViewportDraws`/`m_VpDescCache`, `BuildBatchDebug()` for 3-layer flush
 - `engine/CMakeLists.txt`: added `RenderTexture.cpp`, `UIViewportPanel.cpp`
+- `UIRenderer` draw layers: changed from 2-layer (regular UI → viewports) to 3-layer (regular UI → viewports → debug overlay). Debug detection walks parent chain for `"Debug"` prefix name
+- Layout system: parent `m_ComputedRect` position now added to child offset **before** `child->ComputeLayout()` in all 3 layout modes (Free/Row/Column), fixing nested layouts where grandchildren (e.g. labels inside `UIDragFloatInput` inside `UITestPanel`) had wrong positions
+- `UICanvas::ProcessPointerEvent`: event propagates up parent chain when deepest child returns `false`; pointer capture via `CapturePointer(UIElement*)` / `ReleasePointer()`
+- `UILabel`: vertical centering — text now centered in label's computed rect using `(cr.w - blockH) * 0.5f + ascender` instead of just `ascender`
+- `UIFloatInput`: new engine widget inheriting `UITextInput`, filters `[0-9]` `+` `-` `.`, commits on Enter/Blur
+- `UIDragFloatInput`: new editor widget (UIPanel + UILabel + UIFloatInput), drag-to-change on label with pointer capture
+- `UITestPanel` / `CameraTestPanel`: floating editor panels bound to Cube and Camera transforms, with OnValueChanged callbacks for immediate transform writes and Refresh() per frame
+- `EditorCamera`: new class in `editor/src/Camera/EditorCamera.h/.cpp`, free-fly camera with right-click yaw/pitch, middle-click pan, WASDQE movement. Replaces old inline struct
+- Bidirectional camera sync: EditorCamera → scene camera during right-click/middle-click control; scene camera → EditorCamera during panel edits
+- Camera initial position: `{0.0f, 2.0f, 4.0f}`
