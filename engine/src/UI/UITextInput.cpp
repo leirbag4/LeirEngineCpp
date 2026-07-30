@@ -94,7 +94,14 @@ bool UITextInput::OnKeyDown(int key)
 
     ResetCaretBlink();
 
+    bool ctrl = Keyboard::IsDown(Key::LeftControl) || Keyboard::IsDown(Key::RightControl);
     bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
+
+    if (ctrl && key == static_cast<int>(Key::A)) {
+        m_CursorPos = (int)m_Text.size();
+        m_SelectionStart = 0;
+        return true;
+    }
 
     if (key == static_cast<int>(Key::Backspace)) {
         if (HasSelection()) {
