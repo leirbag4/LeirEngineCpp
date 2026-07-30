@@ -287,10 +287,11 @@ protected:
         m_CameraTestPanel->SetCameraObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
 
-        // Sync EditorCamera initial state from scene camera
+        // Sync scene camera from EditorCamera initial position
         auto* camObj = scene.FindObjectByName("Camera");
         if (camObj) {
-            m_EditorCamera.SetPosition(camObj->GetTransform().GetLocalPosition());
+            camObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
+            camObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
         }
 
         spdlog::info("Scene hierarchy created with viewport system");
@@ -305,17 +306,28 @@ protected:
         auto* hovered = m_Canvas->GetHoveredElement();
         bool inViewport = m_ViewportPanel && hovered &&
             (hovered == m_ViewportPanel || hovered->GetParent() == m_ViewportPanel);
+        bool rightDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right);
 
-        // Right-click yaw/pitch + WASDQE movement (only in viewport)
-        if (inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right)) {
+        // Update EditorCamera state
+        if (rightDown)
             m_EditorCamera.Update(deltaTime);
-        }
 
-        // Sync scene camera from EditorCamera
+        // Bidirectional sync: EditorCamera ↔ scene camera
         auto* cameraObj = scene->FindObjectByName("Camera");
         if (cameraObj) {
-            cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
-            cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
+            if (rightDown) {
+                // EditorCamera → escena (durante control)
+                cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
+                cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
+            } else {
+                // escena → EditorCamera (panel edits)
+                auto& t = cameraObj->GetTransform();
+                auto pos = t.GetLocalPosition();
+                auto euler = glm::degrees(glm::eulerAngles(t.GetLocalRotation()));
+                m_EditorCamera.SetPosition(pos);
+                m_EditorCamera.SetYaw(euler.y);
+                m_EditorCamera.SetPitch(euler.x);
+            }
         }
 
         // Update UI layout on resize

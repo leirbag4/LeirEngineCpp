@@ -20,7 +20,7 @@ public:
     void SetPitch(float p) { m_Pitch = glm::clamp(p, -89.0f, 89.0f); }
 
 private:
-    glm::vec3 m_Position = {0.0f, 2.0f, 8.0f};
+    glm::vec3 m_Position = {0.0f, 2.0f, 4.0f};
     float m_Yaw = 0.0f;
     float m_Pitch = -20.0f;
 };
