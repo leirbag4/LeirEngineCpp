@@ -1,6 +1,7 @@
 #include "LeirEngine/UI/UIFloatInput.h"
 #include <cstdlib>
 #include <cctype>
+#include <spdlog/spdlog.h>
 
 namespace Leir {
 
@@ -15,36 +16,49 @@ void UIFloatInput::SetValue(float v)
 
 bool UIFloatInput::OnTextInput(uint32_t codepoint)
 {
-    if (!m_Focused) return false;
+    if (!m_Focused) {
+        spdlog::trace("[FloatInput] OnTextInput ignored (not focused)");
+        return false;
+    }
 
     char c = (char)codepoint;
     if (std::isdigit(c) || c == '.' || c == '-' || c == '+') {
+        spdlog::trace("[FloatInput] Accept char '{}' text='{}'",
+            c, GetText().c_str());
         InsertChar(codepoint);
         return true;
     }
+    spdlog::trace("[FloatInput] Reject char '{}' (codepoint={})", c, codepoint);
     return false;
 }
 
 bool UIFloatInput::OnKeyDown(int key)
 {
-    if (!m_Focused) return false;
+    if (!m_Focused) {
+        spdlog::trace("[FloatInput] OnKeyDown ignored (not focused)");
+        return false;
+    }
 
     if (key == 257 || key == 335) {
+        spdlog::trace("[FloatInput] Enter key -> CommitValue");
         CommitValue();
         return true;
     }
 
+    spdlog::trace("[FloatInput] KeyDown key={} (not handled)", key);
     return false;
 }
 
 void UIFloatInput::OnFocus()
 {
+    spdlog::trace("[FloatInput] OnFocus (was focused={})", m_Focused);
     m_Focused = true;
     UITextInput::OnFocus();
 }
 
 void UIFloatInput::OnBlur()
 {
+    spdlog::trace("[FloatInput] OnBlur (was focused={})", m_Focused);
     if (m_Focused) {
         m_Focused = false;
         CommitValue();

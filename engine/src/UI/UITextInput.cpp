@@ -1,5 +1,6 @@
 #include "LeirEngine/UI/UITextInput.h"
 #include "LeirEngine/UI/Font.h"
+#include <spdlog/spdlog.h>
 
 namespace Leir {
 
@@ -30,6 +31,7 @@ void UITextInput::OnPointerExit()
 
 bool UITextInput::OnPointerDown(const glm::vec2& pos)
 {
+    spdlog::trace("[TextInput '{}'] OnPointerDown, setting focus", GetName().c_str());
     UpdateCursorPos();
     return true;
 }

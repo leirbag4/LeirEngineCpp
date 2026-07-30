@@ -80,12 +80,19 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 {
     glm::vec2 pos = e.position;
 
+    spdlog::trace("[Canvas] ProcessPointerEvent: source={} action={} pos=({:.1f},{:.1f}) btn={} capture={}",
+        (int)e.source, (int)e.action, pos.x, pos.y, (int)e.button,
+        m_CaptureElement ? m_CaptureElement->GetName().c_str() : "null");
+
     // If an element has captured the pointer, route everything to it
     if (m_CaptureElement && e.action != EventAction::Press) {
+        spdlog::trace("[Canvas] Captured -> {} (action={})",
+            m_CaptureElement->GetName().c_str(), (int)e.action);
         if (e.action == EventAction::Move)
             m_CaptureElement->OnPointerMove(pos);
         else if (e.action == EventAction::Release) {
             m_CaptureElement->OnPointerUp(pos);
+            spdlog::trace("[Canvas] ReleaseCapture");
             m_CaptureElement = nullptr;
         }
         return;
@@ -93,6 +100,9 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 
     UIElement* hit = nullptr;
     HitTest(pos, hit);
+    spdlog::trace("[Canvas] HitTest: {} (prev hover: {})",
+        hit ? hit->GetName().c_str() : "null",
+        m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
 
     // Hover tracking (only when no capture)
     if (hit != m_HoveredElement) {
@@ -119,11 +129,16 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             while (target && !target->OnPointerDown(pos))
                 target = target->GetParent();
 
+            spdlog::trace("[Canvas] Press target: {} (hit: {})",
+                target ? target->GetName().c_str() : "null",
+                hit->GetName().c_str());
+
             if (target)
                 SetFocus(target);
             else
                 SetFocus(hit);
         } else {
+            spdlog::trace("[Canvas] Press on empty area, clearing focus");
             ClearFocus();
         }
     }
@@ -134,6 +149,8 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             UIElement* target = hit;
             while (target && !target->OnPointerUp(pos))
                 target = target->GetParent();
+            spdlog::trace("[Canvas] Release target: {}",
+                target ? target->GetName().c_str() : "null");
         }
     }
 }
@@ -141,6 +158,9 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 void UICanvas::SetFocus(UIElement* element)
 {
     if (m_FocusElement == element) return;
+    spdlog::trace("[Canvas] Focus change: {} -> {}",
+        m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
+        element ? element->GetName().c_str() : "null");
     if (m_FocusElement)
         m_FocusElement->OnBlur();
     m_FocusElement = element;
@@ -150,12 +170,17 @@ void UICanvas::SetFocus(UIElement* element)
 
 void UICanvas::SendTextInput(uint32_t codepoint)
 {
+    spdlog::trace("[Canvas] SendTextInput: codepoint={} ('{}') focus={}",
+        codepoint, (char)codepoint,
+        m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
         m_FocusElement->OnTextInput(codepoint);
 }
 
 void UICanvas::SendKeyDown(int key)
 {
+    spdlog::trace("[Canvas] SendKeyDown: key={} focus={}",
+        key, m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
         m_FocusElement->OnKeyDown(key);
 }
