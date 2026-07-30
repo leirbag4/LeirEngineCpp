@@ -556,6 +556,66 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `SendTextInput(uint32_t codepoint)` — forwards char to `m_FocusElement->OnTextInput()`
 - `SendKeyDown(int key)` — forwards key to `m_FocusElement->OnKeyDown()`
 
+## UITextInput — Text Input System
+
+### Keyboard navigation & deletion
+- `UITextInput::OnKeyDown` handles: Backspace, Delete, Left/Right/Home/End arrows, each with `ResetCaretBlink()`
+- `DeleteForward()` — deletes character after cursor (Delete key)
+- `UIFloatInput::OnKeyDown` forwards unhandled keys to `UITextInput::OnKeyDown`
+
+### m_Focused fix
+- Removed shadow `bool m_Focused` from `UIFloatInput` — now uses inherited `UITextInput::m_Focused`
+
+### Text color API
+- `SetTextColor(Vector4)` / `GetTextColor()` on `UITextInput`
+- `UIRenderer` uses `input->GetTextColor()` instead of hardcoded white
+
+### Cursor positioning & caret
+- `GetCursorX()` — X position of cursor within text (using glyph advances)
+- `GetCursorXAt(int charIndex)` — X of any character index
+- `GetCharIndexAtX(float localX)` — character index from local X (click-to-position)
+- `TickCaret()` called each frame in `UIRenderer::Render`; blink uses `(m_FrameCounter/30)%2`
+- Caret rendered as 1px white quad at computed cursor X, vertically centered for single-line, aligned to line for UITextArea
+- `OnPointerDown` sets cursor via `GetCharIndexAtX`, `OnPointerMove` updates cursor during drag
+
+### Drag selection & pointer capture
+- `m_Dragging` flag: true only while mouse button held after OnPointerDown
+- `OnPointerUp` clears `m_Dragging`
+- `OnPointerMove` only moves cursor when `m_Dragging` is true
+- `CaptureDragPointer()` walks up to `UICanvas` and calls `CapturePointer(this)` — all subsequent Move/Release events go to the input even outside its bounding box (fixes drag-past-border behavior)
+- `OnBlur` releases captured pointer and clears `m_Dragging`
+- Selection by click-drag: first `OnPointerMove` during drag sets `m_SelectionStart = m_CursorPos` (position before movement)
+
+### Double-click word selection
+- Windows-compatible character classification: whitespace (0), word (1: `a-z A-Z 0-9 _`), other (2: everything else)
+- `SelectWordAt(int pos)`: expands left/right while same character class
+- `FindPrevWordBoundary(from)` / `FindNextWordBoundary(from)` — word jump boundaries (Ctrl+Left/Right)
+- Double-click detection: two `OnPointerDown` within ≤15 frames (~250ms) AND `|pos1-pos2| ≤ 3` characters
+- Monotonic `m_FrameCounter` (never wraps, never resets by blink) for reliable timing
+- `spdlog::trace` logged on each double-click with framesSinceLast and posDiff
+
+### Ctrl+A select all
+- `Keyboard::IsDown(LeftControl|RightControl) && Key::A` → `m_SelectionStart = 0`, `m_CursorPos = len`
+
+### Space width fix
+- `GetCursorXAt` and `GetCharIndexAtX` use `m_Font->GetSpaceWidth()` for space characters instead of `g.advance` (which differs from `m_SpaceWidth` used by `Font::LayoutText`), fixing caret misalignment with spaces
+
+### UITextArea (multiline)
+- New class in `engine/include/LeirEngine/UI/UITextArea.h` / `engine/src/UI/UITextArea.cpp`
+- Inherits `UITextInput`, allows `\n` in `InsertChar`
+- `OnKeyDown`: Enter → insert `\n`; Up/Down → navigate between logical lines preserving `m_TargetX`
+- `OnPointerDown`: multiline-aware (computes line from Y, column from X)
+- `GetCursorLine()` / `GetCursorCol()` / `GetLineStart/End()` — logical line helpers
+- `UIRenderer`: renders text with `baselineY = cr.y + 4 + ascender`, caret at `cr.y + 4 + cursorLine * lineH`
+- `GetMinSize()` returns 200×100
+
+### DebugTextPanel (editor)
+- New editor panel in `editor/src/UI/DebugTextPanel.h/.cpp`
+- Contains: `UITextInput` (single-line), `UITextArea` (multiline), `UIFloatInput`
+- `Refresh()` per frame shows live cursor pos, line/col, selection state, float value
+- Name starts with "Debug" → renders in debug overlay layer
+- Integrated in `main.cpp` (OnInit creation, OnUpdate Refresh)
+
 ## Previous Changes Summary
 
 - `Settings.h`: added `debug.show_overlay` field
