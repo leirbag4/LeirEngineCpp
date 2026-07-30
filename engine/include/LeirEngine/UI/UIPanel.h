@@ -1,7 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector4.h"
 
 namespace Leir {
 

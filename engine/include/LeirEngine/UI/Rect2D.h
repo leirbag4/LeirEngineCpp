@@ -1,6 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector4.h"
 
 namespace Leir {
 
@@ -29,9 +30,9 @@ struct LEIR_API OffsetSet {
 struct LEIR_API Rect2D {
     AnchorSet anchor;
     OffsetSet offset;
-    glm::vec2 pivot = {0.5f, 0.5f};
+    Vector2 pivot = {0.5f, 0.5f};
 
-    glm::vec4 GetRect(const glm::vec2& parentSize) const {
+    Vector4 GetRect(const Vector2& parentSize) const {
         float x = anchor.left * parentSize.x + offset.left;
         float y = anchor.top * parentSize.y + offset.top;
         float w = (anchor.right - anchor.left) * parentSize.x + (offset.right - offset.left);
@@ -39,7 +40,7 @@ struct LEIR_API Rect2D {
         return {x, y, w, h};
     }
 
-    static Rect2D Absolute(float x, float y, float w, float h, const glm::vec2& pivot = {0.5f, 0.5f}) {
+    static Rect2D Absolute(float x, float y, float w, float h, const Vector2& pivot = {0.5f, 0.5f}) {
         Rect2D r;
         r.anchor = AnchorSet::TopLeft();
         r.offset = {x, y, x + w, y + h};
@@ -47,7 +48,7 @@ struct LEIR_API Rect2D {
         return r;
     }
 
-    static Rect2D Stretch(const OffsetSet& margins = {}, const glm::vec2& pivot = {0.5f, 0.5f}) {
+    static Rect2D Stretch(const OffsetSet& margins = {}, const Vector2& pivot = {0.5f, 0.5f}) {
         Rect2D r;
         r.anchor = AnchorSet::Stretch();
         r.offset = margins;

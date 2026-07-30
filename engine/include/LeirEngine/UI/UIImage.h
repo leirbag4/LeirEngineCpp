@@ -1,7 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 
 namespace Leir {
 
@@ -21,7 +21,7 @@ public:
     void SetSliceBorders(float left, float top, float right, float bottom);
     const float* GetSliceBorders() const { return m_SliceBorders; }
 
-    glm::vec2 GetMinSize() const override;
+    Vector2 GetMinSize() const override;
 
 private:
     Texture2D* m_Texture = nullptr;

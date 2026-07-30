@@ -16,7 +16,7 @@ public:
 
     void UpdateLayout();
 
-    bool HitTest(const glm::vec2& screenPos, UIElement*& outElement);
+    bool HitTest(const Vector2& screenPos, UIElement*& outElement);
 
     // Connect to EventQueue for automatic input dispatch
     void ConnectToInputSystem();
@@ -43,7 +43,7 @@ private:
     UIElement* m_HoveredElement = nullptr;
     UIElement* m_CaptureElement = nullptr;
 
-    void HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElement*& out);
+    void HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out);
     bool m_PointerDown = false;
 };
 

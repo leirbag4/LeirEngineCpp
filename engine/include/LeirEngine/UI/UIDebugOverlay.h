@@ -1,6 +1,5 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
 #include <string>
 #include <vector>
 

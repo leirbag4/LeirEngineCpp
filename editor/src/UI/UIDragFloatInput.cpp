@@ -48,7 +48,7 @@ void UIDragFloatInput::SetFont(Leir::Font* font)
     if (m_Input) m_Input->SetFont(font);
 }
 
-bool UIDragFloatInput::OnPointerDown(const glm::vec2& pos)
+bool UIDragFloatInput::OnPointerDown(const Leir::Vector2& pos)
 {
     if (!m_Label) return false;
 
@@ -79,7 +79,7 @@ bool UIDragFloatInput::OnPointerDown(const glm::vec2& pos)
     return true;
 }
 
-void UIDragFloatInput::OnPointerMove(const glm::vec2& pos)
+void UIDragFloatInput::OnPointerMove(const Leir::Vector2& pos)
 {
     if (!m_Dragging) return;
 
@@ -92,7 +92,7 @@ void UIDragFloatInput::OnPointerMove(const glm::vec2& pos)
         m_OnValueChanged(newVal);
 }
 
-bool UIDragFloatInput::OnPointerUp(const glm::vec2& pos)
+bool UIDragFloatInput::OnPointerUp(const Leir::Vector2& pos)
 {
     if (!m_Dragging) return false;
     spdlog::trace("[DragInput] DragEnd");
@@ -100,7 +100,7 @@ bool UIDragFloatInput::OnPointerUp(const glm::vec2& pos)
     return true;
 }
 
-glm::vec2 UIDragFloatInput::GetMinSize() const
+Leir::Vector2 UIDragFloatInput::GetMinSize() const
 {
     return {60.0f, 22.0f};
 }

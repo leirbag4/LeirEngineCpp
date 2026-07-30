@@ -16,11 +16,11 @@ public:
 
     void SetOnValueChanged(std::function<void(float)> cb) { m_OnValueChanged = cb; }
 
-    bool OnPointerDown(const glm::vec2& pos) override;
-    void OnPointerMove(const glm::vec2& pos) override;
-    bool OnPointerUp(const glm::vec2& pos) override;
+    bool OnPointerDown(const Leir::Vector2& pos) override;
+    void OnPointerMove(const Leir::Vector2& pos) override;
+    bool OnPointerUp(const Leir::Vector2& pos) override;
 
-    glm::vec2 GetMinSize() const override;
+    Leir::Vector2 GetMinSize() const override;
 
     Leir::UIFloatInput* GetInput() const { return m_Input; }
     Leir::UILabel* GetLabel() const { return m_Label; }

@@ -17,7 +17,7 @@ public:
     void SetTargetObject(Leir::Object3D* obj);
     void Refresh();
 
-    glm::vec2 GetMinSize() const override;
+    Leir::Vector2 GetMinSize() const override;
 
 protected:
     void OnLayoutComputed() override;

@@ -25,7 +25,7 @@ void ScrollView::OnLayoutComputed()
         m_Content->GetRect().offset.top = m_ScrollOffset.y;
         // Give content the full available space (it will ComputeLayout with scroll offsets)
         const auto& cr = GetComputedRect();
-        glm::vec2 avail = {cr.z, cr.w};
+        Vector2 avail = {cr.z, cr.w};
         m_Content->ComputeLayout(avail);
     }
 
@@ -35,7 +35,7 @@ void ScrollView::OnLayoutComputed()
     }
 }
 
-bool ScrollView::OnPointerDown(const glm::vec2& pos)
+bool ScrollView::OnPointerDown(const Vector2& pos)
 {
     m_Dragging = true;
     m_DragStart = pos;
@@ -43,16 +43,16 @@ bool ScrollView::OnPointerDown(const glm::vec2& pos)
     return true;
 }
 
-bool ScrollView::OnPointerUp(const glm::vec2& pos)
+bool ScrollView::OnPointerUp(const Vector2& pos)
 {
     m_Dragging = false;
     return true;
 }
 
-void ScrollView::OnPointerMove(const glm::vec2& pos)
+void ScrollView::OnPointerMove(const Vector2& pos)
 {
     if (m_Dragging) {
-        glm::vec2 delta = pos - m_DragStart;
+        Vector2 delta = pos - m_DragStart;
         m_ScrollOffset = m_ScrollStart + delta;
     }
 }

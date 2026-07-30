@@ -42,12 +42,12 @@ void UIElement::RemoveChild(UIElement* child)
     }
 }
 
-glm::vec2 UIElement::GetMinSize() const
+Vector2 UIElement::GetMinSize() const
 {
     return {0.0f, 0.0f};
 }
 
-void UIElement::ComputeLayout(const glm::vec2& availableSize)
+void UIElement::ComputeLayout(const Vector2& availableSize)
 {
     if (!m_Active)
         return;
@@ -67,14 +67,14 @@ void UIElement::ComputeLayout(const glm::vec2& availableSize)
     OnLayoutComputed();
 }
 
-void UIElement::ComputeFreeLayout(const glm::vec2& availableSize)
+void UIElement::ComputeFreeLayout(const Vector2& availableSize)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
 
     for (auto* child : m_Children) {
         if (!child->IsActive())
             continue;
-        glm::vec2 childSize = {
+        Vector2 childSize = {
             m_ComputedRect.z - m_Padding[0] - m_Padding[2],
             m_ComputedRect.w - m_Padding[1] - m_Padding[3]
         };
@@ -86,7 +86,7 @@ void UIElement::ComputeFreeLayout(const glm::vec2& availableSize)
     }
 }
 
-void UIElement::ComputeRowLayout(const glm::vec2& availableSize)
+void UIElement::ComputeRowLayout(const Vector2& availableSize)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
 
@@ -160,7 +160,7 @@ void UIElement::ComputeRowLayout(const glm::vec2& availableSize)
     }
 }
 
-void UIElement::ComputeColumnLayout(const glm::vec2& availableSize)
+void UIElement::ComputeColumnLayout(const Vector2& availableSize)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
 

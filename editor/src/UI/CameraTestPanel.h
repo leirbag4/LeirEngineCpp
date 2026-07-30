@@ -18,7 +18,7 @@ public:
     void SetCameraObject(Leir::Object3D* cam);
     void Refresh();
 
-    glm::vec2 GetMinSize() const override;
+    Leir::Vector2 GetMinSize() const override;
 
 protected:
     void OnLayoutComputed() override;

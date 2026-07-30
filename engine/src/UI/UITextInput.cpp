@@ -13,13 +13,13 @@ void UITextInput::SetText(const std::string& text)
     m_CursorPos = (int)m_Text.size();
 }
 
-glm::vec2 UITextInput::GetMinSize() const
+Vector2 UITextInput::GetMinSize() const
 {
     float h = m_Font ? m_Font->GetLineHeight() : 20.0f;
     return {100.0f, h + 8.0f};
 }
 
-void UITextInput::OnPointerEnter(const glm::vec2& pos)
+void UITextInput::OnPointerEnter(const Vector2& pos)
 {
     m_Hovered = true;
 }
@@ -29,14 +29,14 @@ void UITextInput::OnPointerExit()
     m_Hovered = false;
 }
 
-bool UITextInput::OnPointerDown(const glm::vec2& pos)
+bool UITextInput::OnPointerDown(const Vector2& pos)
 {
     spdlog::trace("[TextInput '{}'] OnPointerDown, setting focus", GetName().c_str());
     UpdateCursorPos();
     return true;
 }
 
-void UITextInput::OnPointerMove(const glm::vec2& pos)
+void UITextInput::OnPointerMove(const Vector2& pos)
 {
     if (m_Focused)
         UpdateCursorPos();

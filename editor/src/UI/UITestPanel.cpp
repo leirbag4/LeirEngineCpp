@@ -1,7 +1,5 @@
 #include "UITestPanel.h"
 #include <LeirEngine/Core/Transform.h>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/euler_angles.hpp>
 #include <functional>
 
 UITestPanel::UITestPanel()
@@ -58,18 +56,18 @@ UITestPanel::UITestPanel()
     auto* rotRow = makeRow();
     AddField(rotRow, "X:", m_RotX, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.x = v;
-        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.x = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
     AddField(rotRow, "Y:", m_RotY, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.y = v;
-        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.y = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
     AddField(rotRow, "Z:", m_RotZ, [this](float v) {
         if (!m_Target) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Target->GetTransform().GetLocalRotation()))); euler.z = v;
-        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.z = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
 
     // ---- Scale ----
@@ -135,7 +133,7 @@ void UITestPanel::Refresh()
         m_PosY->SetValue(pos.y);
         m_PosZ->SetValue(pos.z);
 
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(t.GetLocalRotation())));
+        auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
         m_RotX->SetValue(euler.x);
         m_RotY->SetValue(euler.y);
         m_RotZ->SetValue(euler.z);
@@ -147,7 +145,7 @@ void UITestPanel::Refresh()
     }
 }
 
-glm::vec2 UITestPanel::GetMinSize() const
+Leir::Vector2 UITestPanel::GetMinSize() const
 {
     return {280.0f, 220.0f};
 }

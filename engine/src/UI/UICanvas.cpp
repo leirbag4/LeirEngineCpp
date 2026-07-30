@@ -50,14 +50,14 @@ void UICanvas::UpdateLayout()
     ComputeLayout({m_ScreenWidth, m_ScreenHeight});
 }
 
-bool UICanvas::HitTest(const glm::vec2& screenPos, UIElement*& outElement)
+bool UICanvas::HitTest(const Vector2& screenPos, UIElement*& outElement)
 {
     outElement = nullptr;
     HitTestRecursive(this, screenPos, outElement);
     return outElement != nullptr;
 }
 
-void UICanvas::HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElement*& out)
+void UICanvas::HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out)
 {
     if (!element->IsActive())
         return;
@@ -78,7 +78,7 @@ void UICanvas::HitTestRecursive(UIElement* element, const glm::vec2& pos, UIElem
 
 void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 {
-    glm::vec2 pos = e.position;
+    Vector2 pos = e.position;
 
     spdlog::trace("[Canvas] ProcessPointerEvent: source={} action={} pos=({:.1f},{:.1f}) btn={} capture={}",
         (int)e.source, (int)e.action, pos.x, pos.y, (int)e.button,

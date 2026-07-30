@@ -1,6 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector4.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -17,9 +18,9 @@ public:
     ~Font();
 
     struct GlyphInfo {
-        glm::vec2 uv0, uv1;
-        glm::vec2 size;
-        glm::vec2 bearing;
+        Vector2 uv0, uv1;
+        Vector2 size;
+        Vector2 bearing;
         float advance;
     };
 
@@ -29,8 +30,8 @@ public:
     float GetAscender() const { return m_Ascender; }
     float GetSpaceWidth() const { return m_SpaceWidth; }
 
-    glm::vec2 MeasureText(const std::string& text, float maxWidth = 0.0f) const;
-    std::vector<glm::vec4> LayoutText(const std::string& text, float maxWidth = 0.0f) const;
+    Vector2 MeasureText(const std::string& text, float maxWidth = 0.0f) const;
+    std::vector<Vector4> LayoutText(const std::string& text, float maxWidth = 0.0f) const;
 
 private:
     void BuildAtlas();

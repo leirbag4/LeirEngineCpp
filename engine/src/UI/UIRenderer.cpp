@@ -42,7 +42,7 @@ UIRenderer::UIRenderer(VulkanDevice* device)
     VkPushConstantRange pushRange{};
     pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushRange.offset = 0;
-    pushRange.size = sizeof(glm::vec2);
+    pushRange.size = sizeof(Vector2);
     m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
 
     auto vertCode = Shader::ReadFile(LEIR_SHADER_DIR "/UI.vert.spv");
@@ -94,7 +94,7 @@ UIRenderer::UIRenderer(VulkanDevice* device)
     vkDestroyShaderModule(dev, fragMod, nullptr);
 
     // White fallback texture for untextured quads
-    Image whiteImg(1, 1, glm::vec4(1.0f));
+        Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     m_FallbackTex = new Texture2D(m_Device, whiteImg);
 
     m_MaxVertices = 8192;
@@ -119,7 +119,7 @@ UIRenderer::~UIRenderer()
     delete m_FallbackTex;
 }
 
-void UIRenderer::BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color)
+void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
     float x0 = rect.x;
     float y0 = rect.y;
@@ -135,7 +135,7 @@ void UIRenderer::BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm
     m_QuadTextures.push_back(texture ? texture : m_FallbackTex);
 }
 
-void UIRenderer::BuildBatchDebug(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color)
+void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
     float x0 = rect.x;
     float y0 = rect.y;
@@ -218,13 +218,13 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     vkUnmapMemory(m_Device->GetDevice(), m_VertexMemory);
 
     VkExtent2D extent = m_Device->GetSwapchainExtent();
-    glm::vec2 screenSize = {(float)extent.width, (float)extent.height};
+    Vector2 screenSize = {(float)extent.width, (float)extent.height};
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
     VkBuffer vb[] = { m_VertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
-    vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2), &screenSize);
+    vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Vector2), &screenSize);
 
     // 1. Regular UI (bottom layer)
     for (size_t qi = 0; qi < regCount; ++qi) {
@@ -330,7 +330,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             }
         }
 
-        auto Batch = [&](Texture2D* t, const glm::vec4& r, const glm::vec4& u, const glm::vec4& c) {
+        auto Batch = [&](Texture2D* t, const Vector4& r, const Vector4& u, const Vector4& c) {
             if (isDebug) BuildBatchDebug(t, r, u, c);
             else BuildBatch(t, r, u, c);
         };
@@ -341,7 +341,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             Texture2D* tex = img->GetTexture();
             Batch(tex, cr, {0, 0, 1, 1}, img->GetColor());
         } else if (auto* btn = dynamic_cast<UIButton*>(elem)) {
-            glm::vec4 bgColor;
+            Vector4 bgColor;
             switch (btn->GetState()) {
                 case ButtonState::Normal:  bgColor = btn->GetBgNormal(); break;
                 case ButtonState::Hovered: bgColor = btn->GetBgHover(); break;
@@ -357,7 +357,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                 for (size_t i = 0; i < rawQuads.size(); i += 2) {
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
-                    glm::vec4 textRect = {cr.x + 6.0f + r.x, baselineY + r.y, r.z, r.w};
+                    Vector4 textRect = {cr.x + 6.0f + r.x, baselineY + r.y, r.z, r.w};
                     Batch(btn->GetFont()->GetAtlasTexture(), textRect, uv, btn->GetTextColor());
                 }
             }
@@ -367,15 +367,15 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             float handleT = slider->HandlePos();
             float fillW = cr.z * handleT;
             if (fillW > 0) {
-                glm::vec4 fillRect = {cr.x, cr.y, fillW, cr.w};
+                Vector4 fillRect = {cr.x, cr.y, fillW, cr.w};
                 Batch(nullptr, fillRect, {0, 0, 1, 1}, {0.4f, 0.6f, 1.0f, 1.0f});
             }
 
             float hx = cr.x + cr.z * handleT - 4.0f;
-            glm::vec4 handleRect = {hx, cr.y - 2.0f, 8.0f, cr.w + 4.0f};
+            Vector4 handleRect = {hx, cr.y - 2.0f, 8.0f, cr.w + 4.0f};
             Batch(nullptr, handleRect, {0, 0, 1, 1}, slider->IsDragging()
-                ? glm::vec4{1.0f, 1.0f, 1.0f, 1.0f}
-                : glm::vec4{0.8f, 0.8f, 0.8f, 1.0f});
+                ? Vector4{1.0f, 1.0f, 1.0f, 1.0f}
+                : Vector4{0.8f, 0.8f, 0.8f, 1.0f});
         } else if (auto* vp = dynamic_cast<UIViewportPanel*>(elem)) {
             if (vp->GetRenderTexture()) {
                 ViewportDraw vd;
@@ -390,7 +390,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         } else if (auto* label = dynamic_cast<UILabel*>(elem)) {
             if (label->GetFont() && label->GetFont()->GetAtlasTexture()) {
                 for (const auto& gq : label->GetGlyphQuads()) {
-                    glm::vec4 r = gq.rect;
+                    Vector4 r = gq.rect;
                     r.x += cr.x;
                     r.y += cr.y;
                     Batch(label->GetFont()->GetAtlasTexture(), r, gq.uv, gq.color);
@@ -401,9 +401,9 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
 
             if (input->GetFont()) {
                 std::string displayText = input->GetText().empty() ? input->GetPlaceholder() : input->GetText();
-                glm::vec4 textColor = input->GetText().empty()
-                    ? glm::vec4{0.5f, 0.5f, 0.5f, 1.0f}
-                    : glm::vec4{1.0f, 1.0f, 1.0f, 1.0f};
+                Vector4 textColor = input->GetText().empty()
+                    ? Vector4{0.5f, 0.5f, 0.5f, 1.0f}
+                    : Vector4{1.0f, 1.0f, 1.0f, 1.0f};
 
                 float lineH = input->GetFont()->GetLineHeight();
                 float ascender = input->GetFont()->GetAscender();
@@ -412,14 +412,14 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                 for (size_t i = 0; i < rawQuads.size(); i += 2) {
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
-                    glm::vec4 textRect = {cr.x + 4.0f + r.x, baselineY + r.y, r.z, r.w};
+                    Vector4 textRect = {cr.x + 4.0f + r.x, baselineY + r.y, r.z, r.w};
                     Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
                 }
             }
         }
 
         if (LeirSettings::Get().debug.ui_outlines) {
-            static const glm::vec4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
+            static const Vector4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
             float t = 2.0f;
             Batch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
             Batch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);

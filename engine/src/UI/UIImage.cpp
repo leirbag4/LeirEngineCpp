@@ -13,7 +13,7 @@ void UIImage::SetSliceBorders(float left, float top, float right, float bottom)
     m_SliceBorders[3] = bottom;
 }
 
-glm::vec2 UIImage::GetMinSize() const
+Vector2 UIImage::GetMinSize() const
 {
     if (m_SliceEnabled) {
         return {

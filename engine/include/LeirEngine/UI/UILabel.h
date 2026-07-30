@@ -1,7 +1,8 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector4.h"
 #include <string>
 #include <vector>
 
@@ -10,9 +11,9 @@ namespace Leir {
 class Font;
 
 struct LEIR_API TextGlyphQuad {
-    glm::vec4 rect;
-    glm::vec4 uv;
-    glm::vec4 color;
+    Vector4 rect;
+    Vector4 uv;
+    Vector4 color;
 };
 
 class LEIR_API UILabel : public UIElement {
@@ -39,7 +40,7 @@ public:
     void SetMaxWidth(float w) { m_MaxWidth = w; MarkDirty(); }
     float GetMaxWidth() const { return m_MaxWidth; }
 
-    glm::vec2 GetMinSize() const override;
+    Vector2 GetMinSize() const override;
     const std::vector<TextGlyphQuad>& GetGlyphQuads() const { return m_GlyphQuads; }
 
 protected:

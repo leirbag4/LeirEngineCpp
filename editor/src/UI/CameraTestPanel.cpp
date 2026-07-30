@@ -1,7 +1,5 @@
 #include "CameraTestPanel.h"
 #include <LeirEngine/Core/Transform.h>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/euler_angles.hpp>
 
 CameraTestPanel::CameraTestPanel()
 {
@@ -57,18 +55,18 @@ CameraTestPanel::CameraTestPanel()
     auto* rotRow = makeRow();
     AddField(rotRow, "X:", m_RotX, [this](float v) {
         if (!m_Camera) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Camera->GetTransform().GetLocalRotation()))); euler.x = v;
-        m_Camera->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.x = v;
+        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
     AddField(rotRow, "Y:", m_RotY, [this](float v) {
         if (!m_Camera) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Camera->GetTransform().GetLocalRotation()))); euler.y = v;
-        m_Camera->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.y = v;
+        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
     AddField(rotRow, "Z:", m_RotZ, [this](float v) {
         if (!m_Camera) return;
-        auto euler = glm::degrees(glm::eulerAngles(glm::quat(m_Camera->GetTransform().GetLocalRotation()))); euler.z = v;
-        m_Camera->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.z = v;
+        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
     });
 }
 
@@ -103,7 +101,7 @@ void CameraTestPanel::Refresh()
     m_PosY->SetValue(pos.y);
     m_PosZ->SetValue(pos.z);
 
-    auto euler = glm::degrees(glm::eulerAngles(glm::quat(t.GetLocalRotation())));
+    auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
     m_RotX->SetValue(euler.x);
     m_RotY->SetValue(euler.y);
     m_RotZ->SetValue(euler.z);
@@ -121,7 +119,7 @@ void CameraTestPanel::AddField(Leir::UIPanel* parent, const std::string& labelTe
     outInput = field;
 }
 
-glm::vec2 CameraTestPanel::GetMinSize() const
+Leir::Vector2 CameraTestPanel::GetMinSize() const
 {
     return {280.0f, 160.0f};
 }

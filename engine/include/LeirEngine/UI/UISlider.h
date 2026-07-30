@@ -19,13 +19,13 @@ public:
 
     void SetOnChange(std::function<void(float)> cb) { m_OnChange = cb; }
 
-    glm::vec2 GetMinSize() const override;
+    Vector2 GetMinSize() const override;
 
-    void OnPointerEnter(const glm::vec2& pos) override;
+    void OnPointerEnter(const Vector2& pos) override;
     void OnPointerExit() override;
-    bool OnPointerDown(const glm::vec2& pos) override;
-    bool OnPointerUp(const glm::vec2& pos) override;
-    void OnPointerMove(const glm::vec2& pos) override;
+    bool OnPointerDown(const Vector2& pos) override;
+    bool OnPointerUp(const Vector2& pos) override;
+    void OnPointerMove(const Vector2& pos) override;
 
     bool IsDragging() const { return m_Dragging; }
     bool IsHovered() const { return m_Hovered; }

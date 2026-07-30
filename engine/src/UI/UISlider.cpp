@@ -11,7 +11,7 @@ void UISlider::SetValue(float value)
     m_Value = std::clamp(value, m_Min, m_Max);
 }
 
-glm::vec2 UISlider::GetMinSize() const
+Vector2 UISlider::GetMinSize() const
 {
     return {100.0f, 20.0f};
 }
@@ -31,7 +31,7 @@ float UISlider::ValueFromPos(float x) const
     return m_Min + t * (m_Max - m_Min);
 }
 
-void UISlider::OnPointerEnter(const glm::vec2& pos)
+void UISlider::OnPointerEnter(const Vector2& pos)
 {
     m_Hovered = true;
 }
@@ -41,7 +41,7 @@ void UISlider::OnPointerExit()
     m_Hovered = false;
 }
 
-bool UISlider::OnPointerDown(const glm::vec2& pos)
+bool UISlider::OnPointerDown(const Vector2& pos)
 {
     m_Dragging = true;
     m_Value = ValueFromPos(pos.x);
@@ -49,13 +49,13 @@ bool UISlider::OnPointerDown(const glm::vec2& pos)
     return true;
 }
 
-bool UISlider::OnPointerUp(const glm::vec2& pos)
+bool UISlider::OnPointerUp(const Vector2& pos)
 {
     m_Dragging = false;
     return true;
 }
 
-void UISlider::OnPointerMove(const glm::vec2& pos)
+void UISlider::OnPointerMove(const Vector2& pos)
 {
     if (m_Dragging) {
         m_Value = ValueFromPos(pos.x);

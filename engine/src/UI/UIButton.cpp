@@ -6,14 +6,14 @@ namespace Leir {
 UIButton::UIButton() = default;
 UIButton::~UIButton() = default;
 
-void UIButton::SetColors(const glm::vec4& normal, const glm::vec4& hover, const glm::vec4& pressed)
+void UIButton::SetColors(const Vector4& normal, const Vector4& hover, const Vector4& pressed)
 {
     m_BgNormal = normal;
     m_BgHover = hover;
     m_BgPressed = pressed;
 }
 
-glm::vec2 UIButton::GetMinSize() const
+Vector2 UIButton::GetMinSize() const
 {
     if (!m_Font || m_Text.empty())
         return {100.0f, 32.0f};
@@ -21,7 +21,7 @@ glm::vec2 UIButton::GetMinSize() const
     return {textSize.x + 16.0f, textSize.y + 10.0f};
 }
 
-void UIButton::OnPointerEnter(const glm::vec2& pos)
+void UIButton::OnPointerEnter(const Vector2& pos)
 {
     m_State = ButtonState::Hovered;
 }
@@ -31,13 +31,13 @@ void UIButton::OnPointerExit()
     m_State = ButtonState::Normal;
 }
 
-bool UIButton::OnPointerDown(const glm::vec2& pos)
+bool UIButton::OnPointerDown(const Vector2& pos)
 {
     m_State = ButtonState::Pressed;
     return true;
 }
 
-bool UIButton::OnPointerUp(const glm::vec2& pos)
+bool UIButton::OnPointerUp(const Vector2& pos)
 {
     if (m_State == ButtonState::Pressed) {
         m_State = ButtonState::Hovered;

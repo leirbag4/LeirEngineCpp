@@ -1,6 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/Math/Vector4.h"
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -13,9 +14,9 @@ class Texture2D;
 class RenderTexture;
 
 struct LEIR_API UIVertex {
-    glm::vec2 position;
-    glm::vec2 texCoord;
-    glm::vec4 color;
+    Vector2 position;
+    Vector2 texCoord;
+    Vector4 color;
 };
 
 struct LEIR_API ViewportDraw {
@@ -31,8 +32,8 @@ public:
     void Render(VkCommandBuffer cmd, UICanvas* canvas);
 
 private:
-    void BuildBatch(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color);
-    void BuildBatchDebug(Texture2D* texture, const glm::vec4& rect, const glm::vec4& uv, const glm::vec4& color);
+    void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
+    void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void Flush(VkCommandBuffer cmd);
 
     VkDescriptorSet GetOrCreateVpDescSet(RenderTexture* rt);

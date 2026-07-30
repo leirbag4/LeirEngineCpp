@@ -91,7 +91,7 @@ void Font::BuildAtlas()
         m_AtlasWidth = 1;
         m_AtlasHeight = 1;
         std::vector<unsigned char> dummy(4, 255);
-        Image dummyImg(1, 1, glm::vec4(1.0f));
+        Image dummyImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
         m_AtlasTexture = std::make_unique<Texture2D>(m_Device, dummyImg);
         return;
     }
@@ -181,7 +181,7 @@ void Font::BuildAtlas()
         rgbaData[i * 4 + 3] = atlasData[i];
     }
 
-    Image atlasImg(atlasW, atlasH, glm::vec4(1.0f));
+    Image atlasImg(atlasW, atlasH, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     memcpy(atlasImg.GetData(), rgbaData.data(), rgbaData.size());
     m_AtlasTexture = std::make_unique<Texture2D>(m_Device, atlasImg);
 }
@@ -202,7 +202,7 @@ const Font::GlyphInfo& Font::GetGlyphInfo(uint32_t codepoint)
     return fallback;
 }
 
-glm::vec2 Font::MeasureText(const std::string& text, float maxWidth) const
+Vector2 Font::MeasureText(const std::string& text, float maxWidth) const
 {
     if (text.empty()) return {0.0f, m_LineHeight};
 
@@ -241,9 +241,9 @@ glm::vec2 Font::MeasureText(const std::string& text, float maxWidth) const
     return {w, h};
 }
 
-std::vector<glm::vec4> Font::LayoutText(const std::string& text, float maxWidth) const
+std::vector<Vector4> Font::LayoutText(const std::string& text, float maxWidth) const
 {
-    std::vector<glm::vec4> quads;
+    std::vector<Vector4> quads;
     if (text.empty()) return quads;
 
     float x = 0, y = 0;

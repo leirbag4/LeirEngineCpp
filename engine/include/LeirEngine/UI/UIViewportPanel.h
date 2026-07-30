@@ -1,7 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
-#include <glm/glm.hpp>
+#include "LeirEngine/Math/Vector2.h"
 
 namespace Leir {
 
@@ -15,7 +15,7 @@ public:
     void SetRenderTexture(RenderTexture* rt) { m_RenderTexture = rt; }
     RenderTexture* GetRenderTexture() const { return m_RenderTexture; }
 
-    glm::vec2 ScreenToViewport(float screenX, float screenY) const;
+    Vector2 ScreenToViewport(float screenX, float screenY) const;
     bool IsInsideViewport(float screenX, float screenY) const;
 
 private:

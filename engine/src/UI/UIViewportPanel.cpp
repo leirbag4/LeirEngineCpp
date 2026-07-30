@@ -10,7 +10,7 @@ UIViewportPanel::~UIViewportPanel()
 {
 }
 
-glm::vec2 UIViewportPanel::ScreenToViewport(float screenX, float screenY) const
+Vector2 UIViewportPanel::ScreenToViewport(float screenX, float screenY) const
 {
     const auto& cr = m_ComputedRect;
     float vx = screenX - cr.x;
