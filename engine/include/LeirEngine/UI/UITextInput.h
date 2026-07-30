@@ -44,6 +44,7 @@ public:
     void OnPointerEnter(const Vector2& pos) override;
     void OnPointerExit() override;
     bool OnPointerDown(const Vector2& pos) override;
+    bool OnPointerUp(const Vector2& pos) override;
     void OnPointerMove(const Vector2& pos) override;
     bool OnTextInput(uint32_t codepoint) override;
     bool OnKeyDown(int key) override;
@@ -65,6 +66,7 @@ protected:
     int m_SelectionStart = -1;
     bool m_Focused = false;
     bool m_Hovered = false;
+    bool m_Dragging = false;
 
 private:
     std::string m_Placeholder;

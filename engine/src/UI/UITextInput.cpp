@@ -45,23 +45,34 @@ bool UITextInput::OnPointerDown(const Vector2& pos)
         m_CursorPos = (int)m_Text.size();
     }
     bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
-    if (shift && m_SelectionStart < 0) {
-        m_SelectionStart = m_CursorPos;
-    } else if (!shift) {
-        m_SelectionStart = m_CursorPos;
+    if (shift) {
+        if (m_SelectionStart < 0)
+            m_SelectionStart = m_CursorPos;
+    } else {
+        ClearSelection();
     }
+    m_Dragging = true;
+    return true;
+}
+
+bool UITextInput::OnPointerUp(const Vector2& pos)
+{
+    m_Dragging = false;
     return true;
 }
 
 void UITextInput::OnPointerMove(const Vector2& pos)
 {
-    if (m_Focused && m_Font) {
-        const auto& cr = GetComputedRect();
-        float localX = pos.x - (cr.x + 4.0f);
-        int idx = GetCharIndexAtX(localX);
-        if (idx >= 0)
-            m_CursorPos = idx;
-    }
+    if (!m_Focused || !m_Font || !m_Dragging) return;
+
+    if (m_SelectionStart < 0)
+        m_SelectionStart = m_CursorPos;
+
+    const auto& cr = GetComputedRect();
+    float localX = pos.x - (cr.x + 4.0f);
+    int idx = GetCharIndexAtX(localX);
+    if (idx >= 0)
+        m_CursorPos = idx;
 }
 
 bool UITextInput::OnKeyDown(int key)
