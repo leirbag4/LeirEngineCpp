@@ -206,11 +206,14 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
     }
 
     bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
-    if (shift && m_SelectionStart < 0)
-        m_SelectionStart = m_CursorPos;
-    else if (!shift)
-        m_SelectionStart = m_CursorPos;
-
+    if (shift) {
+        if (m_SelectionStart < 0)
+            m_SelectionStart = m_CursorPos;
+    } else {
+        ClearSelection();
+    }
+    m_Dragging = true;
+    CaptureDragPointer();
     return true;
 }
 

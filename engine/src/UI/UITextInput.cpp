@@ -1,4 +1,5 @@
 #include "LeirEngine/UI/UITextInput.h"
+#include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/Keyboard.h"
@@ -52,13 +53,25 @@ bool UITextInput::OnPointerDown(const Vector2& pos)
         ClearSelection();
     }
     m_Dragging = true;
+    CaptureDragPointer();
     return true;
 }
 
 bool UITextInput::OnPointerUp(const Vector2& pos)
 {
+    if (!m_Dragging) return false;
     m_Dragging = false;
     return true;
+}
+
+void UITextInput::CaptureDragPointer()
+{
+    UIElement* e = this;
+    while (e) {
+        auto* c = dynamic_cast<UICanvas*>(e);
+        if (c) { c->CapturePointer(this); return; }
+        e = e->GetParent();
+    }
 }
 
 void UITextInput::OnPointerMove(const Vector2& pos)
@@ -159,6 +172,13 @@ void UITextInput::OnFocus()
 void UITextInput::OnBlur()
 {
     m_Focused = false;
+    m_Dragging = false;
+    UIElement* e = this;
+    while (e) {
+        auto* c = dynamic_cast<UICanvas*>(e);
+        if (c) { c->ReleasePointer(); break; }
+        e = e->GetParent();
+    }
 }
 
 void UITextInput::InsertChar(uint32_t codepoint)

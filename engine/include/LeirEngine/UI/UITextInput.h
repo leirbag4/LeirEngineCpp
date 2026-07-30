@@ -58,6 +58,7 @@ protected:
     void UpdateCursorPos();
     void DeleteSelection();
     void ClearSelection() { m_SelectionStart = -1; }
+    void CaptureDragPointer();
 
     std::string m_Text;
     Font* m_Font = nullptr;
