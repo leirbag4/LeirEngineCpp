@@ -2,6 +2,8 @@
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/Keyboard.h"
+#include <cstdlib>
+#include <spdlog/spdlog.h>
 
 namespace Leir {
 
@@ -205,15 +207,16 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
         m_CursorPos = (int)m_Text.size();
     }
 
-    // Double-click detection
+    // Double-click detection: within ~15 frames (~250ms) at nearly the same position
     int framesSinceLast = m_FrameCounter - m_LastClickFrame;
-    if (framesSinceLast < 0) framesSinceLast += 60;
+    int posDiff = abs(m_LastClickPos - m_CursorPos);
     bool noShift = !Keyboard::IsDown(Key::LeftShift) && !Keyboard::IsDown(Key::RightShift);
-    bool doubleClick = noShift && m_LastClickPos >= 0 && framesSinceLast < 30;
+    bool doubleClick = noShift && m_LastClickPos >= 0 && framesSinceLast < 15 && posDiff <= 3;
     m_LastClickFrame = m_FrameCounter;
     m_LastClickPos = m_CursorPos;
 
     if (doubleClick) {
+        spdlog::trace("[TextArea '{}'] Double-click detected (frames={} posDiff={})", GetName().c_str(), framesSinceLast, posDiff);
         SelectWordAt(m_CursorPos);
         m_Dragging = false;
         return true;
