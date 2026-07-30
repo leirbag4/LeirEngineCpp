@@ -307,15 +307,18 @@ protected:
         bool inViewport = m_ViewportPanel && hovered &&
             (hovered == m_ViewportPanel || hovered->GetParent() == m_ViewportPanel);
         bool rightDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right);
+        bool middleDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Middle);
 
         // Update EditorCamera state
-        if (rightDown)
+        if (rightDown || middleDown)
             m_EditorCamera.Update(deltaTime);
+
+        bool cameraControlled = rightDown || middleDown;
 
         // Bidirectional sync: EditorCamera ↔ scene camera
         auto* cameraObj = scene->FindObjectByName("Camera");
         if (cameraObj) {
-            if (rightDown) {
+            if (cameraControlled) {
                 // EditorCamera → escena (durante control)
                 cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
                 cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());

@@ -29,6 +29,20 @@ glm::quat EditorCamera::GetRotation() const
 void EditorCamera::Update(float deltaTime)
 {
     bool rightDown = Leir::Mouse::IsDown(Leir::PointerButton::Right);
+    bool middleDown = Leir::Mouse::IsDown(Leir::PointerButton::Middle);
+
+    // Pan (middle mouse) — mover cámara en plano de la vista
+    if (middleDown) {
+        auto delta = Leir::Mouse::GetDelta();
+        if (delta.x != 0.0f || delta.y != 0.0f) {
+            float panSpeed = 0.01f;
+            glm::vec3 r = GetRight();
+            glm::vec3 up(0.0f, 1.0f, 0.0f);
+            m_Position -= r * delta.x * panSpeed;
+            m_Position += up * delta.y * panSpeed;
+        }
+    }
+
     if (!rightDown) return;
 
     // Yaw/Pitch from mouse delta
