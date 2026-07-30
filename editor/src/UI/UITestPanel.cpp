@@ -2,6 +2,7 @@
 #include <LeirEngine/Core/Transform.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/euler_angles.hpp>
+#include <functional>
 
 UITestPanel::UITestPanel()
 {
@@ -33,29 +34,81 @@ UITestPanel::UITestPanel()
 
     m_TitleLabel = makeTitle("-- Properties --");
 
+    // ---- Position ----
     m_PosTitle = makeTitle("Position");
     auto* posRow = makeRow();
-    AddField(posRow, "X:", m_PosX);
-    AddField(posRow, "Y:", m_PosY);
-    AddField(posRow, "Z:", m_PosZ);
+    AddField(posRow, "X:", m_PosX, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.x = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
+    AddField(posRow, "Y:", m_PosY, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.y = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
+    AddField(posRow, "Z:", m_PosZ, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.z = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
 
+    // ---- Rotation (Euler degrees) ----
     m_RotTitle = makeTitle("Rotation");
     auto* rotRow = makeRow();
-    AddField(rotRow, "X:", m_RotX);
-    AddField(rotRow, "Y:", m_RotY);
-    AddField(rotRow, "Z:", m_RotZ);
+    AddField(rotRow, "X:", m_RotX, [this](float v) {
+        if (!m_Target) return;
+        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.x = v;
+        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+    });
+    AddField(rotRow, "Y:", m_RotY, [this](float v) {
+        if (!m_Target) return;
+        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.y = v;
+        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+    });
+    AddField(rotRow, "Z:", m_RotZ, [this](float v) {
+        if (!m_Target) return;
+        auto euler = glm::degrees(glm::eulerAngles(m_Target->GetTransform().GetLocalRotation())); euler.z = v;
+        m_Target->GetTransform().SetLocalRotation(glm::quat(glm::radians(euler)));
+    });
 
+    // ---- Scale ----
     m_ScaleTitle = makeTitle("Scale");
     auto* scaleRow = makeRow();
-    AddField(scaleRow, "X:", m_ScaleX);
-    AddField(scaleRow, "Y:", m_ScaleY);
-    AddField(scaleRow, "Z:", m_ScaleZ);
+    AddField(scaleRow, "X:", m_ScaleX, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.x = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
+    AddField(scaleRow, "Y:", m_ScaleY, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.y = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
+    AddField(scaleRow, "Z:", m_ScaleZ, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.z = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
 
+    // ---- Camera Position ----
     m_CamTitle = makeTitle("Camera");
     auto* camRow = makeRow();
-    AddField(camRow, "X:", m_CamPosX);
-    AddField(camRow, "Y:", m_CamPosY);
-    AddField(camRow, "Z:", m_CamPosZ);
+    AddField(camRow, "X:", m_CamPosX, [this](float v) {
+        if (!m_Camera) return;
+        auto p = m_Camera->GetTransform().GetLocalPosition(); p.x = v;
+        m_Camera->GetTransform().SetLocalPosition(p);
+    });
+    AddField(camRow, "Y:", m_CamPosY, [this](float v) {
+        if (!m_Camera) return;
+        auto p = m_Camera->GetTransform().GetLocalPosition(); p.y = v;
+        m_Camera->GetTransform().SetLocalPosition(p);
+    });
+    AddField(camRow, "Z:", m_CamPosZ, [this](float v) {
+        if (!m_Camera) return;
+        auto p = m_Camera->GetTransform().GetLocalPosition(); p.z = v;
+        m_Camera->GetTransform().SetLocalPosition(p);
+    });
 }
 
 UITestPanel::~UITestPanel() = default;
@@ -74,12 +127,14 @@ void UITestPanel::SetFont(Leir::Font* font)
     }
 }
 
-void UITestPanel::AddField(Leir::UIPanel* parent, const std::string& labelText, UIDragFloatInput*& outInput)
+void UITestPanel::AddField(Leir::UIPanel* parent, const std::string& labelText, UIDragFloatInput*& outInput, std::function<void(float)> onChanged)
 {
     auto* field = new UIDragFloatInput();
     field->SetLabel(labelText);
     field->SetValue(0.0f);
     field->SetSizePolicy(Leir::SizePolicy::Fill);
+    if (onChanged)
+        field->SetOnValueChanged(onChanged);
     parent->AddChild(field);
     outInput = field;
 }

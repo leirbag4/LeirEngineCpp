@@ -24,7 +24,7 @@ protected:
     void OnLayoutComputed() override;
 
 private:
-    void AddField(Leir::UIPanel* parent, const std::string& labelText, UIDragFloatInput*& outInput);
+    void AddField(Leir::UIPanel* parent, const std::string& labelText, UIDragFloatInput*& outInput, std::function<void(float)> onChanged = nullptr);
 
     Leir::Object3D* m_Target = nullptr;
     Leir::Object3D* m_Camera = nullptr;
