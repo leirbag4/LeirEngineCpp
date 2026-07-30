@@ -34,7 +34,7 @@ void EditorCamera::Update(float deltaTime)
     // Yaw/Pitch from mouse delta
     auto delta = Leir::Mouse::GetDelta();
     if (delta.x != 0.0f || delta.y != 0.0f) {
-        m_Yaw += delta.x * 0.5f;
+        m_Yaw -= delta.x * 0.5f;
         m_Pitch = glm::clamp(m_Pitch - delta.y * 0.5f, -89.0f, 89.0f);
     }
 
