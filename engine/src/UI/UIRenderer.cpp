@@ -464,7 +464,7 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
 
         if (LeirSettings::Get().debug.ui_outlines) {
             static const Vector4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
-            float t = 2.0f;
+            float t = 1.0f;
             Batch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
             Batch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
             Batch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
