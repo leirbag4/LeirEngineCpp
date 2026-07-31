@@ -24,6 +24,9 @@ public:
 
     void SetOnChange(std::function<void(const std::string&)> cb) { m_OnChange = cb; }
 
+    void SetAutoSelect(bool v) { m_AutoSelect = v; }
+    bool GetAutoSelect() const { return m_AutoSelect; }
+
     void SetTextColor(const Vector4& color) { m_TextColor = color; }
     const Vector4& GetTextColor() const { return m_TextColor; }
 
@@ -71,6 +74,7 @@ protected:
     bool m_Focused = false;
     bool m_Hovered = false;
     bool m_Dragging = false;
+    bool m_AutoSelect = false;
     int m_CaretCounter = 0;
     int m_FrameCounter = 0;
     int m_LastClickFrame = -30;

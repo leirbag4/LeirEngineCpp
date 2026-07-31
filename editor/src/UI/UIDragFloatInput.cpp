@@ -20,6 +20,7 @@ UIDragFloatInput::UIDragFloatInput()
     m_Input->SetName("DragInput");
     m_Input->SetValue(0.0f);
     m_Input->SetSizePolicy(Leir::SizePolicy::Fill);
+    m_Input->SetAutoSelect(true);
     AddChild(m_Input);
 }
 

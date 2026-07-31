@@ -11,7 +11,8 @@ UIFloatInput::~UIFloatInput() = default;
 void UIFloatInput::SetValue(float v)
 {
     m_Value = v;
-    SetText(std::to_string(v));
+    if (!m_Focused)
+        SetText(std::to_string(v));
 }
 
 bool UIFloatInput::OnTextInput(uint32_t codepoint)

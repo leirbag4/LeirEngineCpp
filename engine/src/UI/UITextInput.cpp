@@ -15,6 +15,7 @@ void UITextInput::SetText(const std::string& text)
 {
     m_Text = text;
     m_CursorPos = (int)m_Text.size();
+    m_SelectionStart = -1;
 }
 
 Vector2 UITextInput::GetMinSize() const
@@ -37,6 +38,18 @@ bool UITextInput::OnPointerDown(const Vector2& pos)
 {
     spdlog::trace("[TextInput '{}'] OnPointerDown frame={}", GetName().c_str(), m_FrameCounter);
     ResetCaretBlink();
+
+    if (m_AutoSelect && !m_Focused) {
+        spdlog::trace("[TextInput '{}'] Auto-select all (first focus)", GetName().c_str());
+        m_SelectionStart = 0;
+        m_CursorPos = (int)m_Text.size();
+        m_LastClickFrame = m_FrameCounter;
+        m_LastClickPos = m_CursorPos;
+        m_Dragging = true;
+        CaptureDragPointer();
+        return true;
+    }
+
     if (m_Font) {
         const auto& cr = GetComputedRect();
         float localX = pos.x - (cr.x + 4.0f);
