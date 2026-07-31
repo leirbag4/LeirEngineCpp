@@ -12,7 +12,7 @@ UITextArea::~UITextArea() = default;
 
 Vector2 UITextArea::GetMinSize() const
 {
-    return {200.0f, 100.0f};
+    return m_HasCustomMinSize ? m_CustomMinSize : Vector2{200.0f, 100.0f};
 }
 
 int UITextArea::GetLineCount() const

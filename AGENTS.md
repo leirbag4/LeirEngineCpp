@@ -605,9 +605,12 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - Inherits `UITextInput`, allows `\n` in `InsertChar`
 - `OnKeyDown`: Enter → insert `\n`; Up/Down → navigate between logical lines preserving `m_TargetX`
 - `OnPointerDown`: multiline-aware (computes line from Y, column from X)
+- `OnPointerMove`: Y-aware override (line from Y, column from X within line) for correct drag selection across lines
 - `GetCursorLine()` / `GetCursorCol()` / `GetLineStart/End()` — logical line helpers
+- `SetCustomMinSize(Vector2)` — overrides the default min size for specific instances
 - `UIRenderer`: renders text with `baselineY = cr.y + 4 + ascender`, caret at `cr.y + 4 + cursorLine * lineH`
-- `GetMinSize()` returns 200×100
+- Selection rendering: multi-line selection draws one rect per selected line (via `GetLineStart`/`GetLineEnd` intersection)
+- `GetMinSize()` default: 200×100
 
 ### DebugTextPanel (editor)
 - New editor panel in `editor/src/UI/DebugTextPanel.h/.cpp`
@@ -636,3 +639,13 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `EditorCamera`: new class in `editor/src/Camera/EditorCamera.h/.cpp`, free-fly camera with right-click yaw/pitch, middle-click pan, WASDQE movement. Replaces old inline struct
 - Bidirectional camera sync: EditorCamera → scene camera during right-click/middle-click control; scene camera → EditorCamera during panel edits
 - Camera initial position: `{0.0f, 2.0f, 4.0f}`
+- `GetCursorXAt` and `GetCharIndexAtX` in `UITextInput.cpp`: `\n` resets x=0 (instead of adding fallback glyph advance), fixing caret staircase in multiline text
+- `UITextArea::OnPointerDown` in `UITextArea.cpp`: same `\n` + space-width fix in column-finding loop
+- `UITextArea::OnPointerMove` override: Y-aware drag selection (line from Y, column from X within line)
+- `UIRenderer.cpp` selection batch: multi-line selection renders one rect per selected line (via `GetLineStart`/`GetLineEnd` intersection) instead of a single rect
+- `UITextArea.h/.cpp`: added `SetCustomMinSize(Vector2)` + `m_HasCustomMinSize` flag for instance-level min-size override
+- `UIElement.cpp` Column/Row layout: Fill children now clamp to `std::max(fillTotal, GetMinSize())` — prevents squeezing below minimum
+- `DebugTextPanel.cpp`: `\n`/`\r`/`\t` escaped in MultiInput status label text, preventing UILabel multi-line expansion with each Enter
+- `editor/src/UI/TextAreaDebugPanel.h/.cpp`: new isolated debug panel for UITextArea (top-right, above CameraTestPanel)
+- `editor/src/main.cpp`: TextAreaDebugPanel integrated (create + Refresh per frame)
+- `editor/CMakeLists.txt`: added `TextAreaDebugPanel.cpp`

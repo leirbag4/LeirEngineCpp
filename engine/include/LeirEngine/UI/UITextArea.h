@@ -20,11 +20,15 @@ public:
     int GetLineStart(int line) const;
     int GetLineEnd(int line) const;  // index of \n or end
 
+    void SetCustomMinSize(const Vector2& size) { m_CustomMinSize = size; m_HasCustomMinSize = true; }
+
 protected:
     void InsertChar(uint32_t codepoint) override;
 
 private:
     float m_TargetX = -1.0f;
+    Vector2 m_CustomMinSize = {200.0f, 100.0f};
+    bool m_HasCustomMinSize = false;
 };
 
 } // namespace Leir

@@ -34,20 +34,6 @@ DebugTextPanel::DebugTextPanel()
     m_SingleStatus->SetSizePolicy(Leir::SizePolicy::Fixed);
     AddChild(m_SingleStatus);
 
-    // Multiline text area
-    m_MultiInput = new Leir::UITextArea();
-    m_MultiInput->SetName("DebugMultiInput");
-    m_MultiInput->SetPlaceholder("multiline...");
-    m_MultiInput->SetSizePolicy(Leir::SizePolicy::Fill);
-    AddChild(m_MultiInput);
-
-    m_MultiStatus = new Leir::UILabel();
-    m_MultiStatus->SetText("multi: cursor=0 line=0 col=0 sel=-1");
-    m_MultiStatus->SetFontSize(10);
-    m_MultiStatus->SetColor({0.5f, 0.8f, 0.5f, 1.0f});
-    m_MultiStatus->SetSizePolicy(Leir::SizePolicy::Fixed);
-    AddChild(m_MultiStatus);
-
     // Float input
     m_FloatInput = new Leir::UIFloatInput();
     m_FloatInput->SetName("DebugFloatInput");
@@ -81,14 +67,6 @@ void DebugTextPanel::Refresh()
         const auto& text = m_SingleInput->GetText();
         m_SingleStatus->SetText("single: \"" + text + "\" cursor=" + std::to_string(m_SingleInput->GetCursorPos())
             + " sel=" + std::to_string(m_SingleInput->GetSelBegin()));
-    }
-
-    // Multi-line status
-    {
-        const auto& text = m_MultiInput->GetText();
-        m_MultiStatus->SetText("multi: \"" + text + "\" cursor=" + std::to_string(m_MultiInput->GetCursorPos())
-            + " line=" + std::to_string(m_MultiInput->GetCursorLine())
-            + " col=" + std::to_string(m_MultiInput->GetCursorCol()));
     }
 
     // Float status

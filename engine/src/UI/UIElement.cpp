@@ -216,7 +216,7 @@ void UIElement::ComputeColumnLayout(const Vector2& availableSize)
                 childH = child->GetMinSize().y;
                 break;
             case SizePolicy::Fill:
-                childH = fillTotal;
+                childH = std::max(fillTotal, child->GetMinSize().y);
                 break;
             case SizePolicy::Grow:
                 childH = child->GetMinSize().y + growShare;
