@@ -78,14 +78,19 @@ cmake --build build/linux-debug
 
 ## Settings System
 
-- `LeirSettings` singleton (`Core/Settings.h`) reads `leir_settings.json` at executable level
+- `LeirSettings` singleton (`Core/Settings.h`) reads/writes `settings.json` in the platform config dir:
+  - Windows: `%APPDATA%\LeirEngine\settings.json`
+  - macOS: `~/Library/Application Support/LeirEngine/settings.json`
+  - Linux: `$XDG_CONFIG_HOME/LeirEngine/settings.json` (falls back to `~/.config/LeirEngine/`)
 - JSON via nlohmann/json (already a dependency)
 - Sections:
   - `window`: `width`, `height`, `fullscreen`, `vsync`
   - `debug`: `ui_outlines` (toggles green UI bounding-box outlines), `show_overlay` (toggles UIDebugOverlay)
+  - `layout`: `hierarchy_width`, `inspector_width` (editor panel widths, resized via UISplitter)
+- `Save()` creates the config directory if missing (`create_directories`)
 - If file doesn't exist, written with defaults on first `Load()` call
 - `LeirSettings::Get().Load()` called in `main()` before app creation
-- Editor reads settings for window size / fullscreen mode
+- Editor reads settings for window size / fullscreen mode; saves on splitter drag end and on shutdown (`OnShutdown`)
 
 ## Input System
 

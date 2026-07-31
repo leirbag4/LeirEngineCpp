@@ -9,7 +9,6 @@ namespace Leir {
 
 namespace {
 constexpr const char* kSettingsFileName = "settings.json";
-constexpr const char* kLegacySettingsFileName = "leir_settings.json";
 }
 
 LeirSettings& LeirSettings::Get()
@@ -48,35 +47,6 @@ bool LeirSettings::Load(const std::string& path)
 
     std::ifstream f(m_Path);
     if (!f.is_open()) {
-        // Legacy seed: first run after the app-data migration. If the old
-        // executable-level file exists, reuse it so settings aren't lost.
-        std::ifstream legacy(kLegacySettingsFileName);
-        if (legacy.is_open()) {
-            try {
-                nlohmann::json j;
-                legacy >> j;
-                window.width = j.value("window", nlohmann::json::object()).value("width", 1280);
-                window.height = j.value("window", nlohmann::json::object()).value("height", 720);
-                window.fullscreen = j.value("window", nlohmann::json::object()).value("fullscreen", false);
-                window.vsync = j.value("window", nlohmann::json::object()).value("vsync", true);
-
-                debug.ui_outlines = j.value("debug", nlohmann::json::object()).value("ui_outlines", false);
-                debug.show_overlay = j.value("debug", nlohmann::json::object()).value("show_overlay", true);
-                debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
-                debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
-
-                layout.hierarchy_width = j.value("layout", nlohmann::json::object()).value("hierarchy_width", 264.0f);
-                layout.inspector_width = j.value("layout", nlohmann::json::object()).value("inspector_width", 290.0f);
-
-                spdlog::info("Settings migrated from legacy '{}' to '{}'",
-                    kLegacySettingsFileName, m_Path);
-                Save();
-                return true;
-            } catch (const std::exception& e) {
-                spdlog::warn("Failed to parse legacy settings '{}': {}", kLegacySettingsFileName, e.what());
-            }
-        }
-
         spdlog::warn("Settings file '{}' not found, creating with defaults", m_Path);
         SetDefaults();
         Save();
