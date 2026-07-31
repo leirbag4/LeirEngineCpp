@@ -1,5 +1,9 @@
 # LeirEngine — TODO List
 
+> **Estado actual:** Core, Renderer (Vulkan), Physics (Jolt), UI system propio y Editor base están
+> implementados. Pendiente: Audio (SoLoud), Serialización & Assets, Animaciones, Documentación,
+> build WSL/Linux y MoltenVK. Detalle de lo ya hecho en cada fase abajo.
+
 ## Fase 0 — Setup Inicial
 - [x] Crear estructura de directorios del proyecto
 - [x] `dependencies/CMakeLists.txt` con FetchContent (GLFW, GLM, Vulkan, stb, Jolt, SoLoud, spdlog, nlohmann_json, cereal)
@@ -50,6 +54,7 @@
 - [x] Raycast / Shape overlap queries
 - [ ] `CharacterController` component
 - [x] Configurar Jolt multithreading
+- [x] Configuración por capas (NON_MOVING/MOVING, tablas BroadPhase/ObjectLayer)
 
 ## Fase 4 — Audio (SoLoud)
 - [ ] `AudioSystem` wrapper
@@ -59,29 +64,42 @@
 - [ ] Gestión de memoria de sonidos
 
 ## Fase 5 — UI System (Propio)
-- [ ] `Canvas` (screen space overlay, sorting)
-- [ ] `UIWidget` base (rect, transform, padding, color, visible)
-- [ ] `UILabel` (texto con fuente)
-- [ ] `UIButton` (click, hover, pressed states)
-- [ ] `UIImage` (textura)
-- [ ] `UIPanel` (contenedor)
-- [ ] `UIScrollbar`, `UIScrollView`
-- [ ] `UITextInput`, `UISlider`, `UICheckbox`
-- [ ] Layout system (vertical, horizontal, absolute)
+- [x] `Canvas` (screen space overlay, sorting) — `UICanvas` (event hooks, hit-test, hover, focus, pointer capture)
+- [x] `UIWidget` base — `UIElement` (rect/anchor/offset, Free/Row/Column layout, min size, SizePolicy)
+- [x] `UILabel` (texto con fuente, vertical centering)
+- [x] `UIButton` (click, hover, pressed states)
+- [x] `UIImage` (textura)
+- [x] `UIPanel` (contenedor)
+- [x] `UIScrollView`
+- [ ] `UIScrollbar` (scrollbars en ScrollView / UITextArea)
+- [x] `UITextInput` (caret, click-to-position, drag selection, double-click word, Ctrl+A, Ctrl+arrow)
+- [x] `UITextArea` (multiline: líneas lógicas, selección multi-línea, navegación Up/Down)
+- [x] `UIFloatInput` (input numérico que filtra `[0-9+-.]`, commit en Enter/Blur)
+- [x] `UISlider`
+- [ ] `UICheckbox`
+- [x] Layout system (Free/Row/Column con anchors, offsets, propagación de posición al padre)
 - [ ] Style system (colores, borders, fonts, margins)
-- [ ] Text rendering (stb_truetype + FreeType)
+- [x] Text rendering (stb_truetype + FreeType) — `Font`
+- [x] `UIRenderer` (batcher de quads, 3 capas: UI regular → viewports → debug overlay)
+- [x] `UIViewportPanel` (RenderTexture dentro de la UI)
+- [x] `UIDebugOverlay` (FPS, mouse, teclas, hover, eventos)
+- [x] RenderTexture (offscreen color+depth, muestreo en UI)
 
 ## Fase 6 — Editor (LeirEngineEditor)
-- [ ] `EditorApp` (Application subclass)
-- [ ] `HierarchyPanel` (árbol de objetos en Scene)
-- [ ] `InspectorPanel` (propiedades del objeto + sus componentes)
-- [ ] `SceneViewPanel` (viewport 3D con EditorCamera)
+- [x] `EditorApp` (subclase de CoreApplication)
+- [ ] `HierarchyPanel` (árbol de objetos en Scene) — hoy es solo un panel estático con título
+- [x] `InspectorPanel` — `InspectorTransformPanel` (transform en vivo; falta listado de componentes)
+- [x] `SceneViewPanel` (viewport 3D con `UIViewportPanel` + RenderTexture + EditorCamera)
 - [ ] `ConsolePanel` (output de spdlog en tiempo real)
 - [ ] `ProjectPanel` (explorador de archivos)
 - [ ] Gizmos 3D (translate, rotate, scale handles)
 - [ ] Selección de objetos con raycast
 - [ ] Drag & drop en hierarchy
-- [ ] EditorCamera (orbit alt+click, pan, zoom scroll)
+- [x] `EditorCamera` (free-fly: right-click yaw/pitch, middle-click pan, WASDQE, Shift×3; sync bidireccional con cámara de escena)
+- [x] Splitters redimensionables Hierarchy|Viewport|Inspector (`UISplitter`, drag invertido, cursor ResizeEW)
+- [x] Persistencia: layout de paneles + ventana (tamaño/posición/maximized) en `settings.json` (guardado al soltar y al cerrar)
+- [x] Paneles debug: `UITestPanel`, `CameraTestPanel`, `DebugTextPanel`, `TextAreaDebugPanel` (capa debug overlay)
+- [x] `UIDragFloatInput` (drag-to-change sobre label con pointer capture)
 
 ## Fase 7 — Serialización & Assets
 - [ ] `Scene` serialization a JSON (nlohmann_json)
