@@ -131,8 +131,8 @@ void LeirSettings::SetDefaults()
     debug.show_overlay = true;
     debug.show_glyph_quads = false;
     debug.ui_event_log = false;
-    layout.hierarchy_width = 264.0f;
-    layout.inspector_width = 290.0f;
+    layout.hierarchy_width = 300.0f;
+    layout.inspector_width = 300.0f;
 }
 
 } // namespace Leir

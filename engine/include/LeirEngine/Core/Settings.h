@@ -27,8 +27,8 @@ public:
     } debug;
 
     struct {
-        float hierarchy_width = 264.0f;
-        float inspector_width = 290.0f;
+        float hierarchy_width = 300.0f;
+        float inspector_width = 300.0f;
     } layout;
 
     // Resolved platform config path (<config>/LeirEngine/settings.json)
