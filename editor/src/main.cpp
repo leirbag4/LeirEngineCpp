@@ -65,7 +65,10 @@ public:
         : CoreApplication("LeirEngine Editor",
               Leir::LeirSettings::Get().window.width,
               Leir::LeirSettings::Get().window.height,
-              Leir::LeirSettings::Get().window.fullscreen)
+              Leir::LeirSettings::Get().window.fullscreen,
+              Leir::LeirSettings::Get().window.pos_x,
+              Leir::LeirSettings::Get().window.pos_y,
+              Leir::LeirSettings::Get().window.maximized)
     {
     }
 
@@ -453,8 +456,16 @@ protected:
     void OnShutdown() override
     {
         spdlog::info("Editor shutting down");
-        Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
-        Leir::LeirSettings::Get().Save();
+        auto& settings = Leir::LeirSettings::Get();
+        settings.SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
+        // Persist window placement so the next launch restores it. In fullscreen
+        // the saved windowed rect is kept untouched (monitor size would be wrong).
+        if (!settings.window.fullscreen) {
+            if (GetNormalWindowRect(settings.window.pos_x, settings.window.pos_y,
+                                    settings.window.width, settings.window.height))
+                settings.window.maximized = IsMaximized();
+        }
+        settings.Save();
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
         auto& sm = Leir::SceneManager::GetInstance();

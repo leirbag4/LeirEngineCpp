@@ -54,7 +54,7 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
 
 ## Qué incluye la Opción A (implementada)
 
-- `settings.json` (ahora en `%APPDATA%\LeirEngine\`): `window: { width: 1600, height: 900, fullscreen: false, vsync: true }` (16:9, correcto para monitor 1920x1080, ventana no-fullscreen).
+- `settings.json` (ahora en `%APPDATA%\LeirEngine\`): `window: { width: 1600, height: 900, pos_x, pos_y, fullscreen: false, maximized: false, vsync: true }` (16:9, correcto para monitor 1920x1080, ventana no-fullscreen). Posición/tamaño/maximizado se guardan al cerrar y se restauran al abrir (rect normal via callbacks; `INT_MIN` = centrada).
 - Constantes compartidas en `editor/src/main.cpp`:
   - `kHierarchyWidth = 264.0f` (era 200 → +32%)
   - `kInspectorWidth = 290.0f` (era 220 → +32%)

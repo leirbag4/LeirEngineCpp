@@ -1,5 +1,6 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
+#include <climits>
 #include <string>
 
 namespace Leir {
@@ -15,7 +16,10 @@ public:
     struct {
         int width = 1280;
         int height = 720;
+        int pos_x = INT_MIN;   // INT_MIN = unset (window centered on first run)
+        int pos_y = INT_MIN;
         bool fullscreen = false;
+        bool maximized = false;
         bool vsync = true;
     } window;
 

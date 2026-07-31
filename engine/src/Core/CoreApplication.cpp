@@ -11,7 +11,8 @@
 
 namespace Leir {
 
-CoreApplication::CoreApplication(const char* title, int width, int height, bool fullscreen)
+CoreApplication::CoreApplication(const char* title, int width, int height, bool fullscreen,
+                                 int posX, int posY, bool maximized)
     : m_Width(width)
     , m_Height(height)
 {
@@ -31,6 +32,16 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
         std::exit(EXIT_FAILURE);
     }
 
+    // Restore saved placement (only meaningful for windowed mode)
+    if (!fullscreen) {
+        if (posX != INT_MIN && posY != INT_MIN)
+            glfwSetWindowPos(m_Window, posX, posY);
+        else
+            CenterWindow();
+        if (maximized)
+            glfwMaximizeWindow(m_Window);
+    }
+
     spdlog::info("GLFW window created ({}x{})", width, height);
 
     int fbWidth, fbHeight;
@@ -40,8 +51,30 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
         m_Height = fbHeight;
     }
 
+    // Seed the tracked normal rect with the restored (windowed) values. In
+    // fullscreen this stays unset so a later save never overwrites the saved
+    // windowed rect with monitor size.
+    if (!fullscreen) {
+        int x, y, w, h;
+        glfwGetWindowPos(m_Window, &x, &y);
+        glfwGetWindowSize(m_Window, &w, &h);
+        if (maximized) {
+            // Window size already reflects the maximized size; keep the
+            // requested restored size instead.
+            w = width;
+            h = height;
+        }
+        m_NormalX = x;
+        m_NormalY = y;
+        m_NormalW = w;
+        m_NormalH = h;
+        m_HasNormalRect = true;
+    }
+
     glfwSetWindowUserPointer(m_Window, this);
     glfwSetFramebufferSizeCallback(m_Window, FramebufferSizeCallback);
+    glfwSetWindowSizeCallback(m_Window, WindowSizeCallback);
+    glfwSetWindowPosCallback(m_Window, WindowPosCallback);
 
     InputManager::GetInstance().Init(m_Window);
 }
@@ -101,6 +134,84 @@ void CoreApplication::HandleWindowResize(int width, int height)
     m_Width = width;
     m_Height = height;
     OnWindowResized(width, height);
+}
+
+void CoreApplication::GetWindowPosition(int& x, int& y) const
+{
+    x = 0;
+    y = 0;
+    if (m_Window)
+        glfwGetWindowPos(m_Window, &x, &y);
+}
+
+void CoreApplication::GetWindowSize(int& w, int& h) const
+{
+    w = m_Width;
+    h = m_Height;
+    if (m_Window)
+        glfwGetWindowSize(m_Window, &w, &h);
+}
+
+bool CoreApplication::IsMaximized() const
+{
+    return m_Window && glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED);
+}
+
+bool CoreApplication::GetNormalWindowRect(int& x, int& y, int& w, int& h) const
+{
+    if (!m_HasNormalRect)
+        return false;
+    x = m_NormalX;
+    y = m_NormalY;
+    w = m_NormalW;
+    h = m_NormalH;
+    return true;
+}
+
+void CoreApplication::WindowSizeCallback(GLFWwindow* window, int width, int height)
+{
+    auto* app = static_cast<CoreApplication*>(glfwGetWindowUserPointer(window));
+    if (!app)
+        return;
+    int x, y;
+    glfwGetWindowPos(window, &x, &y);
+    app->UpdateNormalRect(x, y, width, height);
+}
+
+void CoreApplication::WindowPosCallback(GLFWwindow* window, int x, int y)
+{
+    auto* app = static_cast<CoreApplication*>(glfwGetWindowUserPointer(window));
+    if (!app)
+        return;
+    int w, h;
+    glfwGetWindowSize(window, &w, &h);
+    app->UpdateNormalRect(x, y, w, h);
+}
+
+void CoreApplication::UpdateNormalRect(int x, int y, int w, int h)
+{
+    if (!m_Window)
+        return;
+    if (glfwGetWindowMonitor(m_Window) != nullptr)
+        return; // fullscreen: keep last windowed rect
+    if (glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED))
+        return; // maximized: only track restored size/pos
+    m_NormalX = x;
+    m_NormalY = y;
+    m_NormalW = w;
+    m_NormalH = h;
+    m_HasNormalRect = true;
+}
+
+void CoreApplication::CenterWindow()
+{
+    if (!m_Window)
+        return;
+    int vx, vy, vw, vh;
+    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &vx, &vy, &vw, &vh);
+    int w, h;
+    glfwGetWindowSize(m_Window, &w, &h);
+    glfwSetWindowPos(m_Window, vx + (vw - w) / 2, vy + (vh - h) / 2);
 }
 
 } // namespace Leir

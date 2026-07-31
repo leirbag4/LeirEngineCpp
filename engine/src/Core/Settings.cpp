@@ -59,7 +59,10 @@ bool LeirSettings::Load(const std::string& path)
 
         window.width = j.value("window", nlohmann::json::object()).value("width", 1280);
         window.height = j.value("window", nlohmann::json::object()).value("height", 720);
+        window.pos_x = j.value("window", nlohmann::json::object()).value("pos_x", INT_MIN);
+        window.pos_y = j.value("window", nlohmann::json::object()).value("pos_y", INT_MIN);
         window.fullscreen = j.value("window", nlohmann::json::object()).value("fullscreen", false);
+        window.maximized = j.value("window", nlohmann::json::object()).value("maximized", false);
         window.vsync = j.value("window", nlohmann::json::object()).value("vsync", true);
 
         debug.ui_outlines = j.value("debug", nlohmann::json::object()).value("ui_outlines", false);
@@ -86,7 +89,10 @@ bool LeirSettings::Save()
     nlohmann::json j;
     j["window"]["width"] = window.width;
     j["window"]["height"] = window.height;
+    j["window"]["pos_x"] = window.pos_x;
+    j["window"]["pos_y"] = window.pos_y;
     j["window"]["fullscreen"] = window.fullscreen;
+    j["window"]["maximized"] = window.maximized;
     j["window"]["vsync"] = window.vsync;
     j["debug"]["ui_outlines"] = debug.ui_outlines;
     j["debug"]["show_overlay"] = debug.show_overlay;
@@ -125,7 +131,10 @@ void LeirSettings::SetDefaults()
 {
     window.width = 1280;
     window.height = 720;
+    window.pos_x = INT_MIN;
+    window.pos_y = INT_MIN;
     window.fullscreen = false;
+    window.maximized = false;
     window.vsync = true;
     debug.ui_outlines = false;
     debug.show_overlay = true;

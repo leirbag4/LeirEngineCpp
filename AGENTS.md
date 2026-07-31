@@ -84,13 +84,14 @@ cmake --build build/linux-debug
   - Linux: `$XDG_CONFIG_HOME/LeirEngine/settings.json` (falls back to `~/.config/LeirEngine/`)
 - JSON via nlohmann/json (already a dependency)
 - Sections:
-  - `window`: `width`, `height`, `fullscreen`, `vsync`
+  - `window`: `width`, `height`, `pos_x`, `pos_y` (`INT_MIN` = unset → centered on first run), `fullscreen`, `maximized`, `vsync`
   - `debug`: `ui_outlines` (toggles green UI bounding-box outlines), `show_overlay` (toggles UIDebugOverlay)
   - `layout`: `hierarchy_width`, `inspector_width` (editor panel widths, resized via UISplitter)
 - `Save()` creates the config directory if missing (`create_directories`)
 - If file doesn't exist, written with defaults on first `Load()` call
 - `LeirSettings::Get().Load()` called in `main()` before app creation
-- Editor reads settings for window size / fullscreen mode; saves on splitter drag end and on shutdown (`OnShutdown`)
+- Editor reads settings for window size / fullscreen / position / maximized; saves on splitter drag end and on shutdown (`OnShutdown`)
+- Window placement persistence: `CoreApplication` tracks the "normal rect" (size/pos only when not maximized and not fullscreen) via GLFW size/pos callbacks, so exiting maximized or fullscreen never corrupts the saved windowed rect. Position is restored via `glfwSetWindowPos` (centered if unset), maximized via `glfwMaximizeWindow`, both ignored in fullscreen
 
 ## Input System
 
@@ -658,3 +659,4 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `InputManager.h/.cpp`: new `CursorStyle` enum + static `SetCursorStyle()` using cached `glfwCreateStandardCursor` (no-op on no change)
 - `UISplitter`: new editor widget (`editor/src/UI/UISplitter.h/.cpp`) — 6px draggable divider between panels, pointer capture, `clamp(startWidth+dx, min, max)`, `SetDragInverted(true)` for right-docked panels, `ResizeEW` cursor on hover/drag, saves on drag end
 - `EditorApp` (editor/src/main.cpp): replaced `kHierarchyWidth`/`kInspectorWidth` constants with mutable `m_HierarchyWidth`/`m_InspectorWidth` state; new `ApplyPanelLayout()` applies widths to panel offsets (called in OnInit + each frame before layout); splitters between Hierarchy|Viewport and Viewport|Inspector; save on splitter drag end + on `OnShutdown`
+- Window placement persistence: `CoreApplication` (CoreApplication.h/.cpp) extended ctor with `posX/posY/maximized` (restored via `glfwSetWindowPos`/`glfwMaximizeWindow`, centered if `INT_MIN`); new `glfwSetWindowSizeCallback`/`glfwSetWindowPosCallback` track the normal (non-maximized, non-fullscreen) rect; getters `GetWindowPosition`, `GetWindowSize`, `IsMaximized`, `GetNormalWindowRect`. `LeirSettings.window` added `pos_x`, `pos_y` (default `INT_MIN`), `maximized`. Editor saves windowed rect + maximized flag on `OnShutdown` (skips when fullscreen)
