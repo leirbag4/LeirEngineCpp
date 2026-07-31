@@ -145,6 +145,12 @@ bool LeirSettings::Save()
     }
 }
 
+void LeirSettings::SetLayoutWidths(float hierarchyWidth, float inspectorWidth)
+{
+    layout.hierarchy_width = hierarchyWidth;
+    layout.inspector_width = inspectorWidth;
+}
+
 void LeirSettings::SetDefaults()
 {
     window.width = 1280;

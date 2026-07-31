@@ -10,6 +10,7 @@ public:
 
     bool Load(const std::string& path = "");
     bool Save();
+    void SetLayoutWidths(float hierarchyWidth, float inspectorWidth);
 
     struct {
         int width = 1280;

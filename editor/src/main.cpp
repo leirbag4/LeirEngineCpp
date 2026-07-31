@@ -339,7 +339,10 @@ protected:
         m_HierarchySplitter->SetMaxWidth(kHierarchyMaxWidth);
         m_HierarchySplitter->SetCurrentWidthGetter([this]() { return m_HierarchyWidth; });
         m_HierarchySplitter->SetOnResize([this](float w) { m_HierarchyWidth = w; });
-        m_HierarchySplitter->SetOnDragEnd([this]() { Leir::LeirSettings::Get().Save(); });
+        m_HierarchySplitter->SetOnDragEnd([this]() {
+            Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
+            Leir::LeirSettings::Get().Save();
+        });
         root->AddChild(m_HierarchySplitter);
 
         m_InspectorSplitter = new UISplitter();
@@ -349,7 +352,11 @@ protected:
         m_InspectorSplitter->SetMaxWidth(kInspectorMaxWidth);
         m_InspectorSplitter->SetCurrentWidthGetter([this]() { return m_InspectorWidth; });
         m_InspectorSplitter->SetOnResize([this](float w) { m_InspectorWidth = w; });
-        m_InspectorSplitter->SetOnDragEnd([this]() { Leir::LeirSettings::Get().Save(); });
+        m_InspectorSplitter->SetDragInverted(true);
+        m_InspectorSplitter->SetOnDragEnd([this]() {
+            Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
+            Leir::LeirSettings::Get().Save();
+        });
         root->AddChild(m_InspectorSplitter);
 
         // Apply current panel widths to all panel offsets
@@ -446,6 +453,8 @@ protected:
     void OnShutdown() override
     {
         spdlog::info("Editor shutting down");
+        Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
+        Leir::LeirSettings::Get().Save();
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
         auto& sm = Leir::SceneManager::GetInstance();

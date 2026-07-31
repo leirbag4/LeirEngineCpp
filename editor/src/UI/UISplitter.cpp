@@ -33,7 +33,9 @@ void UISplitter::OnPointerMove(const Leir::Vector2& pos)
 {
     if (!m_Dragging) return;
 
-    float newWidth = std::clamp(m_StartWidth + (pos.x - m_DragStartX), m_MinWidth, m_MaxWidth);
+    float dx = pos.x - m_DragStartX;
+    if (m_InvertDrag) dx = -dx;
+    float newWidth = std::clamp(m_StartWidth + dx, m_MinWidth, m_MaxWidth);
     spdlog::trace("[Splitter] dragMove: startX={:.1f} curX={:.1f} width={:.1f}", m_DragStartX, pos.x, newWidth);
     if (m_OnResize)
         m_OnResize(newWidth);

@@ -16,6 +16,7 @@ public:
     void SetCurrentWidthGetter(std::function<float()> getter) { m_GetCurrent = std::move(getter); }
     void SetOnResize(std::function<void(float)> cb) { m_OnResize = std::move(cb); }
     void SetOnDragEnd(std::function<void()> cb) { m_OnDragEnd = std::move(cb); }
+    void SetDragInverted(bool inv) { m_InvertDrag = inv; }
 
     bool OnPointerDown(const Leir::Vector2& pos) override;
     void OnPointerMove(const Leir::Vector2& pos) override;
@@ -27,6 +28,7 @@ public:
 
 private:
     bool m_Dragging = false;
+    bool m_InvertDrag = false;
     float m_DragStartX = 0.0f;
     float m_StartWidth = 0.0f;
     float m_MinWidth = 140.0f;
