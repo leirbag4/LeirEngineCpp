@@ -192,18 +192,16 @@ acepta `flags` y el pool de la UI se crea con el flag.
 - El RT del viewport deriva del layout (`GetComputedRect`), así que el resize de panel dispara
   el resize del RT solo (`UpdateViewportRenderTarget`).
 
-# Fase 6 (pendiente, aplazada a futuro)
+# Fase 6 (en curso)
 
-Ideas para la próxima iteración profesional, NO bloqueantes:
-
-- **Colapso de paneles + docking real** (acoplar/desacoplar Hierarchy/Inspector, pestañas, etc.).
-- **Soporte HiDPI**: hoy se usa tamaño de ventana (window coords) para layout/UI mientras el
-  swapchain usa framebuffer size (glfwGetFramebufferSize). En DPI >100% difieren. Preexistente,
-  documentado como caveat. Habría que unificar con escala de DPI (o usar framebuffer size como
-  tamaño lógico).
-- **Refinar `InvalidateViewportDescriptor`**: el pool de la UI ya soporta free
-  (`VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT`). Pendiente de revisar si conviene un
-  pool más grande o recrear el pool en resize.
+- **Soporte HiDPI** — base implementada (pasos 0-3 de `TODO_HIDPI.md`): UI/input en coordenadas
+  lógicas, `dpr` solo en swapchain/RT, toggle `settings.window.hidpi` (default true), ventana
+  creada a `lógico × scale`, `InputManager::ToLogical` (Windows), `screenSize` lógico en UIRenderer,
+  RT del viewport a `lógico × dpr`. **Pendiente**: verificación visual del usuario a 125%/100% y
+  toggle off (Paso 4), docs en AGENTS.md.
+- **Colapso de paneles + docking básico** (colapsar/expandir Hierarchy/Inspector + arrastrar título a zonas de drop). Pendiente, después de verificar HiDPI.
+- **Refinar `InvalidateViewportDescriptor`** — pendiente: mover ownership del descriptor set a `RenderTexture` (alloc en ctor, re-write en resize, destroy en dtor; eliminar cache + invalidate; pool con growth).
+- Más ideas a futuro: docking completo con pestañas/flotantes (requiere multi-window), `renderScale` (pixel-perfect 2D / screen percentage 3D).
 
 
 ---

@@ -23,7 +23,7 @@ void InputManager::Init(GLFWwindow* window)
 
     double x, y;
     glfwGetCursorPos(window, &x, &y);
-    m_LastMousePos = { static_cast<float>(x), static_cast<float>(y) };
+    m_LastMousePos = ToLogical(x, y);
 
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetCharCallback(window, CharCallback);
@@ -120,12 +120,13 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
     auto& inst = GetInstance();
     double x, y;
     glfwGetCursorPos(inst.m_Window, &x, &y);
+    Vector2 pos = inst.ToLogical(x, y);
 
     PointerEvent e;
     e.source = PointerSource::Mouse;
     e.pointerId = 0;
-    e.position = { static_cast<float>(x), static_cast<float>(y) };
-    e.delta = e.position - inst.m_LastMousePos;
+    e.position = pos;
+    e.delta = pos - inst.m_LastMousePos;
     e.button = btn;
     e.action = (action == GLFW_PRESS) ? EventAction::Press : EventAction::Release;
     e.pressure = 1.0f;
@@ -136,7 +137,7 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
 void InputManager::CursorPosCallback(GLFWwindow* window, double x, double y)
 {
     auto& inst = GetInstance();
-    Vector2 newPos{ static_cast<float>(x), static_cast<float>(y) };
+    Vector2 newPos = inst.ToLogical(x, y);
 
     PointerEvent e;
     e.source = PointerSource::Mouse;
@@ -149,6 +150,19 @@ void InputManager::CursorPosCallback(GLFWwindow* window, double x, double y)
 
     inst.m_LastMousePos = newPos;
     EventQueue::Get().Push(e);
+}
+
+Vector2 InputManager::ToLogical(double x, double y) const
+{
+    Vector2 pos{ static_cast<float>(x), static_cast<float>(y) };
+#ifdef _WIN32
+    // On Windows a DPI-aware process receives cursor positions in physical
+    // pixels (like the window size). Convert to logical UI units. On
+    // macOS/Linux GLFW already reports logical units, so this is a no-op.
+    if (m_ContentScale > 0.0f)
+        pos /= m_ContentScale;
+#endif
+    return pos;
 }
 
 void InputManager::ScrollCallback(GLFWwindow* window, double xOffset, double yOffset)

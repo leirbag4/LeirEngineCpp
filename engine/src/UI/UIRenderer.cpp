@@ -236,8 +236,10 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
 
     vkUnmapMemory(m_Device->GetDevice(), m_VertexMemories[frame]);
 
-    VkExtent2D extent = m_Device->GetSwapchainExtent();
-    Vector2 screenSize = {(float)extent.width, (float)extent.height};
+    // Logical canvas size maps vertices (in logical units) to NDC. The
+    // swapchain/render pass is physical, but the vertex positions are in
+    // logical units, so the shader must divide by the logical size.
+    Vector2 screenSize = m_ScreenSize;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
     VkBuffer vb[] = { m_VertexBuffers[frame] };
@@ -330,6 +332,8 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
     m_DebugQuadTextures.clear();
 
     if (!canvas || !canvas->IsActive()) return;
+
+    m_ScreenSize = {canvas->GetScreenWidth(), canvas->GetScreenHeight()};
 
     // Walk tree depth-first
     std::vector<UIElement*> stack = { canvas };

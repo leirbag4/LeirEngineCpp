@@ -21,6 +21,7 @@ public:
         bool fullscreen = false;
         bool maximized = false;
         bool vsync = true;
+        bool hidpi = true;  // use system DPI scale (false = fixed/1x UI)
     } window;
 
     struct {

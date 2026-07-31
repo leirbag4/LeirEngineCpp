@@ -241,6 +241,10 @@ SwapchainSupport VulkanDevice::QuerySwapchainSupport(VkPhysicalDevice device) co
 {
     SwapchainSupport support;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_Surface, &support.capabilities);
+    spdlog::info("Surface capabilities: currentExtent {}x{}, min {}x{}, max {}x{}",
+        support.capabilities.currentExtent.width, support.capabilities.currentExtent.height,
+        support.capabilities.minImageExtent.width, support.capabilities.minImageExtent.height,
+        support.capabilities.maxImageExtent.width, support.capabilities.maxImageExtent.height);
     uint32_t count;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_Surface, &count, nullptr);
     if (count) {

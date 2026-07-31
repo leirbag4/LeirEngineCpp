@@ -84,7 +84,7 @@ cmake --build build/linux-debug
   - Linux: `$XDG_CONFIG_HOME/LeirEngine/settings.json` (falls back to `~/.config/LeirEngine/`)
 - JSON via nlohmann/json (already a dependency)
 - Sections:
-  - `window`: `width`, `height`, `pos_x`, `pos_y` (`INT_MIN` = unset → centered on first run), `fullscreen`, `maximized`, `vsync`
+  - `window`: `width`, `height`, `pos_x`, `pos_y` (`INT_MIN` = unset → centered on first run), `fullscreen`, `maximized`, `vsync`, `hidpi` (uses system DPI scale; `false` = fixed 1× UI)
   - `debug`: `ui_outlines` (toggles green UI bounding-box outlines), `show_overlay` (toggles UIDebugOverlay)
   - `layout`: `hierarchy_width`, `inspector_width` (editor panel widths, resized via UISplitter)
 - `Save()` creates the config directory if missing (`create_directories`)
@@ -92,6 +92,26 @@ cmake --build build/linux-debug
 - `LeirSettings::Get().Load()` called in `main()` before app creation
 - Editor reads settings for window size / fullscreen / position / maximized; saves on splitter drag end and on shutdown (`OnShutdown`)
 - Window placement persistence: `CoreApplication` tracks the "normal rect" (size/pos only when not maximized and not fullscreen) via GLFW size/pos callbacks, so exiting maximized or fullscreen never corrupts the saved windowed rect. Position is restored via `glfwSetWindowPos` (centered if unset), maximized via `glfwMaximizeWindow`, both ignored in fullscreen
+
+## HiDPI (DPI awareness)
+
+- The engine runs **per-monitor DPI-aware** (GLFW calls `SetProcessDpiAwarenessContext` on init).
+  On Windows `glfwGetWindowSize == glfwGetFramebufferSize` = **physical pixels**; logical =
+  `framebuffer ÷ contentScale`. On macOS/Linux window size is logical, framebuffer physical.
+- `CoreApplication` works in **logical units**: `GetWidth()/GetHeight()` (logical, derived from
+  `framebuffer ÷ GetContentScale()`), `GetFramebufferWidth/Height()` (physical),
+  `GetContentScale()` (system scale, or 1.0 when HiDPI disabled via `SetHidpiEnabled`).
+- The window is created at `logical × scale` physical pixels when HiDPI is enabled, so the
+  windowed area stays the same at any DPI. `CenterWindow` uses native units (no conversion).
+- **Input**: GLFW cursor is physical on Windows; `InputManager::ToLogical()` divides by the
+  effective scale there (no-op on macOS/Linux). Set via `InputManager::SetContentScale()` by
+  `CoreApplication` before `Init` and on `glfwSetWindowContentScaleCallback`
+  (`OnContentScaleChanged()` virtual).
+- **Rendering**: the swapchain extent is physical (Vulkan surface caps). `UIRenderer` push-constant
+  `screenSize` = **logical canvas size** (vertices are logical). The editor viewport `RenderTexture`
+  is created/resized at `logical × dpr`. Viewport/scissor stay physical.
+- Toggle: `settings.window.hidpi` (default `true`); `false` = old "fixed 1×" behavior.
+  See `TODO_HIDPI.md` for full concept and platform notes.
 
 ## Input System
 
@@ -660,3 +680,5 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `UISplitter`: new editor widget (`editor/src/UI/UISplitter.h/.cpp`) — 6px draggable divider between panels, pointer capture, `clamp(startWidth+dx, min, max)`, `SetDragInverted(true)` for right-docked panels, `ResizeEW` cursor on hover/drag, saves on drag end
 - `EditorApp` (editor/src/main.cpp): replaced `kHierarchyWidth`/`kInspectorWidth` constants with mutable `m_HierarchyWidth`/`m_InspectorWidth` state; new `ApplyPanelLayout()` applies widths to panel offsets (called in OnInit + each frame before layout); splitters between Hierarchy|Viewport and Viewport|Inspector; save on splitter drag end + on `OnShutdown`
 - Window placement persistence: `CoreApplication` (CoreApplication.h/.cpp) extended ctor with `posX/posY/maximized` (restored via `glfwSetWindowPos`/`glfwMaximizeWindow`, centered if `INT_MIN`); new `glfwSetWindowSizeCallback`/`glfwSetWindowPosCallback` track the normal (non-maximized, non-fullscreen) rect; getters `GetWindowPosition`, `GetWindowSize`, `IsMaximized`, `GetNormalWindowRect`. `LeirSettings.window` added `pos_x`, `pos_y` (default `INT_MIN`), `maximized`. Editor saves windowed rect + maximized flag on `OnShutdown` (skips when fullscreen)
+- HiDPI base (see `TODO_HIDPI.md`): `CoreApplication` ctor takes `hidpi` and creates the window at `logical × scale` physical px; `GetWidth/GetHeight` are now **logical** (`framebuffer ÷ GetContentScale()`), `GetFramebufferWidth/Height` physical, `GetContentScale()` (1.0 when HiDPI disabled); `OnContentScaleChanged()` virtual via `glfwSetWindowContentScaleCallback`. `InputManager::ToLogical()` divides cursor pos by the effective scale on Windows (physical there for DPI-aware processes, no-op on mac/linux), fed by `SetContentScale()`. `UIRenderer` push-constant `screenSize` = logical canvas size. Editor viewport `RenderTexture` sized at `logical × dpr`. `LeirSettings.window` added `hidpi` (default `true`). Diagnostic logs: DPI awareness context + surface currentExtent
+

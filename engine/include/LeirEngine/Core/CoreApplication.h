@@ -10,7 +10,8 @@ namespace Leir {
 class LEIR_API CoreApplication {
 public:
     CoreApplication(const char* title, int width, int height, bool fullscreen = false,
-                    int posX = INT_MIN, int posY = INT_MIN, bool maximized = false);
+                    int posX = INT_MIN, int posY = INT_MIN, bool maximized = false,
+                    bool hidpi = true);
     virtual ~CoreApplication();
 
     void Run();
@@ -19,6 +20,11 @@ public:
     GLFWwindow* GetWindow() const { return m_Window; }
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }
+    int GetFramebufferWidth() const { return m_FbWidth; }
+    int GetFramebufferHeight() const { return m_FbHeight; }
+    // System DPI scale (1.0 = 100%). Returns 1.0 when HiDPI scaling is disabled.
+    float GetContentScale() const { return m_HidpiEnabled ? m_ContentScale : 1.0f; }
+    void SetHidpiEnabled(bool enabled) { m_HidpiEnabled = enabled; }
 
     // Window placement queries (window coordinates, not framebuffer)
     void GetWindowPosition(int& x, int& y) const;
@@ -34,11 +40,16 @@ protected:
     virtual void OnRender() {}
     virtual void OnShutdown() {}
     virtual void OnWindowResized(int width, int height) {}
+    virtual void OnContentScaleChanged() {}
 
     GLFWwindow* m_Window = nullptr;
-    int m_Width = 1280;
+    int m_Width = 1280;    // logical window size (screen units)
     int m_Height = 720;
+    int m_FbWidth = 1280;  // physical framebuffer size (pixels)
+    int m_FbHeight = 720;
     bool m_Running = false;
+    float m_ContentScale = 1.0f;
+    bool m_HidpiEnabled = true;
 
     // Normal-state window rect (tracked via size/pos callbacks)
     int m_NormalX = 0;
@@ -51,8 +62,10 @@ private:
     static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void WindowPosCallback(GLFWwindow* window, int x, int y);
+    static void WindowContentScaleCallback(GLFWwindow* window, float xscale, float yscale);
     void HandleWindowResize(int width, int height);
     void UpdateNormalRect(int x, int y, int w, int h);
+    int ToLogical(int nativeSize) const;
     void CenterWindow();
 };
 

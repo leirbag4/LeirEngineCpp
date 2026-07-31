@@ -59,6 +59,8 @@ private:
 
     std::vector<UIVertex> m_DebugVertices;
     std::vector<Texture2D*> m_DebugQuadTextures;
+
+    Vector2 m_ScreenSize = {1280.0f, 720.0f}; // logical canvas size (px→NDC)
 };
 
 } // namespace Leir

@@ -27,6 +27,11 @@ public:
 
     GLFWwindow* GetWindow() const { return m_Window; }
 
+    // Effective logical scale (1.0 when HiDPI scaling is disabled). Set by
+    // CoreApplication so cursor positions can be converted from the native
+    // (physical on Windows) coordinate space to logical UI units.
+    void SetContentScale(float scale) { m_ContentScale = scale; }
+
     // OS cursor shape (cached, no-op if unchanged)
     static void SetCursorStyle(CursorStyle style);
 
@@ -42,9 +47,12 @@ private:
     static void CursorPosCallback(GLFWwindow* window, double x, double y);
     static void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
 
+    Vector2 ToLogical(double x, double y) const;
+
     GLFWwindow* m_Window = nullptr;
     Vector2 m_LastMousePos{ 0.0f, 0.0f };
     int m_CurrentCursor = -1;
+    float m_ContentScale = 1.0f;
 };
 
 } // namespace Leir

@@ -64,6 +64,7 @@ bool LeirSettings::Load(const std::string& path)
         window.fullscreen = j.value("window", nlohmann::json::object()).value("fullscreen", false);
         window.maximized = j.value("window", nlohmann::json::object()).value("maximized", false);
         window.vsync = j.value("window", nlohmann::json::object()).value("vsync", true);
+        window.hidpi = j.value("window", nlohmann::json::object()).value("hidpi", true);
 
         debug.ui_outlines = j.value("debug", nlohmann::json::object()).value("ui_outlines", false);
         debug.show_overlay = j.value("debug", nlohmann::json::object()).value("show_overlay", true);
@@ -94,6 +95,7 @@ bool LeirSettings::Save()
     j["window"]["fullscreen"] = window.fullscreen;
     j["window"]["maximized"] = window.maximized;
     j["window"]["vsync"] = window.vsync;
+    j["window"]["hidpi"] = window.hidpi;
     j["debug"]["ui_outlines"] = debug.ui_outlines;
     j["debug"]["show_overlay"] = debug.show_overlay;
     j["debug"]["show_glyph_quads"] = debug.show_glyph_quads;
@@ -136,6 +138,7 @@ void LeirSettings::SetDefaults()
     window.fullscreen = false;
     window.maximized = false;
     window.vsync = true;
+    window.hidpi = true;
     debug.ui_outlines = false;
     debug.show_overlay = true;
     debug.show_glyph_quads = false;

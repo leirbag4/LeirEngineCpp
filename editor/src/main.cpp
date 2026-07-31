@@ -68,7 +68,8 @@ public:
               Leir::LeirSettings::Get().window.fullscreen,
               Leir::LeirSettings::Get().window.pos_x,
               Leir::LeirSettings::Get().window.pos_y,
-              Leir::LeirSettings::Get().window.maximized)
+              Leir::LeirSettings::Get().window.maximized,
+              Leir::LeirSettings::Get().window.hidpi)
     {
     }
 
@@ -120,9 +121,13 @@ protected:
         m_ViewportW = (uint32_t)std::max(1.0f, GetWidth() - m_HierarchyWidth - m_InspectorWidth);
         m_ViewportH = (uint32_t)std::max(1.0f, GetHeight() - kBottomBarHeight);
 
-        // Create RenderTexture for the viewport
+        // Create RenderTexture for the viewport. The UI/layout is in logical
+        // units; the RT is physical (logical x DPI) so the 3D view is sharp.
+        float dpr = GetContentScale();
         m_ViewportRT = std::make_unique<Leir::RenderTexture>(
-            m_VulkanDevice.get(), m_ViewportW, m_ViewportH);
+            m_VulkanDevice.get(),
+            (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportW * dpr)),
+            (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportH * dpr)));
         m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
 
         // Camera (will be driven by EditorCamera)
@@ -482,6 +487,15 @@ protected:
             m_VulkanDevice->NotifyResized();
     }
 
+    void OnContentScaleChanged() override
+    {
+        // DPI changed (e.g. monitor moved / system scale changed). The logical
+        // size is updated by the framebuffer callback; re-layout and re-size
+        // the viewport RT happen each frame, so just log the change.
+        spdlog::info("Content scale changed to {:.2f} (logical {}x{})",
+            GetContentScale(), GetWidth(), GetHeight());
+    }
+
 private:
     void ApplyPanelLayout()
     {
@@ -531,13 +545,18 @@ private:
             return;
 
         const auto& cr = m_ViewportPanel->GetComputedRect();
-        uint32_t w = (uint32_t)std::max(1.0f, cr.z);
+        uint32_t w = (uint32_t)std::max(1.0f, cr.z); // logical
         uint32_t h = (uint32_t)std::max(1.0f, cr.w);
 
-        if (w == m_ViewportRT->GetWidth() && h == m_ViewportRT->GetHeight())
+        // Physical render target size = logical x DPI
+        float dpr = GetContentScale();
+        uint32_t fw = (uint32_t)std::max(1.0f, (float)std::lround(w * dpr));
+        uint32_t fh = (uint32_t)std::max(1.0f, (float)std::lround(h * dpr));
+
+        if (fw == m_ViewportRT->GetWidth() && fh == m_ViewportRT->GetHeight())
             return;
 
-        m_ViewportRT->Resize(w, h);
+        m_ViewportRT->Resize(fw, fh);
         if (m_UIRenderer)
             m_UIRenderer->InvalidateViewportDescriptor(m_ViewportRT.get());
 
@@ -548,7 +567,7 @@ private:
                 cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 100.0f);
         }
 
-        spdlog::info("Viewport resized to {}x{}", w, h);
+        spdlog::info("Viewport resized to {}x{} ({}x{} physical)", w, h, fw, fh);
     }
 
     std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
