@@ -34,6 +34,7 @@ bool LeirSettings::Load(const std::string& path)
         debug.ui_outlines = j.value("debug", nlohmann::json::object()).value("ui_outlines", false);
         debug.show_overlay = j.value("debug", nlohmann::json::object()).value("show_overlay", true);
         debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
+        debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
 
         spdlog::info("Settings loaded from '{}'", path);
         return true;
@@ -56,6 +57,7 @@ bool LeirSettings::Save()
     j["debug"]["ui_outlines"] = debug.ui_outlines;
     j["debug"]["show_overlay"] = debug.show_overlay;
     j["debug"]["show_glyph_quads"] = debug.show_glyph_quads;
+    j["debug"]["ui_event_log"] = debug.ui_event_log;
 
     try {
         std::ofstream f(m_Path);
@@ -81,6 +83,7 @@ void LeirSettings::SetDefaults()
     debug.ui_outlines = false;
     debug.show_overlay = true;
     debug.show_glyph_quads = false;
+    debug.ui_event_log = false;
 }
 
 } // namespace Leir

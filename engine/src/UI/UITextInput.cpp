@@ -212,7 +212,11 @@ void UITextInput::OnBlur()
     UIElement* e = this;
     while (e) {
         auto* c = dynamic_cast<UICanvas*>(e);
-        if (c) { c->ReleasePointer(); break; }
+        if (c) {
+            if (c->GetCaptureElement() == this)
+                c->ReleasePointer();
+            break;
+        }
         e = e->GetParent();
     }
 }
