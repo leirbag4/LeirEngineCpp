@@ -25,6 +25,9 @@ bool UIFloatInput::OnTextInput(uint32_t codepoint)
     if (std::isdigit(c) || c == '.' || c == '-' || c == '+') {
         spdlog::trace("[FloatInput] Accept char '{}' text='{}'",
             c, GetText().c_str());
+        ResetCaretBlink();
+        if (HasSelection())
+            DeleteSelection();
         InsertChar(codepoint);
         return true;
     }
