@@ -16,6 +16,7 @@
 #include "LeirEngine/Rendering/Image.h"
 #include "LeirEngine/Core/Settings.h"
 
+#include <algorithm>
 #include <spdlog/spdlog.h>
 
 namespace Leir {
@@ -423,9 +424,26 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                 }
 
                 if (input->IsFocused() && input->HasSelection()) {
-                    float sx = textX0 + input->GetCursorXAt(input->GetSelBegin());
-                    float ex = textX0 + input->GetCursorXAt(input->GetSelEnd());
-                    Batch(nullptr, {sx, caretY, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                    int selB = input->GetSelBegin();
+                    int selE = input->GetSelEnd();
+                    if (textArea) {
+                        for (int line = 0; line < textArea->GetLineCount(); ++line) {
+                            int lStart = textArea->GetLineStart(line);
+                            int lEnd = textArea->GetLineEnd(line);
+                            if (selB < lEnd && selE > lStart) {
+                                int rs = std::max(selB, lStart);
+                                int re = std::min(selE, lEnd);
+                                float sx = textX0 + input->GetCursorXAt(rs);
+                                float ex = textX0 + input->GetCursorXAt(re);
+                                float ly = cr.y + 4.0f + line * lineH;
+                                Batch(nullptr, {sx, ly, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                            }
+                        }
+                    } else {
+                        float sx = textX0 + input->GetCursorXAt(selB);
+                        float ex = textX0 + input->GetCursorXAt(selE);
+                        Batch(nullptr, {sx, caretY, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                    }
                 }
 
                 auto rawQuads = input->GetFont()->LayoutText(displayText, cr.z - 8.0f);

@@ -236,4 +236,49 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
     return true;
 }
 
+void UITextArea::OnPointerMove(const Vector2& pos)
+{
+    if (!m_Focused || !m_Font || !m_Dragging) return;
+
+    if (m_SelectionStart < 0)
+        m_SelectionStart = m_CursorPos;
+
+    const auto& cr = GetComputedRect();
+    float lineH = m_Font->GetLineHeight();
+    float localY = pos.y - cr.y;
+    int line = std::min((int)(localY / lineH), GetLineCount() - 1);
+    if (line < 0) line = 0;
+
+    float localX = pos.x - (cr.x + 4.0f);
+    int lineStart = GetLineStart(line);
+    int lineEnd = GetLineEnd(line);
+    int lineLen = lineEnd - lineStart;
+
+    int col = 0;
+    float x = 0.0f;
+    for (int i = 0; i < lineLen && lineStart + i < (int)m_Text.size();) {
+        int idx = lineStart + i;
+        uint32_t cp = (unsigned char)m_Text[idx];
+        int step = 1;
+        if (cp < 0x80) { step = 1; }
+        else if ((cp & 0xE0) == 0xC0 && idx + 1 < (int)m_Text.size()) { cp = ((cp & 0x1F) << 6) | (m_Text[idx+1] & 0x3F); step = 2; }
+        else if ((cp & 0xF0) == 0xE0 && idx + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[idx+1] & 0x3F) << 6) | (m_Text[idx+2] & 0x3F); step = 3; }
+        else { ++i; continue; }
+
+        if (cp == '\n') { x = 0.0f; i += step; continue; }
+
+        float advance = (cp == ' ') ? m_Font->GetSpaceWidth() : m_Font->GetGlyphInfo(cp).advance;
+        float nextX = x + advance;
+        if (localX < nextX) {
+            col = (localX - x < nextX - localX) ? i : i + step;
+            break;
+        }
+        x = nextX;
+        i += step;
+        col = i;
+    }
+
+    m_CursorPos = lineStart + std::min(col, lineLen);
+}
+
 } // namespace Leir

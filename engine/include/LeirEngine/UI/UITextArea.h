@@ -12,6 +12,7 @@ public:
     Vector2 GetMinSize() const override;
     bool OnKeyDown(int key) override;
     bool OnPointerDown(const Vector2& pos) override;
+    void OnPointerMove(const Vector2& pos) override;
 
     int GetLineCount() const;
     int GetCursorLine() const;
