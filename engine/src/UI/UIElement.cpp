@@ -47,6 +47,53 @@ Vector2 UIElement::GetMinSize() const
     return {0.0f, 0.0f};
 }
 
+Vector2 UIElement::GetNaturalSize() const
+{
+    switch (m_SizePolicy) {
+        case SizePolicy::Content:
+            return GetContentSize();
+        case SizePolicy::Fixed:
+        case SizePolicy::Fill:
+        case SizePolicy::Grow:
+        default:
+            return GetMinSize();
+    }
+}
+
+Vector2 UIElement::GetContentSize() const
+{
+    if (m_LayoutMode == LayoutMode::Free)
+        return GetMinSize();
+
+    bool isRow = (m_LayoutMode == LayoutMode::Row);
+    float mainTotal = 0.0f;
+    float crossMax = 0.0f;
+    int childCount = 0;
+
+    for (auto* child : m_Children) {
+        if (!child->IsActive())
+            continue;
+        Vector2 natural = child->GetNaturalSize();
+        if (isRow) {
+            mainTotal += natural.x;
+            crossMax = std::max(crossMax, natural.y);
+        } else {
+            mainTotal += natural.y;
+            crossMax = std::max(crossMax, natural.x);
+        }
+        childCount++;
+    }
+
+    if (childCount > 1)
+        mainTotal += m_Spacing * (childCount - 1);
+
+    if (isRow)
+        return {m_Padding[0] + mainTotal + m_Padding[2],
+                m_Padding[1] + crossMax + m_Padding[3]};
+    return {m_Padding[0] + crossMax + m_Padding[2],
+            m_Padding[1] + mainTotal + m_Padding[3]};
+}
+
 void UIElement::ComputeLayout(const Vector2& availableSize)
 {
     if (!m_Active)
@@ -107,6 +154,9 @@ void UIElement::ComputeRowLayout(const Vector2& availableSize)
             case SizePolicy::Fixed:
                 fixedTotal += child->GetMinSize().x;
                 break;
+            case SizePolicy::Content:
+                fixedTotal += child->GetContentSize().x;
+                break;
             case SizePolicy::Fill:
                 fillCount++;
                 break;
@@ -140,6 +190,9 @@ void UIElement::ComputeRowLayout(const Vector2& availableSize)
         switch (child->m_SizePolicy) {
             case SizePolicy::Fixed:
                 childW = child->GetMinSize().x;
+                break;
+            case SizePolicy::Content:
+                childW = std::max(child->GetContentSize().x, child->GetMinSize().x);
                 break;
             case SizePolicy::Fill:
                 childW = fillTotal;
@@ -181,6 +234,9 @@ void UIElement::ComputeColumnLayout(const Vector2& availableSize)
             case SizePolicy::Fixed:
                 fixedTotal += child->GetMinSize().y;
                 break;
+            case SizePolicy::Content:
+                fixedTotal += child->GetContentSize().y;
+                break;
             case SizePolicy::Fill:
                 fillCount++;
                 break;
@@ -214,6 +270,9 @@ void UIElement::ComputeColumnLayout(const Vector2& availableSize)
         switch (child->m_SizePolicy) {
             case SizePolicy::Fixed:
                 childH = child->GetMinSize().y;
+                break;
+            case SizePolicy::Content:
+                childH = std::max(child->GetContentSize().y, child->GetMinSize().y);
                 break;
             case SizePolicy::Fill:
                 childH = std::max(fillTotal, child->GetMinSize().y);

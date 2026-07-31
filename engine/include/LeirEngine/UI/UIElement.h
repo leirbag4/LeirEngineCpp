@@ -18,6 +18,7 @@ enum class LEIR_API SizePolicy {
     Fixed,
     Fill,
     Grow,
+    Content,
 };
 
 class LEIR_API UIElement {
@@ -59,6 +60,7 @@ public:
     bool IsActive() const { return m_Active; }
 
     virtual Vector2 GetMinSize() const;
+    virtual Vector2 GetContentSize() const;
     void ComputeLayout(const Vector2& availableSize);
 
     UIElement* FindChildByName(const std::string& name);
@@ -95,6 +97,7 @@ protected:
 private:
     UIElement* m_Parent = nullptr;
     std::vector<UIElement*> m_Children;
+    Vector2 GetNaturalSize() const;
     void ComputeFreeLayout(const Vector2& availableSize);
     void ComputeRowLayout(const Vector2& availableSize);
     void ComputeColumnLayout(const Vector2& availableSize);

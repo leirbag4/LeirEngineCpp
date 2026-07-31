@@ -254,7 +254,7 @@ protected:
         // Transform panel (inside Inspector)
         m_InspectorTransformPanel = new InspectorTransformPanel();
         m_InspectorTransformPanel->SetName("InspectorTransformPanel");
-        m_InspectorTransformPanel->SetSizePolicy(Leir::SizePolicy::Fill);
+        m_InspectorTransformPanel->SetSizePolicy(Leir::SizePolicy::Content);
         m_InspectorTransformPanel->SetFont(m_FontSmall.get());
         inspector->AddChild(m_InspectorTransformPanel);
 

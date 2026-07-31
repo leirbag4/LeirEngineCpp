@@ -25,7 +25,7 @@ InspectorTransformPanel::InspectorTransformPanel()
         row->SetColor({0, 0, 0, 0});
         row->SetLayoutMode(Leir::LayoutMode::Row);
         row->SetSpacing(4.0f);
-        row->SetSizePolicy(Leir::SizePolicy::Fill);
+        row->SetSizePolicy(Leir::SizePolicy::Content);
         AddChild(row);
         return row;
     };

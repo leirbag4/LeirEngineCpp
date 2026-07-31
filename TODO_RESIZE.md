@@ -71,3 +71,54 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
 - Actualizar el aspect de la cámara del viewport.
 - Re-habilitar `GLFW_RESIZABLE = GLFW_TRUE`.
 - (Ideal, no bloqueante) Paneles del editor redimensionables / dockeables como Unity.
+
+---
+
+# Plan B (layout): `SizePolicy::Content` — IMPLEMENTADO
+
+## Problema que resuelve
+
+El `InspectorTransformPanel` dentro del Inspector se estiraba en alto ocupando todo el panel.
+Causa raíz: `SizePolicy::Fill` en un Column significa "estirar en alto para ocupar todo el
+sobrante" (`UIElement::ComputeColumnLayout`). Encadenado (panel Fill → filas Fill → DragInputs
+Fill en el Row) deformaba todo. El ancho en un Column siempre es full-width
+(`childW = innerW`), así que el Fill solo afectaba el alto.
+
+Antes de esto, la única forma de "alto fijo" era `Fixed` + `GetMinSize().y` hardcodeado
+(número mágico frágil).
+
+## Qué se agregó
+
+### Engine — `engine/include/LeirEngine/UI/UIElement.h` / `engine/src/UI/UIElement.cpp`
+
+- Nuevo valor en el enum `SizePolicy`: `Content`.
+- Nuevo método virtual `Vector2 UIElement::GetContentSize() const`:
+  - Para `LayoutMode::Free` → devuelve `GetMinSize()`.
+  - Para `Row`: ancho = `padding + Σ(hijos) + spacings + padding`, alto = `padding + max(hijos)`.
+  - Para `Column`: alto = `padding + Σ(hijos) + spacings + padding`, ancho = `padding + max(hijos)`.
+  - El tamaño "natural" de cada hijo se obtiene con `GetNaturalSize()`:
+    - hijo `Content` → se recorre recursivamente (`GetContentSize()`).
+    - hijo `Fixed`/`Fill`/`Grow` → `GetMinSize()` (el Fill/Grow no tienen tamaño de contenido intrínseco).
+- En `ComputeRowLayout` y `ComputeColumnLayout` (tanto en el pase de `fixedTotal` como en el de
+  tamaño del hijo):
+  - hijo `Content` → tamaño = `max(GetContentSize(), GetMinSize())` (el min size actúa como piso).
+
+### Editor — `editor/src/UI/InspectorTransformPanel.cpp` / `editor/src/main.cpp`
+
+- `InspectorTransformPanel` ahora usa `SizePolicy::Content` (main.cpp) — el alto se calcula del
+  contenido, no se estira.
+- Las filas Position/Rotation/Scale dentro del panel usan `SizePolicy::Content` (alto ~22px,
+  el de los DragInputs), en vez de `Fill`.
+
+## Resultado
+
+El panel ocupa exactamente el alto de su contenido (~101px: título + 3 filas + padding/spacing),
+el ancho sigue siendo full-width del Inspector, y los DragInputs no se deforman. Si el contenido
+cambia (fuente, más filas, etc.) el alto se recalcula solo — sin números mágicos.
+
+## Nota
+
+`UITestPanel`/`CameraTestPanel` (paneles flotantes con rect absoluto) siguen usando `Fill` en
+sus filas internas y no se vieron afectados. Para los paneles anclados en Column/Row, `Content`
+es ahora la opción recomendada sobre `Fill` cuando se quiere alto/ancho de contenido.
+
