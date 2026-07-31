@@ -38,7 +38,8 @@ UIRenderer::UIRenderer(VulkanDevice* device)
     std::vector<VkDescriptorPoolSize> poolSizes = {
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 }
     };
-    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 64);
+    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 64,
+        VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
 
     // Pipeline layout
     VkPushConstantRange pushRange{};
@@ -96,7 +97,7 @@ UIRenderer::UIRenderer(VulkanDevice* device)
     vkDestroyShaderModule(dev, fragMod, nullptr);
 
     // White fallback texture for untextured quads
-        Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     m_FallbackTex = new Texture2D(m_Device, whiteImg);
 
     m_MaxVertices = 8192;

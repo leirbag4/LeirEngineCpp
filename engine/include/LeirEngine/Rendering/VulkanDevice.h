@@ -79,7 +79,8 @@ public:
     ) const;
     VkDescriptorPool CreateDescriptorPool(
         const std::vector<VkDescriptorPoolSize>& poolSizes,
-        uint32_t maxSets
+        uint32_t maxSets,
+        VkDescriptorPoolCreateFlags flags = 0
     ) const;
 
     uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;

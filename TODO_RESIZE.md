@@ -102,7 +102,7 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
   `InvalidateViewportDescriptor` → actualiza el aspect de la cámara (`SetPerspective`) → log.
 - Llamado en `OnUpdate` justo después del `SetScreenSize + UpdateLayout` existente.
 
-## Bugs pre-existentes encontrados y corregidos
+## Bugs encontrados durante la verificación y corregidos
 
 1. **Crash al resize (`Assertion failed: window != NULL` en `window.c:711`)**:
    `VulkanDevice` usaba `glfwGetFramebufferSize(glfwGetCurrentContext(), ...)` en
@@ -126,15 +126,50 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
    tras crear la ventana y lo usa como tamaño lógico (consistente con el camino de resize).
    En DPI 100% no cambia nada.
 
+## Fullscreen flicker — corregido (carrera CPU-GPU en el vertex buffer de la UI)
+
+**Síntoma**: en fullscreen, al mantener click derecho y rotar la cámara, los paneles de debug
+parpadeaban mostrando el atlas de la fuente cubriendo toda el área del panel; al soltar el click
+desaparecía. En ventana no se notaba.
+
+**Causa raíz**: `UIRenderer` escribía un **único** vertex buffer cada frame
+(`vkMapMemory` + `memcpy`) mientras el frame anterior (N-1) podía seguir ejecutándose y
+leyendo el mismo buffer. Con `MAX_FRAMES_IN_FLIGHT = 2`, `BeginFrame` solo espera el fence
+del frame N-2 (`VulkanDevice.cpp`), no el del N-1 → el CPU sobreescribe mientras el GPU dibuja
+→ vértices partidos: un quad de glyph (descriptor del atlas) leía los vértices del quad de
+fondo (rect completo + UVs 0..1) → el atlas estirado sobre el panel. Solo se veía al rotar
+porque ahí el overlay de debug (mouse/FPS/labels) cambia cada frame; con UI estática los datos
+partidos eran idénticos e invisibles.
+
+**Fix**: **doble-buffer del vertex buffer de la UI** (`m_VertexBuffers[2]` +
+`m_VertexMemories[2]`, indexado por `GetCurrentFrameIndex()`), mismo patrón que el UBO del
+`RenderPipeline` (`m_UBOBuffers[frame]`). Cada buffer solo se escribe tras esperar el fence de
+su propio slot → sin carrera.
+
+## vsync respetado (present mode)
+
+`VulkanDevice::ChoosePresentMode` elegía SIEMPRE `MAILBOX`, ignorando `window.vsync` de
+settings. Ahora: `vsync=true` → `FIFO` (throttling al refresh, sin tearing), `vsync=false` →
+`MAILBOX`. Nuevo campo `VulkanDeviceConfig.vsync` (default `true`), el editor lo pasa desde
+`LeirSettings::Get().window.vsync`.
+
+## Descriptor pool de UI con FREE_DESCRIPTOR_SET_BIT
+
+`InvalidateViewportDescriptor` (resize del viewport) llamaba `vkFreeDescriptorSets` sobre un
+pool creado sin `VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT` → validation error
+`VUID-vkFreeDescriptorSets-descriptorPool-00312` en cada resize. Fix: `CreateDescriptorPool`
+acepta `flags` y el pool de la UI se crea con el flag.
+
 ## Verificación (checklist)
 
-- [ ] Build completo OK (engine DLL + editor EXE).
-- [ ] Estirar la ventana: sin crash/flicker, swapchain se recupera.
-- [ ] Maximizar/restaurar y minimizar→restaurar: correctos.
-- [ ] Aspecto correcto en todos los tamaños (sin distorsión de la escena 3D).
-- [ ] Paneles refluyen (Inspector/Hierarchy fijos, debug panels anclados al viewport).
-- [ ] DragInputs + auto-select + live value siguen funcionando.
-- [ ] Sin warnings/errores de Vulkan en consola durante el resize.
+- [x] Build completo OK (engine DLL + editor EXE).
+- [x] Estirar la ventana: sin crash/flicker, swapchain se recupera.
+- [x] Maximizar/restaurar y minimizar→restaurar: correctos.
+- [x] Aspecto correcto en todos los tamaños (sin distorsión de la escena 3D).
+- [x] Paneles refluyen (Inspector/Hierarchy fijos, debug panels anclados al viewport).
+- [x] DragInputs + auto-select + live value siguen funcionando.
+- [x] Sin warnings/errores de Vulkan en consola durante el resize.
+- [x] Fullscreen: sin flicker al rotar la cámara (vertex buffer doble-buffered).
 
 ---
 
@@ -149,7 +184,8 @@ Ideas para la próxima iteración profesional, NO bloqueantes:
   swapchain usa framebuffer size (glfwGetFramebufferSize). En DPI >100% difieren. Preexistente,
   documentado como caveat. Habría que unificar con escala de DPI (o usar framebuffer size como
   tamaño lógico).
-- **Refinar `InvalidateViewportDescriptor`**: ya libera descriptor sets; revisar si conviene un
+- **Refinar `InvalidateViewportDescriptor`**: el pool de la UI ya soporta free
+  (`VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT`). Pendiente de revisar si conviene un
   pool más grande o recrear el pool en resize.
 
 
