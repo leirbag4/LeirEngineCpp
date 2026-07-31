@@ -46,6 +46,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <chrono>
 
 namespace {
     const float kHierarchyWidth = 264.0f;
@@ -80,6 +81,7 @@ protected:
         config.appName = "LeirEngine Editor";
         config.windowWidth = GetWidth();
         config.windowHeight = GetHeight();
+        config.vsync = Leir::LeirSettings::Get().window.vsync;
         m_VulkanDevice = std::make_unique<Leir::VulkanDevice>(GetWindow(), config);
 
         std::string shaderDir = LEIR_SHADER_DIR;
@@ -334,6 +336,19 @@ protected:
 
     void OnUpdate(float deltaTime) override
     {
+        {
+            static auto lastFpsLog = std::chrono::steady_clock::now();
+            static int fpsFrames = 0;
+            ++fpsFrames;
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration<double>(now - lastFpsLog).count();
+            if (elapsed >= 1.0) {
+                spdlog::info("DIAG FPS: {:.0f}", fpsFrames / elapsed);
+                fpsFrames = 0;
+                lastFpsLog = now;
+            }
+        }
+
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 

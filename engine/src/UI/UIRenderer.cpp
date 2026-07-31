@@ -101,10 +101,12 @@ UIRenderer::UIRenderer(VulkanDevice* device)
 
     m_MaxVertices = 8192;
     VkDeviceSize vbSize = m_MaxVertices * sizeof(UIVertex);
-    m_VertexBuffer = m_Device->CreateBuffer(vbSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_VertexMemory);
+    for (int f = 0; f < 2; ++f) {
+        m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_VertexMemories[f]);
+    }
 
     spdlog::info("UIRenderer created");
 }
@@ -116,8 +118,10 @@ UIRenderer::~UIRenderer()
     if (m_PipelineLayout) vkDestroyPipelineLayout(dev, m_PipelineLayout, nullptr);
     if (m_DescSetLayout) vkDestroyDescriptorSetLayout(dev, m_DescSetLayout, nullptr);
     if (m_DescPool) vkDestroyDescriptorPool(dev, m_DescPool, nullptr);
-    if (m_VertexBuffer) vkDestroyBuffer(dev, m_VertexBuffer, nullptr);
-    if (m_VertexMemory) vkFreeMemory(dev, m_VertexMemory, nullptr);
+    for (int f = 0; f < 2; ++f) {
+        if (m_VertexBuffers[f]) vkDestroyBuffer(dev, m_VertexBuffers[f], nullptr);
+        if (m_VertexMemories[f]) vkFreeMemory(dev, m_VertexMemories[f], nullptr);
+    }
     delete m_FallbackTex;
 }
 
@@ -208,13 +212,15 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
         return;
     }
 
+    int frame = (int)m_Device->GetCurrentFrameIndex();
+
     VkDeviceSize regBytes = m_Vertices.size() * sizeof(UIVertex);
     VkDeviceSize vpBytes = vpCount * 4 * sizeof(UIVertex);
     VkDeviceSize dbgBytes = m_DebugVertices.size() * sizeof(UIVertex);
     VkDeviceSize totalBytes = regBytes + vpBytes + dbgBytes;
 
     void* data;
-    vkMapMemory(m_Device->GetDevice(), m_VertexMemory, 0, totalBytes, 0, &data);
+    vkMapMemory(m_Device->GetDevice(), m_VertexMemories[frame], 0, totalBytes, 0, &data);
 
     // Layout: [regular UI] [viewport] [debug overlay]
     if (!m_Vertices.empty())
@@ -227,13 +233,13 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     if (!m_DebugVertices.empty())
         memcpy((char*)data + regBytes + vpBytes, m_DebugVertices.data(), (size_t)dbgBytes);
 
-    vkUnmapMemory(m_Device->GetDevice(), m_VertexMemory);
+    vkUnmapMemory(m_Device->GetDevice(), m_VertexMemories[frame]);
 
     VkExtent2D extent = m_Device->GetSwapchainExtent();
     Vector2 screenSize = {(float)extent.width, (float)extent.height};
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
-    VkBuffer vb[] = { m_VertexBuffer };
+    VkBuffer vb[] = { m_VertexBuffers[frame] };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
     vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Vector2), &screenSize);

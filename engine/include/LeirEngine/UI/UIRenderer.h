@@ -45,8 +45,8 @@ private:
     VkPipeline m_Pipeline = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_DescSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool m_DescPool = VK_NULL_HANDLE;
-    VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_VertexMemory = VK_NULL_HANDLE;
+    VkBuffer m_VertexBuffers[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+    VkDeviceMemory m_VertexMemories[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
     int m_MaxVertices = 0;
 
     std::vector<UIVertex> m_Vertices;

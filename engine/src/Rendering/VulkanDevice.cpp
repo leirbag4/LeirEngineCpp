@@ -304,6 +304,7 @@ void VulkanDevice::CreateSwapchain()
     auto format = ChooseSwapchainFormat(support.formats);
     auto presentMode = ChoosePresentMode(support.presentModes);
     auto extent = ChooseSwapchainExtent(support.capabilities);
+    spdlog::info("DIAG swapchain: presentMode={} vsync={}", (int)presentMode, m_Config.vsync ? 1 : 0);
 
     uint32_t imageCount = support.capabilities.minImageCount + 1;
     if (support.capabilities.maxImageCount > 0)
@@ -356,8 +357,14 @@ VkSurfaceFormatKHR VulkanDevice::ChooseSwapchainFormat(const std::vector<VkSurfa
 
 VkPresentModeKHR VulkanDevice::ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) const
 {
-    for (const auto& m : modes) {
-        if (m == VK_PRESENT_MODE_MAILBOX_KHR) return m;
+    if (m_Config.vsync) {
+        for (const auto& m : modes) {
+            if (m == VK_PRESENT_MODE_FIFO_KHR) return m;
+        }
+    } else {
+        for (const auto& m : modes) {
+            if (m == VK_PRESENT_MODE_MAILBOX_KHR) return m;
+        }
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
@@ -816,9 +823,28 @@ void VulkanDevice::EndFrame()
     presentInfo.pImageIndices = &m_CurrentImageIndex;
 
     VkResult result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResized) {
-        m_FramebufferResized = false;
-        RecreateSwapchain();
+    {
+        static double lastLogTime = 0.0;
+        static uint64_t totalFrames = 0;
+        static uint64_t recreates = 0;
+        static int nonSuccessCount = 0;
+        ++totalFrames;
+        bool recreate = (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResized);
+        if (recreate) ++recreates;
+        if (result != VK_SUCCESS) ++nonSuccessCount;
+        double now = glfwGetTime();
+        if (now - lastLogTime >= 1.0) {
+            spdlog::info("DIAG present: result={} badInWindow={} recreatesInWindow={} fps={:.0f}",
+                (int)result, nonSuccessCount, recreates, (double)totalFrames / (now - lastLogTime));
+            lastLogTime = now;
+            totalFrames = 0;
+            nonSuccessCount = 0;
+            recreates = 0;
+        }
+        if (recreate) {
+            m_FramebufferResized = false;
+            RecreateSwapchain();
+        }
     }
 
     m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -828,11 +854,26 @@ void VulkanDevice::EndFrame()
 
 void VulkanDevice::RecreateSwapchain()
 {
+    static uint64_t sRecreateCount = 0;
+    static double sLastLog = -1000.0;
+    ++sRecreateCount;
+
     int w = 0, h = 0;
     glfwGetFramebufferSize(m_Window, &w, &h);
     while (w == 0 || h == 0) {
         glfwGetFramebufferSize(m_Window, &w, &h);
         glfwWaitEvents();
+    }
+
+    double now = glfwGetTime();
+    if (now - sLastLog >= 0.5 || sRecreateCount <= 3) {
+        auto support = QuerySwapchainSupport(m_PhysicalDevice);
+        spdlog::info("DIAG RecreateSwapchain #{} t={:.3f} fb={}x{} curExtent={}x{} min={}x{} max={}x{}",
+            sRecreateCount, now, w, h,
+            support.capabilities.currentExtent.width, support.capabilities.currentExtent.height,
+            support.capabilities.minImageExtent.width, support.capabilities.minImageExtent.height,
+            support.capabilities.maxImageExtent.width, support.capabilities.maxImageExtent.height);
+        sLastLog = now;
     }
 
     vkDeviceWaitIdle(m_Device);

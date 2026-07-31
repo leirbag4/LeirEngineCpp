@@ -30,6 +30,7 @@ struct LEIR_API VulkanDeviceConfig {
     int windowWidth = 1280;
     int windowHeight = 720;
     bool enableValidationLayers = true;
+    bool vsync = true;
 };
 
 class LEIR_API VulkanDevice {

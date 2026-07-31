@@ -2,7 +2,7 @@
     "window": {
         "width": 1600,
         "height": 900,
-        "fullscreen": false,
+        "fullscreen": true,
         "vsync": true
     },
     "debug": {

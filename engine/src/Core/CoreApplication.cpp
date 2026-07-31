@@ -96,6 +96,7 @@ void CoreApplication::FramebufferSizeCallback(GLFWwindow* window, int width, int
 
 void CoreApplication::HandleWindowResize(int width, int height)
 {
+    spdlog::info("DIAG HandleWindowResize {}x{}", width, height);
     if (width <= 0 || height <= 0)
         return;
     m_Width = width;
