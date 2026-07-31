@@ -211,6 +211,7 @@ void UITextInput::DeleteSelection()
     ClearSelection();
     if (m_OnChange)
         m_OnChange(m_Text);
+    OnTextMutated();
 }
 
 void UITextInput::OnFocus()
@@ -239,11 +240,20 @@ void UITextInput::InsertChar(uint32_t codepoint)
     if (codepoint < 32 || codepoint > 126)
         return;
 
+    if (m_OnTextChanged) {
+        std::string candidate = m_Text.substr(0, m_CursorPos)
+                              + (char)codepoint
+                              + m_Text.substr(m_CursorPos);
+        if (!m_OnTextChanged(candidate))
+            return;
+    }
+
     m_Text.insert(m_CursorPos, 1, (char)codepoint);
     m_CursorPos++;
 
     if (m_OnChange)
         m_OnChange(m_Text);
+    OnTextMutated();
 }
 
 void UITextInput::DeleteChar()
@@ -256,6 +266,7 @@ void UITextInput::DeleteChar()
     m_CursorPos--;
     if (m_OnChange)
         m_OnChange(m_Text);
+    OnTextMutated();
 }
 
 void UITextInput::DeleteForward()
@@ -267,6 +278,11 @@ void UITextInput::DeleteForward()
     m_Text = before + after;
     if (m_OnChange)
         m_OnChange(m_Text);
+    OnTextMutated();
+}
+
+void UITextInput::OnTextMutated()
+{
 }
 
 float UITextInput::GetCursorX() const

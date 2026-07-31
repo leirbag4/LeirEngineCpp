@@ -22,6 +22,7 @@ public:
 
 private:
     void CommitValue();
+    void OnTextMutated() override;
 
     float m_Value = 0.0f;
     std::function<void(float)> m_OnValueChanged;

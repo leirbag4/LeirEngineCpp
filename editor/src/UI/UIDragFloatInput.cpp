@@ -38,6 +38,13 @@ void UIDragFloatInput::SetValue(float v)
         m_Input->SetValue(v);
 }
 
+void UIDragFloatInput::SetOnValueChanged(std::function<void(float)> cb)
+{
+    m_OnValueChanged = cb;
+    if (m_Input)
+        m_Input->SetOnValueChanged(cb);
+}
+
 float UIDragFloatInput::GetValue() const
 {
     return m_Input ? m_Input->GetValue() : 0.0f;

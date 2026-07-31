@@ -14,7 +14,7 @@ public:
     void SetValue(float v);
     float GetValue() const;
 
-    void SetOnValueChanged(std::function<void(float)> cb) { m_OnValueChanged = cb; }
+    void SetOnValueChanged(std::function<void(float)> cb);
 
     bool OnPointerDown(const Leir::Vector2& pos) override;
     void OnPointerMove(const Leir::Vector2& pos) override;

@@ -23,6 +23,7 @@ public:
     const std::string& GetPlaceholder() const { return m_Placeholder; }
 
     void SetOnChange(std::function<void(const std::string&)> cb) { m_OnChange = cb; }
+    void SetOnTextChanged(std::function<bool(const std::string&)> cb) { m_OnTextChanged = cb; }
 
     void SetAutoSelect(bool v) { m_AutoSelect = v; }
     bool GetAutoSelect() const { return m_AutoSelect; }
@@ -65,10 +66,12 @@ protected:
     void SelectWordAt(int pos);
     int FindPrevWordBoundary(int from) const;
     int FindNextWordBoundary(int from) const;
+    virtual void OnTextMutated();
 
     std::string m_Text;
     Font* m_Font = nullptr;
     std::function<void(const std::string&)> m_OnChange;
+    std::function<bool(const std::string&)> m_OnTextChanged;
     int m_CursorPos = 0;
     int m_SelectionStart = -1;
     bool m_Focused = false;

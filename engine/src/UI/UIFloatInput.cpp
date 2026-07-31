@@ -5,7 +5,21 @@
 
 namespace Leir {
 
-UIFloatInput::UIFloatInput() = default;
+UIFloatInput::UIFloatInput()
+{
+    SetOnTextChanged([](const std::string& t) -> bool {
+        int dots = 0;
+        for (int i = 0; i < (int)t.size(); ++i) {
+            char c = t[i];
+            if (c == '.') {
+                if (++dots > 1) return false;
+            } else if (c == '-' || c == '+') {
+                if (i != 0) return false;
+            }
+        }
+        return true;
+    });
+}
 UIFloatInput::~UIFloatInput() = default;
 
 void UIFloatInput::SetValue(float v)
@@ -66,6 +80,22 @@ void UIFloatInput::OnBlur()
         CommitValue();
     }
     UITextInput::OnBlur();
+}
+
+void UIFloatInput::OnTextMutated()
+{
+    const std::string& text = GetText();
+    if (text.empty())
+        return;
+
+    char* end = nullptr;
+    float val = std::strtof(text.c_str(), &end);
+    if (end == text.c_str())
+        return;
+
+    m_Value = val;
+    if (m_OnValueChanged)
+        m_OnValueChanged(val);
 }
 
 void UIFloatInput::CommitValue()
