@@ -8,7 +8,7 @@ class LEIR_API LeirSettings {
 public:
     static LeirSettings& Get();
 
-    bool Load(const std::string& path = "leir_settings.json");
+    bool Load(const std::string& path = "");
     bool Save();
 
     struct {
@@ -25,10 +25,19 @@ public:
         bool ui_event_log = false;
     } debug;
 
+    struct {
+        float hierarchy_width = 264.0f;
+        float inspector_width = 290.0f;
+    } layout;
+
+    // Resolved platform config path (<config>/LeirEngine/settings.json)
+    const std::string& GetPath() const { return m_Path; }
+
 private:
     LeirSettings() = default;
 
     void SetDefaults();
+    std::string GetDefaultPath() const;
     std::string m_Path;
 };
 

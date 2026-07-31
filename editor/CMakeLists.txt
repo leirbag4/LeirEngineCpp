@@ -7,6 +7,7 @@ add_executable(LeirEngineEditor
     src/UI/DebugTextPanel.cpp
     src/UI/TextAreaDebugPanel.cpp
     src/UI/InspectorTransformPanel.cpp
+    src/UI/UISplitter.cpp
 )
 
 target_include_directories(LeirEngineEditor
@@ -26,7 +27,4 @@ add_custom_command(TARGET LeirEngineEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:LeirEngineEditor>/assets"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/leir_settings.json"
-        "$<TARGET_FILE_DIR:LeirEngineEditor>/leir_settings.json"
 )

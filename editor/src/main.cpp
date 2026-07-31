@@ -37,6 +37,7 @@
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
+#include "UI/UISplitter.h"
 #include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
@@ -48,11 +49,14 @@
 #include <algorithm>
 
 namespace {
-    const float kHierarchyWidth = 264.0f;
-    const float kInspectorWidth = 290.0f;
     const float kBottomBarHeight = 30.0f;
     const float kDebugPanelMargin = 10.0f;
     const float kDebugPanelWidth = 280.0f;
+    const float kSplitterHalfWidth = 3.0f;
+    const float kHierarchyMinWidth = 140.0f;
+    const float kHierarchyMaxWidth = 600.0f;
+    const float kInspectorMinWidth = 180.0f;
+    const float kInspectorMaxWidth = 600.0f;
 }
 
 class EditorApp : public Leir::CoreApplication {
@@ -105,9 +109,13 @@ protected:
         auto& scene = sceneManager.CreateScene("Main Scene");
         sceneManager.SetActiveScene(&scene);
 
+        // Panel widths (editable via splitters, persisted to settings)
+        m_HierarchyWidth = Leir::LeirSettings::Get().layout.hierarchy_width;
+        m_InspectorWidth = Leir::LeirSettings::Get().layout.inspector_width;
+
         // Viewport size: real area between Hierarchy and Inspector, minus bottom bar
-        m_ViewportW = (uint32_t)(GetWidth() - (int)kHierarchyWidth - (int)kInspectorWidth);
-        m_ViewportH = (uint32_t)(GetHeight() - (int)kBottomBarHeight);
+        m_ViewportW = (uint32_t)std::max(1.0f, GetWidth() - m_HierarchyWidth - m_InspectorWidth);
+        m_ViewportH = (uint32_t)std::max(1.0f, GetHeight() - kBottomBarHeight);
 
         // Create RenderTexture for the viewport
         m_ViewportRT = std::make_unique<Leir::RenderTexture>(
@@ -213,7 +221,6 @@ protected:
         m_ViewportPanel->SetName("Viewport");
         m_ViewportPanel->SetRenderTexture(m_ViewportRT.get());
         m_ViewportPanel->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
-        m_ViewportPanel->GetRect().offset = {kHierarchyWidth, 0.0f, -kInspectorWidth, -kBottomBarHeight};
         root->AddChild(m_ViewportPanel);
 
         // Hierarchy panel (left)
@@ -221,7 +228,6 @@ protected:
         hierarchy->SetName("Hierarchy");
         hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         hierarchy->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
-        hierarchy->GetRect().offset = {0.0f, 0.0f, kHierarchyWidth, -kBottomBarHeight};
         hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
         hierarchy->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         hierarchy->SetSpacing(2.0f);
@@ -240,7 +246,6 @@ protected:
         inspector->SetName("Inspector");
         inspector->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         inspector->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
-        inspector->GetRect().offset = {-kInspectorWidth, 0.0f, 0.0f, -kBottomBarHeight};
         inspector->SetLayoutMode(Leir::LayoutMode::Column);
         inspector->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         inspector->SetSpacing(2.0f);
@@ -289,7 +294,6 @@ protected:
         m_TestPanel = new UITestPanel();
         m_TestPanel->SetName("DebugTestPanel");
         m_TestPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
-        m_TestPanel->GetRect().offset = {kHierarchyWidth + kDebugPanelMargin, -260.0f, kHierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -30.0f};
         m_TestPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_TestPanel);
 
@@ -300,7 +304,6 @@ protected:
         m_CameraTestPanel = new CameraTestPanel();
         m_CameraTestPanel->SetName("DebugCameraPanel");
         m_CameraTestPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
-        m_CameraTestPanel->GetRect().offset = {-(kInspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -200.0f, -(kInspectorWidth + kDebugPanelMargin), -30.0f};
         m_CameraTestPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_CameraTestPanel);
 
@@ -311,7 +314,6 @@ protected:
         m_TextAreaDebugPanel = new TextAreaDebugPanel();
         m_TextAreaDebugPanel->SetName("DebugTextAreaPanel");
         m_TextAreaDebugPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
-        m_TextAreaDebugPanel->GetRect().offset = {-(kInspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -400.0f, -(kInspectorWidth + kDebugPanelMargin), -210.0f};
         m_TextAreaDebugPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_TextAreaDebugPanel);
 
@@ -319,7 +321,6 @@ protected:
         m_DebugTextPanel = new DebugTextPanel();
         m_DebugTextPanel->SetName("DebugTextPanel");
         m_DebugTextPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
-        m_DebugTextPanel->GetRect().offset = {kHierarchyWidth + kDebugPanelMargin, -430.0f, kHierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -270.0f};
         m_DebugTextPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_DebugTextPanel);
 
@@ -329,6 +330,30 @@ protected:
             camObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
             camObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
         }
+
+        // Resizable splitters between Hierarchy|Viewport and Viewport|Inspector
+        m_HierarchySplitter = new UISplitter();
+        m_HierarchySplitter->SetName("HierarchySplitter");
+        m_HierarchySplitter->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
+        m_HierarchySplitter->SetMinWidth(kHierarchyMinWidth);
+        m_HierarchySplitter->SetMaxWidth(kHierarchyMaxWidth);
+        m_HierarchySplitter->SetCurrentWidthGetter([this]() { return m_HierarchyWidth; });
+        m_HierarchySplitter->SetOnResize([this](float w) { m_HierarchyWidth = w; });
+        m_HierarchySplitter->SetOnDragEnd([this]() { Leir::LeirSettings::Get().Save(); });
+        root->AddChild(m_HierarchySplitter);
+
+        m_InspectorSplitter = new UISplitter();
+        m_InspectorSplitter->SetName("InspectorSplitter");
+        m_InspectorSplitter->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
+        m_InspectorSplitter->SetMinWidth(kInspectorMinWidth);
+        m_InspectorSplitter->SetMaxWidth(kInspectorMaxWidth);
+        m_InspectorSplitter->SetCurrentWidthGetter([this]() { return m_InspectorWidth; });
+        m_InspectorSplitter->SetOnResize([this](float w) { m_InspectorWidth = w; });
+        m_InspectorSplitter->SetOnDragEnd([this]() { Leir::LeirSettings::Get().Save(); });
+        root->AddChild(m_InspectorSplitter);
+
+        // Apply current panel widths to all panel offsets
+        ApplyPanelLayout();
 
         spdlog::info("Scene hierarchy created with viewport system");
     }
@@ -371,6 +396,7 @@ protected:
 
         // Update UI layout on resize
         if (m_Canvas) {
+            ApplyPanelLayout();
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
             m_Canvas->UpdateLayout();
         }
@@ -437,6 +463,48 @@ protected:
     }
 
 private:
+    void ApplyPanelLayout()
+    {
+        float w = (float)GetWidth();
+        float h = (float)GetHeight();
+
+        auto findRoot = [&]() -> Leir::UIElement* {
+            Leir::UIElement* root = m_Canvas.get();
+            if (root && !root->GetChildren().empty())
+                return root->GetChildren().front();
+            return nullptr;
+        };
+        Leir::UIElement* rootEl = findRoot();
+        if (!rootEl || !m_ViewportPanel) return;
+
+        m_HierarchyWidth = std::clamp(m_HierarchyWidth, kHierarchyMinWidth, kHierarchyMaxWidth);
+        m_InspectorWidth = std::clamp(m_InspectorWidth, kInspectorMinWidth, kInspectorMaxWidth);
+
+        if (auto* hierarchy = dynamic_cast<Leir::UIPanel*>(rootEl->FindChildByName("Hierarchy")))
+            hierarchy->GetRect().offset = {0.0f, 0.0f, m_HierarchyWidth, -kBottomBarHeight};
+
+        if (auto* inspector = dynamic_cast<Leir::UIPanel*>(rootEl->FindChildByName("Inspector")))
+            inspector->GetRect().offset = {-m_InspectorWidth, 0.0f, 0.0f, -kBottomBarHeight};
+
+        m_ViewportPanel->GetRect().offset = {m_HierarchyWidth, 0.0f, -m_InspectorWidth, -kBottomBarHeight};
+
+        // Debug panels anchored to the viewport edges
+        if (m_TestPanel)
+            m_TestPanel->GetRect().offset = {m_HierarchyWidth + kDebugPanelMargin, -260.0f, m_HierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -30.0f};
+        if (m_DebugTextPanel)
+            m_DebugTextPanel->GetRect().offset = {m_HierarchyWidth + kDebugPanelMargin, -430.0f, m_HierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -270.0f};
+        if (m_CameraTestPanel)
+            m_CameraTestPanel->GetRect().offset = {-(m_InspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -200.0f, -(m_InspectorWidth + kDebugPanelMargin), -30.0f};
+        if (m_TextAreaDebugPanel)
+            m_TextAreaDebugPanel->GetRect().offset = {-(m_InspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -400.0f, -(m_InspectorWidth + kDebugPanelMargin), -210.0f};
+
+        // Splitters sit exactly on the panel boundaries
+        if (m_HierarchySplitter)
+            m_HierarchySplitter->GetRect().offset = {m_HierarchyWidth - kSplitterHalfWidth, 0.0f, m_HierarchyWidth + kSplitterHalfWidth, -kBottomBarHeight};
+        if (m_InspectorSplitter)
+            m_InspectorSplitter->GetRect().offset = {-m_InspectorWidth - kSplitterHalfWidth, 0.0f, -m_InspectorWidth + kSplitterHalfWidth, -kBottomBarHeight};
+    }
+
     void UpdateViewportRenderTarget()
     {
         if (!m_ViewportRT || !m_ViewportPanel)
@@ -483,6 +551,12 @@ private:
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::UIViewportPanel* m_ViewportPanel = nullptr;
     EditorCamera m_EditorCamera;
+
+    // Panel layout state (resizable via splitters, persisted to settings)
+    float m_HierarchyWidth = 264.0f;
+    float m_InspectorWidth = 290.0f;
+    UISplitter* m_HierarchySplitter = nullptr;
+    UISplitter* m_InspectorSplitter = nullptr;
 
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;

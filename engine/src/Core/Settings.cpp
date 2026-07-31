@@ -1,9 +1,16 @@
 #include "LeirEngine/Core/Settings.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <cstdlib>
+#include <filesystem>
 #include <spdlog/spdlog.h>
 
 namespace Leir {
+
+namespace {
+constexpr const char* kSettingsFileName = "settings.json";
+constexpr const char* kLegacySettingsFileName = "leir_settings.json";
+}
 
 LeirSettings& LeirSettings::Get()
 {
@@ -11,12 +18,66 @@ LeirSettings& LeirSettings::Get()
     return instance;
 }
 
+std::string LeirSettings::GetDefaultPath() const
+{
+    namespace fs = std::filesystem;
+
+    fs::path configDir;
+#ifdef _WIN32
+    if (const char* ap = std::getenv("APPDATA"))
+        configDir = fs::path(ap) / "LeirEngine";
+    else
+        configDir = fs::current_path() / "LeirEngine";
+#elif defined(__APPLE__)
+    const char* home = std::getenv("HOME");
+    configDir = fs::path(home ? home : ".") / "Library" / "Application Support" / "LeirEngine";
+#else
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"))
+        configDir = fs::path(xdg) / "LeirEngine";
+    else {
+        const char* home = std::getenv("HOME");
+        configDir = fs::path(home ? home : ".") / ".config" / "LeirEngine";
+    }
+#endif
+    return (configDir / kSettingsFileName).string();
+}
+
 bool LeirSettings::Load(const std::string& path)
 {
-    m_Path = path;
-    std::ifstream f(path);
+    m_Path = path.empty() ? GetDefaultPath() : path;
+
+    std::ifstream f(m_Path);
     if (!f.is_open()) {
-        spdlog::warn("Settings file '{}' not found, creating with defaults", path);
+        // Legacy seed: first run after the app-data migration. If the old
+        // executable-level file exists, reuse it so settings aren't lost.
+        std::ifstream legacy(kLegacySettingsFileName);
+        if (legacy.is_open()) {
+            try {
+                nlohmann::json j;
+                legacy >> j;
+                window.width = j.value("window", nlohmann::json::object()).value("width", 1280);
+                window.height = j.value("window", nlohmann::json::object()).value("height", 720);
+                window.fullscreen = j.value("window", nlohmann::json::object()).value("fullscreen", false);
+                window.vsync = j.value("window", nlohmann::json::object()).value("vsync", true);
+
+                debug.ui_outlines = j.value("debug", nlohmann::json::object()).value("ui_outlines", false);
+                debug.show_overlay = j.value("debug", nlohmann::json::object()).value("show_overlay", true);
+                debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
+                debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
+
+                layout.hierarchy_width = j.value("layout", nlohmann::json::object()).value("hierarchy_width", 264.0f);
+                layout.inspector_width = j.value("layout", nlohmann::json::object()).value("inspector_width", 290.0f);
+
+                spdlog::info("Settings migrated from legacy '{}' to '{}'",
+                    kLegacySettingsFileName, m_Path);
+                Save();
+                return true;
+            } catch (const std::exception& e) {
+                spdlog::warn("Failed to parse legacy settings '{}': {}", kLegacySettingsFileName, e.what());
+            }
+        }
+
+        spdlog::warn("Settings file '{}' not found, creating with defaults", m_Path);
         SetDefaults();
         Save();
         return true;
@@ -36,10 +97,13 @@ bool LeirSettings::Load(const std::string& path)
         debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
         debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
 
-        spdlog::info("Settings loaded from '{}'", path);
+        layout.hierarchy_width = j.value("layout", nlohmann::json::object()).value("hierarchy_width", 264.0f);
+        layout.inspector_width = j.value("layout", nlohmann::json::object()).value("inspector_width", 290.0f);
+
+        spdlog::info("Settings loaded from '{}'", m_Path);
         return true;
     } catch (const std::exception& e) {
-        spdlog::error("Failed to parse settings file '{}': {}", path, e.what());
+        spdlog::error("Failed to parse settings file '{}': {}", m_Path, e.what());
         SetDefaults();
         return false;
     }
@@ -58,8 +122,15 @@ bool LeirSettings::Save()
     j["debug"]["show_overlay"] = debug.show_overlay;
     j["debug"]["show_glyph_quads"] = debug.show_glyph_quads;
     j["debug"]["ui_event_log"] = debug.ui_event_log;
+    j["layout"]["hierarchy_width"] = layout.hierarchy_width;
+    j["layout"]["inspector_width"] = layout.inspector_width;
 
     try {
+        namespace fs = std::filesystem;
+        fs::path dir = fs::path(m_Path).parent_path();
+        if (!dir.empty() && !fs::exists(dir))
+            fs::create_directories(dir);
+
         std::ofstream f(m_Path);
         if (!f.is_open()) {
             spdlog::error("Failed to write settings file '{}'", m_Path);
@@ -84,6 +155,8 @@ void LeirSettings::SetDefaults()
     debug.show_overlay = true;
     debug.show_glyph_quads = false;
     debug.ui_event_log = false;
+    layout.hierarchy_width = 264.0f;
+    layout.inspector_width = 290.0f;
 }
 
 } // namespace Leir

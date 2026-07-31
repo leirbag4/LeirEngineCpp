@@ -7,6 +7,7 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <unordered_map>
 
 namespace Leir {
 
@@ -34,6 +35,36 @@ void InputManager::Init(GLFWwindow* window)
 void InputManager::Shutdown()
 {
     m_Window = nullptr;
+}
+
+void InputManager::SetCursorStyle(CursorStyle style)
+{
+    auto& im = GetInstance();
+    if (!im.m_Window) return;
+    if (im.m_CurrentCursor == (int)style) return;
+
+    int shape = GLFW_ARROW_CURSOR;
+    switch (style) {
+        case CursorStyle::Arrow:    shape = GLFW_ARROW_CURSOR; break;
+        case CursorStyle::Hand:     shape = GLFW_HAND_CURSOR; break;
+        case CursorStyle::IBeam:    shape = GLFW_IBEAM_CURSOR; break;
+        case CursorStyle::ResizeEW: shape = GLFW_RESIZE_EW_CURSOR; break;
+        case CursorStyle::ResizeNS: shape = GLFW_RESIZE_NS_CURSOR; break;
+    }
+
+    GLFWcursor* cursor = nullptr;
+    if (shape != GLFW_ARROW_CURSOR) {
+        static std::unordered_map<int, GLFWcursor*> sCursors;
+        auto it = sCursors.find(shape);
+        if (it == sCursors.end()) {
+            cursor = glfwCreateStandardCursor(shape);
+            sCursors[shape] = cursor;
+        } else {
+            cursor = it->second;
+        }
+    }
+    glfwSetCursor(im.m_Window, cursor);
+    im.m_CurrentCursor = (int)style;
 }
 
 void InputManager::Update()

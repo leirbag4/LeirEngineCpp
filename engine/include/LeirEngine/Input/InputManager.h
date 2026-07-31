@@ -9,6 +9,14 @@ struct GLFWwindow;
 
 namespace Leir {
 
+enum class LEIR_API CursorStyle {
+    Arrow = 0,
+    Hand = 1,
+    IBeam = 2,
+    ResizeEW = 3,
+    ResizeNS = 4,
+};
+
 class LEIR_API InputManager {
 public:
     static InputManager& GetInstance();
@@ -18,6 +26,9 @@ public:
     void Update();
 
     GLFWwindow* GetWindow() const { return m_Window; }
+
+    // OS cursor shape (cached, no-op if unchanged)
+    static void SetCursorStyle(CursorStyle style);
 
 private:
     InputManager() = default;
@@ -33,6 +44,7 @@ private:
 
     GLFWwindow* m_Window = nullptr;
     Vector2 m_LastMousePos{ 0.0f, 0.0f };
+    int m_CurrentCursor = -1;
 };
 
 } // namespace Leir
