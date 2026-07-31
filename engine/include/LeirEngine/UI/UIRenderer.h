@@ -30,6 +30,7 @@ public:
     ~UIRenderer();
 
     void Render(VkCommandBuffer cmd, UICanvas* canvas);
+    void InvalidateViewportDescriptor(RenderTexture* rt);
 
 private:
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);

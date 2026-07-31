@@ -11,6 +11,8 @@ public:
     RenderTexture(VulkanDevice* device, uint32_t width, uint32_t height);
     ~RenderTexture();
 
+    void Resize(uint32_t width, uint32_t height);
+
     void BeginRender(VkCommandBuffer cmd, VkClearValue clearColor, float depthClear = 1.0f);
     void EndRender(VkCommandBuffer cmd);
 
@@ -23,6 +25,11 @@ public:
     VkSampler GetSampler() const { return m_Sampler; }
 
 private:
+    void CreateRenderPass();
+    void CreateSampler();
+    void CreateResources();
+    void DestroyResources();
+
     VulkanDevice* m_Device;
     uint32_t m_Width, m_Height;
 

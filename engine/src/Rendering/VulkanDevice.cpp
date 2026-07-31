@@ -26,6 +26,7 @@ static std::vector<const char*> GetRequiredExtensions(bool enableValidation) {
 
 VulkanDevice::VulkanDevice(GLFWwindow* window, const VulkanDeviceConfig& config)
     : m_Config(config)
+    , m_Window(window)
 {
     CreateInstance();
     if (config.enableValidationLayers)
@@ -367,7 +368,7 @@ VkExtent2D VulkanDevice::ChooseSwapchainExtent(const VkSurfaceCapabilitiesKHR& c
         return caps.currentExtent;
 
     int w, h;
-    glfwGetFramebufferSize(glfwGetCurrentContext(), &w, &h);
+    glfwGetFramebufferSize(m_Window, &w, &h);
     return {
         std::clamp((uint32_t)w, caps.minImageExtent.width, caps.maxImageExtent.width),
         std::clamp((uint32_t)h, caps.minImageExtent.height, caps.maxImageExtent.height)
@@ -828,9 +829,9 @@ void VulkanDevice::EndFrame()
 void VulkanDevice::RecreateSwapchain()
 {
     int w = 0, h = 0;
-    glfwGetFramebufferSize(glfwGetCurrentContext(), &w, &h);
+    glfwGetFramebufferSize(m_Window, &w, &h);
     while (w == 0 || h == 0) {
-        glfwGetFramebufferSize(glfwGetCurrentContext(), &w, &h);
+        glfwGetFramebufferSize(m_Window, &w, &h);
         glfwWaitEvents();
     }
 

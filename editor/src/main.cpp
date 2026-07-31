@@ -45,6 +45,7 @@
 #include <spdlog/spdlog.h>
 
 #include <memory>
+#include <algorithm>
 
 namespace {
     const float kHierarchyWidth = 264.0f;
@@ -202,7 +203,8 @@ protected:
         auto* root = new Leir::UIPanel();
         root->SetName("EditorRoot");
         root->SetColor({0.12f, 0.12f, 0.14f, 1.0f});
-        root->GetRect() = Leir::Rect2D::Absolute(0, 0, (float)GetWidth(), (float)GetHeight());
+        root->GetRect().anchor = Leir::AnchorSet::Stretch();
+        root->GetRect().offset = {};
         m_Canvas->AddChild(root);
 
         // Viewport panel (center-right area)
@@ -372,6 +374,9 @@ protected:
             m_Canvas->UpdateLayout();
         }
 
+        // Keep the viewport render target in sync with the actual layout size
+        UpdateViewportRenderTarget();
+
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
 
@@ -421,7 +426,42 @@ protected:
         sm.SetActiveScene(nullptr);
     }
 
+    void OnWindowResized(int width, int height) override
+    {
+        (void)width;
+        (void)height;
+        // Notify VulkanDevice so the swapchain is recreated at next present
+        if (m_VulkanDevice)
+            m_VulkanDevice->NotifyResized();
+    }
+
 private:
+    void UpdateViewportRenderTarget()
+    {
+        if (!m_ViewportRT || !m_ViewportPanel)
+            return;
+
+        const auto& cr = m_ViewportPanel->GetComputedRect();
+        uint32_t w = (uint32_t)std::max(1.0f, cr.z);
+        uint32_t h = (uint32_t)std::max(1.0f, cr.w);
+
+        if (w == m_ViewportRT->GetWidth() && h == m_ViewportRT->GetHeight())
+            return;
+
+        m_ViewportRT->Resize(w, h);
+        if (m_UIRenderer)
+            m_UIRenderer->InvalidateViewportDescriptor(m_ViewportRT.get());
+
+        auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+        auto* cameraObj = scene ? scene->FindObjectByName("Camera") : nullptr;
+        if (cameraObj) {
+            if (auto* cam = cameraObj->GetComponent<Leir::Camera>())
+                cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 100.0f);
+        }
+
+        spdlog::info("Viewport resized to {}x{}", w, h);
+    }
+
     std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
     std::shared_ptr<Leir::Shader> m_Shader;

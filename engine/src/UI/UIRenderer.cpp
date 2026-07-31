@@ -182,6 +182,16 @@ VkDescriptorSet UIRenderer::GetOrCreateVpDescSet(RenderTexture* rt)
     return newSet;
 }
 
+void UIRenderer::InvalidateViewportDescriptor(RenderTexture* rt)
+{
+    auto it = m_VpDescCache.find(rt);
+    if (it == m_VpDescCache.end())
+        return;
+    if (m_DescPool != VK_NULL_HANDLE && it->second != VK_NULL_HANDLE)
+        vkFreeDescriptorSets(m_Device->GetDevice(), m_DescPool, 1, &it->second);
+    m_VpDescCache.erase(it);
+}
+
 void UIRenderer::Flush(VkCommandBuffer cmd)
 {
     size_t regCount = m_QuadTextures.size();

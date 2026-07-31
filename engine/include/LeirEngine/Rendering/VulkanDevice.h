@@ -99,6 +99,7 @@ public:
     // Resize
     bool WasResized() const { return m_FramebufferResized; }
     void ResetResized() { m_FramebufferResized = false; }
+    void NotifyResized() { m_FramebufferResized = true; }
     void RecreateSwapchain();
 
 private:
@@ -136,6 +137,7 @@ private:
     VulkanDeviceConfig m_Config;
 
     // Core
+    GLFWwindow* m_Window = nullptr;
     VkInstance m_Instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;

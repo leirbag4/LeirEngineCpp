@@ -21,7 +21,7 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     m_Window = glfwCreateWindow(width, height, title, monitor, nullptr);
@@ -32,6 +32,16 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     }
 
     spdlog::info("GLFW window created ({}x{})", width, height);
+
+    int fbWidth, fbHeight;
+    glfwGetFramebufferSize(m_Window, &fbWidth, &fbHeight);
+    if (fbWidth > 0 && fbHeight > 0) {
+        m_Width = fbWidth;
+        m_Height = fbHeight;
+    }
+
+    glfwSetWindowUserPointer(m_Window, this);
+    glfwSetFramebufferSizeCallback(m_Window, FramebufferSizeCallback);
 
     InputManager::GetInstance().Init(m_Window);
 }
@@ -75,6 +85,22 @@ void CoreApplication::Run()
 void CoreApplication::Quit()
 {
     m_Running = false;
+}
+
+void CoreApplication::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+    auto* app = static_cast<CoreApplication*>(glfwGetWindowUserPointer(window));
+    if (app)
+        app->HandleWindowResize(width, height);
+}
+
+void CoreApplication::HandleWindowResize(int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return;
+    m_Width = width;
+    m_Height = height;
+    OnWindowResized(width, height);
 }
 
 } // namespace Leir

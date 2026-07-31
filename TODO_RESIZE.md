@@ -47,10 +47,10 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
 
 ## Decisión
 
-1. **Ahora → Opción A** para que el Inspector (InspectorTransformPanel) funcione con aspecto
-   correcto en la ventana de 1600x900. Se bloquea el resize de la ventana mientras tanto.
-2. **Apenas el Inspector funcione → Opción B** (refactor profesional): infraestructura de
-   resize completa y re-habilitar la ventana redimensionable.
+1. **Opción A (IMPLEMENTADA)** — para que el Inspector (InspectorTransformPanel) funcionara con
+   aspecto correcto en 1600x900. Se bloqueó el resize de la ventana mientras tanto.
+2. **Opción B (IMPLEMENTADA)** — infraestructura de resize completa y ventana redimensionable
+   de nuevo. Detalle abajo.
 
 ## Qué incluye la Opción A (implementada)
 
@@ -60,17 +60,98 @@ que NO coincide con el ancho real del viewport (= ventana − Hierarchy − Insp
   - `kInspectorWidth = 290.0f` (era 220 → +32%)
   - `kBottomBarHeight = 30.0f`
   usadas tanto en los offsets del layout como en `m_ViewportW`/`m_ViewportH`.
-- `engine/src/Core/CoreApplication.cpp`: `GLFW_RESIZABLE = GLFW_FALSE` (se revierte en B).
+- `engine/src/Core/CoreApplication.cpp`: `GLFW_RESIZABLE = GLFW_FALSE` (REVERTIDO en la B).
 
-## Qué debe incluir la Opción B (pendiente)
+---
 
-- Registrar `glfwSetFramebufferSizeCallback` en la ventana.
-- Actualizar `m_Width`/`m_Height` de `CoreApplication` en el resize.
-- Marcar `m_FramebufferResized = true` (y consumirlo donde ya existe el camino de recrear swapchain).
-- Recrear `RenderTexture` del viewport con el nuevo tamaño y `m_Material->RecreatePipeline(...)`.
-- Actualizar el aspect de la cámara del viewport.
-- Re-habilitar `GLFW_RESIZABLE = GLFW_TRUE`.
-- (Ideal, no bloqueante) Paneles del editor redimensionables / dockeables como Unity.
+# Plan B (resize): IMPLEMENTADO
+
+## Diseño
+
+- **RT in-place**: la `RenderTexture` se redimensiona con `Resize(w,h)` sin cambiar el puntero
+  (conserva render pass y sampler, que no dependen del tamaño).
+- **Callback en `CoreApplication`** (el engine posee la ventana): actualiza `m_Width`/`m_Height`
+  y expone `virtual OnWindowResized(w,h)` que las subclases sobreescriben. El editor no toca GLFW.
+- **Tamaño del RT derivado del layout real**: se lee `UIViewportPanel::GetComputedRect()` después
+  de `UpdateLayout()` — el RT siempre coincide con lo que se dibuja, aunque cambien anchos de paneles.
+- **Verificación por frame barata**: `UpdateViewportRenderTarget()` compara tamaños (no-op si igual).
+  El flag de VulkanDevice queda solo para el recreo del swapchain.
+
+## Qué se hizo
+
+### Fase 1 — Infraestructura de resize (engine)
+- `CoreApplication.h/.cpp`:
+  - Ctor registra `glfwSetFramebufferSizeCallback` + `glfwSetWindowUserPointer`.
+  - Callback estático → `HandleWindowResize(w,h)` → actualiza `m_Width/m_Height` (si >0) y llama
+    `virtual OnWindowResized(w,h)`.
+  - `GLFW_RESIZABLE = GLFW_TRUE` (se revirtió el lock de la opción A).
+- `VulkanDevice.h`: nuevo `NotifyResized()` → `m_FramebufferResized = true`
+  (el camino de recrear swapchain ya existía en `RecreateSwapchain`, ahora se dispara en present).
+
+### Fase 2 — RenderTexture redimensionable (engine)
+- `RenderTexture.h/.cpp`: refactor a `CreateRenderPass()` / `CreateSampler()` / `CreateResources()`
+  / `DestroyResources()`. Nuevo `Resize(w,h)`: `vkDeviceWaitIdle` → destroy → create. Render pass
+  y sampler se conservan (formats fijos).
+- `UIRenderer.h/.cpp`: nuevo `InvalidateViewportDescriptor(RenderTexture*)` que libera el
+  descriptor set viejo (`vkFreeDescriptorSets`) y lo borra de `m_VpDescCache` (evita apuntar a una
+  image view destruida y evita acumular descriptor sets en cada resize).
+
+### Fase 3 — Editor (`editor/src/main.cpp`)
+- `EditorApp::OnWindowResized` → `m_VulkanDevice->NotifyResized()`.
+- Nuevo `UpdateViewportRenderTarget()`: lee el rect del viewport → `Resize()` del RT →
+  `InvalidateViewportDescriptor` → actualiza el aspect de la cámara (`SetPerspective`) → log.
+- Llamado en `OnUpdate` justo después del `SetScreenSize + UpdateLayout` existente.
+
+## Bugs pre-existentes encontrados y corregidos
+
+1. **Crash al resize (`Assertion failed: window != NULL` en `window.c:711`)**:
+   `VulkanDevice` usaba `glfwGetFramebufferSize(glfwGetCurrentContext(), ...)` en
+   `ChooseSwapchainExtent` y `RecreateSwapchain`. Como la ventana es Vulkan-only
+   (`GLFW_NO_API`), `glfwGetCurrentContext()` devuelve SIEMPRE `NULL` (GLFW solo setea el
+   slot con `glfwMakeContextCurrent`, que rechaza ventanas NO_API). Al primer resize,
+   `vkAcquireNextImageKHR` devolvía `VK_ERROR_OUT_OF_DATE_KHR` → `RecreateSwapchain()` →
+   assert → cierre. Fix: `VulkanDevice` guarda `GLFWwindow* m_Window` y lo usa directo.
+   (El bug existía desde antes de la Opción B; la ventana no era redimensionable en A.)
+
+2. **Layout congelado al resize**: el root del editor se creaba con
+   `Rect2D::Absolute(0,0,GetWidth(),GetHeight())`, un rect absoluto que ignora el
+   `availableSize` del layout. Aunque `SetScreenSize`/`UpdateLayout` corrieran con el nuevo
+   tamaño, el viewport (hijo del root) quedaba siempre en 1046x870. Fix: el root usa
+   `AnchorSet::Stretch()` (como el canvas), así `ComputeLayout` lo rellena con el screen size
+   real cada frame.
+
+3. **DPI/startup inconsistente**: `m_Width/m_Height` arrancaban con el tamaño pedido en
+   settings (coords de ventana) mientras swapchain/RT usan framebuffer pixels. Con DPI != 100%
+   el UI quedaba en un área equivocada. Fix: `CoreApplication` ctor lee `glfwGetFramebufferSize`
+   tras crear la ventana y lo usa como tamaño lógico (consistente con el camino de resize).
+   En DPI 100% no cambia nada.
+
+## Verificación (checklist)
+
+- [ ] Build completo OK (engine DLL + editor EXE).
+- [ ] Estirar la ventana: sin crash/flicker, swapchain se recupera.
+- [ ] Maximizar/restaurar y minimizar→restaurar: correctos.
+- [ ] Aspecto correcto en todos los tamaños (sin distorsión de la escena 3D).
+- [ ] Paneles refluyen (Inspector/Hierarchy fijos, debug panels anclados al viewport).
+- [ ] DragInputs + auto-select + live value siguen funcionando.
+- [ ] Sin warnings/errores de Vulkan en consola durante el resize.
+
+---
+
+# Fase 5 (pendiente, aplazada a futuro)
+
+Ideas para la próxima iteración profesional, NO bloqueantes:
+
+- **Paneles redimensionables tipo dock** (divider arrastrable entre Hierarchy/Inspector/viewport).
+  El RT ya lo aguanta porque su tamaño deriva del layout (`GetComputedRect`), así que un cambio de
+  ancho de panel dispararía el resize solo.
+- **Soporte HiDPI**: hoy se usa tamaño de ventana (window coords) para layout/UI mientras el
+  swapchain usa framebuffer size (glfwGetFramebufferSize). En DPI >100% difieren. Preexistente,
+  documentado como caveat. Habría que unificar con escala de DPI (o usar framebuffer size como
+  tamaño lógico).
+- **Refinar `InvalidateViewportDescriptor`**: ya libera descriptor sets; revisar si conviene un
+  pool más grande o recrear el pool en resize.
+
 
 ---
 

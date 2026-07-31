@@ -7,27 +7,39 @@ namespace Leir {
 RenderTexture::RenderTexture(VulkanDevice* device, uint32_t width, uint32_t height)
     : m_Device(device), m_Width(width), m_Height(height)
 {
+    CreateRenderPass();
+    CreateSampler();
+    CreateResources();
+}
+
+RenderTexture::~RenderTexture()
+{
+    auto dev = m_Device->GetDevice();
+    vkDeviceWaitIdle(dev);
+    DestroyResources();
+    if (m_Sampler) vkDestroySampler(dev, m_Sampler, nullptr);
+    if (m_RenderPass) vkDestroyRenderPass(dev, m_RenderPass, nullptr);
+}
+
+void RenderTexture::Resize(uint32_t width, uint32_t height)
+{
+    if (width == m_Width && height == m_Height)
+        return;
+
+    auto dev = m_Device->GetDevice();
+    vkDeviceWaitIdle(dev);
+    DestroyResources();
+    m_Width = width;
+    m_Height = height;
+    CreateResources();
+}
+
+void RenderTexture::CreateRenderPass()
+{
     auto dev = m_Device->GetDevice();
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;
     VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
 
-    // Color image (color attachment + sampled)
-    m_Device->CreateImage(width, height, colorFormat,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_ColorImage, m_ColorMemory);
-    m_ColorImageView = m_Device->CreateImageView(m_ColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-    // Depth image
-    m_Device->CreateImage(width, height, depthFormat,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_DepthImage, m_DepthMemory);
-    m_DepthImageView = m_Device->CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
-
-    // Render pass (compatible with the swapchain 3D render pass: same formats + subpass structure)
     VkAttachmentDescription color{};
     color.format = colorFormat;
     color.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -85,21 +97,11 @@ RenderTexture::RenderTexture(VulkanDevice* device, uint32_t width, uint32_t heig
 
     if (vkCreateRenderPass(dev, &rpInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
         throw std::runtime_error("Failed to create offscreen render pass");
+}
 
-    // Framebuffer
-    VkImageView fbAttachments[] = { m_ColorImageView, m_DepthImageView };
-    VkFramebufferCreateInfo fbInfo{};
-    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = m_RenderPass;
-    fbInfo.attachmentCount = 2;
-    fbInfo.pAttachments = fbAttachments;
-    fbInfo.width = width;
-    fbInfo.height = height;
-    fbInfo.layers = 1;
-    if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &m_Framebuffer) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create offscreen framebuffer");
-
-    // Sampler
+void RenderTexture::CreateSampler()
+{
+    auto dev = m_Device->GetDevice();
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -116,19 +118,59 @@ RenderTexture::RenderTexture(VulkanDevice* device, uint32_t width, uint32_t heig
         throw std::runtime_error("Failed to create sampler");
 }
 
-RenderTexture::~RenderTexture()
+void RenderTexture::CreateResources()
 {
     auto dev = m_Device->GetDevice();
-    vkDeviceWaitIdle(dev);
-    if (m_Sampler) vkDestroySampler(dev, m_Sampler, nullptr);
+    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+
+    // Color image (color attachment + sampled)
+    m_Device->CreateImage(m_Width, m_Height, colorFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_ColorImage, m_ColorMemory);
+    m_ColorImageView = m_Device->CreateImageView(m_ColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    // Depth image
+    m_Device->CreateImage(m_Width, m_Height, depthFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_DepthImage, m_DepthMemory);
+    m_DepthImageView = m_Device->CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    // Framebuffer
+    VkImageView fbAttachments[] = { m_ColorImageView, m_DepthImageView };
+    VkFramebufferCreateInfo fbInfo{};
+    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbInfo.renderPass = m_RenderPass;
+    fbInfo.attachmentCount = 2;
+    fbInfo.pAttachments = fbAttachments;
+    fbInfo.width = m_Width;
+    fbInfo.height = m_Height;
+    fbInfo.layers = 1;
+    if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &m_Framebuffer) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create offscreen framebuffer");
+}
+
+void RenderTexture::DestroyResources()
+{
+    auto dev = m_Device->GetDevice();
     if (m_Framebuffer) vkDestroyFramebuffer(dev, m_Framebuffer, nullptr);
-    if (m_RenderPass) vkDestroyRenderPass(dev, m_RenderPass, nullptr);
+    m_Framebuffer = VK_NULL_HANDLE;
     if (m_DepthImageView) vkDestroyImageView(dev, m_DepthImageView, nullptr);
     if (m_DepthImage) vkDestroyImage(dev, m_DepthImage, nullptr);
     if (m_DepthMemory) vkFreeMemory(dev, m_DepthMemory, nullptr);
+    m_DepthImageView = VK_NULL_HANDLE;
+    m_DepthImage = VK_NULL_HANDLE;
+    m_DepthMemory = VK_NULL_HANDLE;
     if (m_ColorImageView) vkDestroyImageView(dev, m_ColorImageView, nullptr);
     if (m_ColorImage) vkDestroyImage(dev, m_ColorImage, nullptr);
     if (m_ColorMemory) vkFreeMemory(dev, m_ColorMemory, nullptr);
+    m_ColorImageView = VK_NULL_HANDLE;
+    m_ColorImage = VK_NULL_HANDLE;
+    m_ColorMemory = VK_NULL_HANDLE;
 }
 
 void RenderTexture::BeginRender(VkCommandBuffer cmd, VkClearValue clearColor, float depthClear)
