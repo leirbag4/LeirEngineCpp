@@ -173,13 +173,30 @@ acepta `flags` y el pool de la UI se crea con el flag.
 
 ---
 
-# Fase 5 (pendiente, aplazada a futuro)
+# Fase 5 — Paneles redimensionables tipo dock — IMPLEMENTADA
+
+- **`UISplitter`** (`editor/src/UI/UISplitter.h/.cpp`): `UIPanel` de 6px que captura el pointer,
+  clampa el ancho nuevo en `[min, max]`, cambia el cursor a `ResizeEW` en hover/drag y llama
+  `SetOnResize` en move + `SetOnDragEnd` al soltar.
+  - `SetDragInverted(true)` para el Inspector (dockeado a la derecha): arrastrar su pared
+    izquierda hacia la izquierda **agranda** el panel.
+- **Layout mutable**: las constantes `kHierarchyWidth`/`kInspectorWidth` se reemplazaron por
+  estado `m_HierarchyWidth`/`m_InspectorWidth` en `EditorApp`; `ApplyPanelLayout()` aplica los
+  anchos a los offsets de Hierarchy/Viewport/Inspector/splitters/debug panels (llamado en
+  `OnInit` y cada frame antes de `SetScreenSize/UpdateLayout`).
+- **Persistencia** en `settings.json` (`%APPDATA%\LeirEngine\`):
+  - Save al soltar cada splitter (`SetOnDragEnd` → `SetLayoutWidths` + `Save()`).
+  - Save al cerrar la app (`OnShutdown`).
+  - Defaults: `hierarchy_width = 300.0`, `inspector_width = 300.0`.
+  - Clamps: Hierarchy `[140,600]`, Inspector `[180,600]`.
+- El RT del viewport deriva del layout (`GetComputedRect`), así que el resize de panel dispara
+  el resize del RT solo (`UpdateViewportRenderTarget`).
+
+# Fase 6 (pendiente, aplazada a futuro)
 
 Ideas para la próxima iteración profesional, NO bloqueantes:
 
-- **Paneles redimensionables tipo dock** (divider arrastrable entre Hierarchy/Inspector/viewport).
-  El RT ya lo aguanta porque su tamaño deriva del layout (`GetComputedRect`), así que un cambio de
-  ancho de panel dispararía el resize solo.
+- **Colapso de paneles + docking real** (acoplar/desacoplar Hierarchy/Inspector, pestañas, etc.).
 - **Soporte HiDPI**: hoy se usa tamaño de ventana (window coords) para layout/UI mientras el
   swapchain usa framebuffer size (glfwGetFramebufferSize). En DPI >100% difieren. Preexistente,
   documentado como caveat. Habría que unificar con escala de DPI (o usar framebuffer size como

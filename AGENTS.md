@@ -654,3 +654,7 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `editor/src/UI/TextAreaDebugPanel.h/.cpp`: new isolated debug panel for UITextArea (top-right, above CameraTestPanel)
 - `editor/src/main.cpp`: TextAreaDebugPanel integrated (create + Refresh per frame)
 - `editor/CMakeLists.txt`: added `TextAreaDebugPanel.cpp`
+- `LeirSettings` (Settings.h/.cpp): settings moved to platform config dir (`%APPDATA%\LeirEngine\settings.json` on Windows, `~/Library/Application Support/LeirEngine/` macOS, `$XDG_CONFIG_HOME/LeirEngine/` Linux); added `layout` section (`hierarchy_width`/`inspector_width`); `Save()` creates the config dir; legacy `leir_settings.json` migration + file removed (no backward compat)
+- `InputManager.h/.cpp`: new `CursorStyle` enum + static `SetCursorStyle()` using cached `glfwCreateStandardCursor` (no-op on no change)
+- `UISplitter`: new editor widget (`editor/src/UI/UISplitter.h/.cpp`) — 6px draggable divider between panels, pointer capture, `clamp(startWidth+dx, min, max)`, `SetDragInverted(true)` for right-docked panels, `ResizeEW` cursor on hover/drag, saves on drag end
+- `EditorApp` (editor/src/main.cpp): replaced `kHierarchyWidth`/`kInspectorWidth` constants with mutable `m_HierarchyWidth`/`m_InspectorWidth` state; new `ApplyPanelLayout()` applies widths to panel offsets (called in OnInit + each frame before layout); splitters between Hierarchy|Viewport and Viewport|Inspector; save on splitter drag end + on `OnShutdown`
