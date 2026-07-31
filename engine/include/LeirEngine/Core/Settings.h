@@ -21,6 +21,7 @@ public:
     struct {
         bool ui_outlines = false;
         bool show_overlay = true;
+        bool show_glyph_quads = false;
     } debug;
 
 private:

@@ -94,6 +94,7 @@ public:
     VkImageView CreateImageView(VkImage image, VkFormat format,
         VkImageAspectFlags aspectFlags) const;
     VkSampler CreateSampler() const;
+    VkSampler CreateSampler(VkFilter filter, VkSamplerAddressMode addressMode) const;
 
     // Resize
     bool WasResized() const { return m_FramebufferResized; }

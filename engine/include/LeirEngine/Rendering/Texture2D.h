@@ -15,7 +15,9 @@ public:
     Texture2D(VulkanDevice* device, const std::string& path);
     Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,
               const unsigned char* pixels);
-    Texture2D(VulkanDevice* device, Image& image);
+    Texture2D(VulkanDevice* device, Image& image,
+              VkFilter filter = VK_FILTER_LINEAR,
+              VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
     ~Texture2D();
 
     void UpdateFromImage(Image& image);
@@ -34,7 +36,9 @@ public:
     }
 
 private:
-    void CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height);
+    void CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height,
+        VkFilter filter = VK_FILTER_LINEAR,
+        VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
     void TransitionLayout(VkImage image, VkFormat format,
         VkImageLayout oldLayout, VkImageLayout newLayout);
     void CopyBufferToImage(VkBuffer buffer, VkImage image,

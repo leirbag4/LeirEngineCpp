@@ -1141,13 +1141,18 @@ VkImageView VulkanDevice::CreateImageView(VkImage image, VkFormat format,
 
 VkSampler VulkanDevice::CreateSampler() const
 {
+    return CreateSampler(VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+}
+
+VkSampler VulkanDevice::CreateSampler(VkFilter filter, VkSamplerAddressMode addressMode) const
+{
     VkSamplerCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    info.magFilter = VK_FILTER_LINEAR;
-    info.minFilter = VK_FILTER_LINEAR;
-    info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    info.magFilter = filter;
+    info.minFilter = filter;
+    info.addressModeU = addressMode;
+    info.addressModeV = addressMode;
+    info.addressModeW = addressMode;
     info.anisotropyEnable = VK_TRUE;
     info.maxAnisotropy = 16.0f;
     info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;

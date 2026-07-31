@@ -7,7 +7,8 @@
 
 namespace Leir {
 
-void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height)
+void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height,
+    VkFilter filter, VkSamplerAddressMode addressMode)
 {
     m_Width = width;
     m_Height = height;
@@ -41,7 +42,7 @@ void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint
     vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
 
     m_ImageView = m_Device->CreateImageView(m_Image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-    m_Sampler = m_Device->CreateSampler();
+    m_Sampler = m_Device->CreateSampler(filter, addressMode);
 }
 
 Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
@@ -75,10 +76,10 @@ Texture2D::Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,
     CreateFromData(pixels, width, height);
 }
 
-Texture2D::Texture2D(VulkanDevice* device, Image& image)
+Texture2D::Texture2D(VulkanDevice* device, Image& image, VkFilter filter, VkSamplerAddressMode addressMode)
     : m_Device(device)
 {
-    CreateFromData(image.GetData(), image.GetWidth(), image.GetHeight());
+    CreateFromData(image.GetData(), image.GetWidth(), image.GetHeight(), filter, addressMode);
 }
 
 Texture2D::~Texture2D()

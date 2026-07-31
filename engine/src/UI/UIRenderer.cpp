@@ -337,6 +337,14 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             else BuildBatch(t, r, u, c);
         };
 
+        const bool showQuadDebug = LeirSettings::Get().debug.show_glyph_quads;
+        static const Vector4 quadColors[] = {
+            {0.0f, 1.0f, 1.0f, 0.35f},
+            {1.0f, 1.0f, 0.0f, 0.35f},
+            {1.0f, 0.0f, 1.0f, 0.35f},
+            {0.5f, 1.0f, 0.0f, 0.35f},
+        };
+
         if (auto* panel = dynamic_cast<UIPanel*>(elem)) {
             Batch(nullptr, cr, {0, 0, 1, 1}, panel->GetColor());
         } else if (auto* img = dynamic_cast<UIImage*>(elem)) {
@@ -391,11 +399,15 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
             }
         } else if (auto* label = dynamic_cast<UILabel*>(elem)) {
             if (label->GetFont() && label->GetFont()->GetAtlasTexture()) {
+                int quadIdx = 0;
                 for (const auto& gq : label->GetGlyphQuads()) {
                     Vector4 r = gq.rect;
                     r.x += cr.x;
                     r.y += cr.y;
+                    if (showQuadDebug)
+                        Batch(nullptr, r, {0, 0, 1, 1}, quadColors[quadIdx % 4]);
                     Batch(label->GetFont()->GetAtlasTexture(), r, gq.uv, gq.color);
+                    ++quadIdx;
                 }
             }
         } else if (auto* input = dynamic_cast<UITextInput*>(elem)) {
@@ -451,6 +463,8 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                     const auto& r = rawQuads[i];
                     const auto& uv = rawQuads[i + 1];
                     Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
+                    if (showQuadDebug)
+                        Batch(nullptr, textRect, {0, 0, 1, 1}, quadColors[(i / 2) % 4]);
                     Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
                 }
 

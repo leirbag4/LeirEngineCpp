@@ -183,7 +183,8 @@ void Font::BuildAtlas()
 
     Image atlasImg(atlasW, atlasH, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     memcpy(atlasImg.GetData(), rgbaData.data(), rgbaData.size());
-    m_AtlasTexture = std::make_unique<Texture2D>(m_Device, atlasImg);
+    m_AtlasTexture = std::make_unique<Texture2D>(m_Device, atlasImg,
+        VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 }
 
 const Font::GlyphInfo& Font::GetGlyphInfo(uint32_t codepoint)
