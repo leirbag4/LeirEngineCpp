@@ -36,6 +36,7 @@
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
+#include "UI/InspectorTransformPanel.h"
 #include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
@@ -44,6 +45,14 @@
 #include <spdlog/spdlog.h>
 
 #include <memory>
+
+namespace {
+    const float kHierarchyWidth = 264.0f;
+    const float kInspectorWidth = 290.0f;
+    const float kBottomBarHeight = 30.0f;
+    const float kDebugPanelMargin = 10.0f;
+    const float kDebugPanelWidth = 280.0f;
+}
 
 class EditorApp : public Leir::CoreApplication {
 public:
@@ -94,9 +103,9 @@ protected:
         auto& scene = sceneManager.CreateScene("Main Scene");
         sceneManager.SetActiveScene(&scene);
 
-        // Viewport size (80% of window width, full height minus bottom bar)
-        m_ViewportW = (uint32_t)(GetWidth() * 0.78f);
-        m_ViewportH = (uint32_t)(GetHeight() - 30);
+        // Viewport size: real area between Hierarchy and Inspector, minus bottom bar
+        m_ViewportW = (uint32_t)(GetWidth() - (int)kHierarchyWidth - (int)kInspectorWidth);
+        m_ViewportH = (uint32_t)(GetHeight() - (int)kBottomBarHeight);
 
         // Create RenderTexture for the viewport
         m_ViewportRT = std::make_unique<Leir::RenderTexture>(
@@ -201,7 +210,7 @@ protected:
         m_ViewportPanel->SetName("Viewport");
         m_ViewportPanel->SetRenderTexture(m_ViewportRT.get());
         m_ViewportPanel->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
-        m_ViewportPanel->GetRect().offset = {200.0f, 0.0f, -220.0f, -30.0f};
+        m_ViewportPanel->GetRect().offset = {kHierarchyWidth, 0.0f, -kInspectorWidth, -kBottomBarHeight};
         root->AddChild(m_ViewportPanel);
 
         // Hierarchy panel (left)
@@ -209,7 +218,7 @@ protected:
         hierarchy->SetName("Hierarchy");
         hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         hierarchy->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
-        hierarchy->GetRect().offset = {0.0f, 0.0f, 200.0f, -30.0f};
+        hierarchy->GetRect().offset = {0.0f, 0.0f, kHierarchyWidth, -kBottomBarHeight};
         hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
         hierarchy->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         hierarchy->SetSpacing(2.0f);
@@ -228,7 +237,7 @@ protected:
         inspector->SetName("Inspector");
         inspector->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         inspector->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
-        inspector->GetRect().offset = {-220.0f, 0.0f, 0.0f, -30.0f};
+        inspector->GetRect().offset = {-kInspectorWidth, 0.0f, 0.0f, -kBottomBarHeight};
         inspector->SetLayoutMode(Leir::LayoutMode::Column);
         inspector->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         inspector->SetSpacing(2.0f);
@@ -241,6 +250,16 @@ protected:
         inspectorTitle->SetColor({0.7f, 0.7f, 0.7f, 1.0f});
         inspectorTitle->SetSizePolicy(Leir::SizePolicy::Fixed);
         inspector->AddChild(inspectorTitle);
+
+        // Transform panel (inside Inspector)
+        m_InspectorTransformPanel = new InspectorTransformPanel();
+        m_InspectorTransformPanel->SetName("InspectorTransformPanel");
+        m_InspectorTransformPanel->SetSizePolicy(Leir::SizePolicy::Fill);
+        m_InspectorTransformPanel->SetFont(m_FontSmall.get());
+        inspector->AddChild(m_InspectorTransformPanel);
+
+        m_InspectorTransformPanel->SetTargetObject(
+            dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
 
         // Bottom bar
         auto* bottomBar = new Leir::UIImage();
@@ -267,7 +286,7 @@ protected:
         m_TestPanel = new UITestPanel();
         m_TestPanel->SetName("DebugTestPanel");
         m_TestPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
-        m_TestPanel->GetRect().offset = {210.0f, -260.0f, 490.0f, -30.0f};
+        m_TestPanel->GetRect().offset = {kHierarchyWidth + kDebugPanelMargin, -260.0f, kHierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -30.0f};
         m_TestPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_TestPanel);
 
@@ -278,7 +297,7 @@ protected:
         m_CameraTestPanel = new CameraTestPanel();
         m_CameraTestPanel->SetName("DebugCameraPanel");
         m_CameraTestPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
-        m_CameraTestPanel->GetRect().offset = {-510.0f, -200.0f, -230.0f, -30.0f};
+        m_CameraTestPanel->GetRect().offset = {-(kInspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -200.0f, -(kInspectorWidth + kDebugPanelMargin), -30.0f};
         m_CameraTestPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_CameraTestPanel);
 
@@ -289,7 +308,7 @@ protected:
         m_TextAreaDebugPanel = new TextAreaDebugPanel();
         m_TextAreaDebugPanel->SetName("DebugTextAreaPanel");
         m_TextAreaDebugPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
-        m_TextAreaDebugPanel->GetRect().offset = {-510.0f, -400.0f, -230.0f, -210.0f};
+        m_TextAreaDebugPanel->GetRect().offset = {-(kInspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -400.0f, -(kInspectorWidth + kDebugPanelMargin), -210.0f};
         m_TextAreaDebugPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_TextAreaDebugPanel);
 
@@ -297,7 +316,7 @@ protected:
         m_DebugTextPanel = new DebugTextPanel();
         m_DebugTextPanel->SetName("DebugTextPanel");
         m_DebugTextPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
-        m_DebugTextPanel->GetRect().offset = {210.0f, -430.0f, 490.0f, -270.0f};
+        m_DebugTextPanel->GetRect().offset = {kHierarchyWidth + kDebugPanelMargin, -430.0f, kHierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -270.0f};
         m_DebugTextPanel->SetFont(m_FontSmall.get());
         root->AddChild(m_DebugTextPanel);
 
@@ -364,6 +383,8 @@ protected:
             m_DebugTextPanel->Refresh();
         if (m_TextAreaDebugPanel)
             m_TextAreaDebugPanel->Refresh();
+        if (m_InspectorTransformPanel)
+            m_InspectorTransformPanel->Refresh();
     }
 
     void OnRender() override
@@ -426,6 +447,7 @@ private:
     CameraTestPanel* m_CameraTestPanel = nullptr;
     DebugTextPanel* m_DebugTextPanel = nullptr;
     TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
+    InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 };

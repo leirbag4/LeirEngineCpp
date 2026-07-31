@@ -1,0 +1,156 @@
+#include "InspectorTransformPanel.h"
+#include <LeirEngine/Core/Transform.h>
+#include <functional>
+
+InspectorTransformPanel::InspectorTransformPanel()
+{
+    SetName("InspectorTransformPanel");
+    SetColor({0.08f, 0.08f, 0.10f, 0.85f});
+    SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
+    SetLayoutMode(Leir::LayoutMode::Column);
+    SetSpacing(3.0f);
+
+    auto makeTitle = [&](const std::string& text) -> Leir::UILabel* {
+        auto* lbl = new Leir::UILabel();
+        lbl->SetText(text);
+        lbl->SetFontSize(11);
+        lbl->SetColor({0.6f, 0.6f, 0.6f, 1.0f});
+        lbl->SetSizePolicy(Leir::SizePolicy::Fixed);
+        AddChild(lbl);
+        return lbl;
+    };
+
+    auto makeRow = [&]() -> Leir::UIPanel* {
+        auto* row = new Leir::UIPanel();
+        row->SetColor({0, 0, 0, 0});
+        row->SetLayoutMode(Leir::LayoutMode::Row);
+        row->SetSpacing(4.0f);
+        row->SetSizePolicy(Leir::SizePolicy::Fill);
+        AddChild(row);
+        return row;
+    };
+
+    m_TitleLabel = makeTitle("Transform");
+
+    // ---- Position ----
+    m_PosTitle = makeTitle("Position");
+    auto* posRow = makeRow();
+    AddField(posRow, "X:", m_PosX, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.x = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
+    AddField(posRow, "Y:", m_PosY, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.y = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
+    AddField(posRow, "Z:", m_PosZ, [this](float v) {
+        if (!m_Target) return;
+        auto p = m_Target->GetTransform().GetLocalPosition(); p.z = v;
+        m_Target->GetTransform().SetLocalPosition(p);
+    });
+
+    // ---- Rotation (Euler degrees) ----
+    m_RotTitle = makeTitle("Rotation");
+    auto* rotRow = makeRow();
+    AddField(rotRow, "X:", m_RotX, [this](float v) {
+        if (!m_Target) return;
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.x = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+    });
+    AddField(rotRow, "Y:", m_RotY, [this](float v) {
+        if (!m_Target) return;
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.y = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+    });
+    AddField(rotRow, "Z:", m_RotZ, [this](float v) {
+        if (!m_Target) return;
+        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.z = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+    });
+
+    // ---- Scale ----
+    m_ScaleTitle = makeTitle("Scale");
+    auto* scaleRow = makeRow();
+    AddField(scaleRow, "X:", m_ScaleX, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.x = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
+    AddField(scaleRow, "Y:", m_ScaleY, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.y = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
+    AddField(scaleRow, "Z:", m_ScaleZ, [this](float v) {
+        if (!m_Target) return;
+        auto s = m_Target->GetTransform().GetLocalScale(); s.z = v;
+        m_Target->GetTransform().SetLocalScale(s);
+    });
+
+}
+
+InspectorTransformPanel::~InspectorTransformPanel() = default;
+
+void InspectorTransformPanel::SetFont(Leir::Font* font)
+{
+    for (auto* child : GetChildren()) {
+        if (auto* label = dynamic_cast<Leir::UILabel*>(child)) {
+            label->SetFont(font);
+        } else if (auto* panel = dynamic_cast<Leir::UIPanel*>(child)) {
+            for (auto* sub : panel->GetChildren()) {
+                if (auto* dfi = dynamic_cast<UIDragFloatInput*>(sub))
+                    dfi->SetFont(font);
+            }
+        }
+    }
+}
+
+void InspectorTransformPanel::AddField(Leir::UIPanel* parent, const std::string& labelText, UIDragFloatInput*& outInput, std::function<void(float)> onChanged)
+{
+    auto* field = new UIDragFloatInput();
+    field->SetLabel(labelText);
+    field->SetValue(0.0f);
+    field->SetSizePolicy(Leir::SizePolicy::Fill);
+    if (onChanged)
+        field->SetOnValueChanged(onChanged);
+    parent->AddChild(field);
+    outInput = field;
+}
+
+void InspectorTransformPanel::SetTargetObject(Leir::Object3D* obj)
+{
+    m_Target = obj;
+}
+
+void InspectorTransformPanel::Refresh()
+{
+    if (m_Target) {
+        auto& t = m_Target->GetTransform();
+        auto pos = t.GetLocalPosition();
+        m_PosX->SetValue(pos.x);
+        m_PosY->SetValue(pos.y);
+        m_PosZ->SetValue(pos.z);
+
+        auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
+        m_RotX->SetValue(euler.x);
+        m_RotY->SetValue(euler.y);
+        m_RotZ->SetValue(euler.z);
+
+        auto scale = t.GetLocalScale();
+        m_ScaleX->SetValue(scale.x);
+        m_ScaleY->SetValue(scale.y);
+        m_ScaleZ->SetValue(scale.z);
+    }
+}
+
+Leir::Vector2 InspectorTransformPanel::GetMinSize() const
+{
+    return {220.0f, 110.0f};
+}
+
+void InspectorTransformPanel::OnLayoutComputed()
+{
+    UIPanel::OnLayoutComputed();
+}

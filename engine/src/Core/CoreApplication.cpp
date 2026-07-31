@@ -21,7 +21,7 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     m_Window = glfwCreateWindow(width, height, title, monitor, nullptr);

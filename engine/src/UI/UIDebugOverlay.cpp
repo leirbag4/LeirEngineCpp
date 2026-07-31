@@ -31,7 +31,7 @@ void UIDebugOverlay::CreatePanel(Font* font)
     m_Panel = new UIPanel();
     m_Panel->SetName("DebugOverlay");
     m_Panel->GetRect().anchor = {0.0f, 0.0f, 0.0f, 0.0f};
-    m_Panel->GetRect().offset = {210.0f, 10.0f, 480.0f, 210.0f};
+    m_Panel->GetRect().offset = {274.0f, 10.0f, 544.0f, 210.0f};
     m_Panel->SetColor({0.08f, 0.08f, 0.1f, 0.85f});
     m_Panel->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
     m_Panel->SetLayoutMode(LayoutMode::Column);
