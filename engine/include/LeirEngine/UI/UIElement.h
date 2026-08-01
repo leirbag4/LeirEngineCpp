@@ -59,9 +59,13 @@ public:
     void SetActive(bool active) { m_Active = active; }
     bool IsActive() const { return m_Active; }
 
+    // Elements routed to the top overlay batch (drawn last, above viewports).
+    void SetOverlayLayer(bool on) { m_IsOverlay = on; }
+    bool IsOverlayLayer() const { return m_IsOverlay; }
+
     virtual Vector2 GetMinSize() const;
     virtual Vector2 GetContentSize() const;
-    void ComputeLayout(const Vector2& availableSize);
+    virtual void ComputeLayout(const Vector2& availableSize);
 
     UIElement* FindChildByName(const std::string& name);
 
@@ -92,6 +96,7 @@ protected:
     Vector4 m_Color = {1.0f, 1.0f, 1.0f, 1.0f};
     bool m_Active = true;
     bool m_Hovered = false;
+    bool m_IsOverlay = false;
     std::string m_Name;
 
 private:

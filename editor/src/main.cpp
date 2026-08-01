@@ -32,12 +32,12 @@
 #include <LeirEngine/UI/UIRenderer.h>
 #include <LeirEngine/UI/UIViewportPanel.h>
 #include <LeirEngine/UI/UIDebugOverlay.h>
+#include <LeirEngine/UI/Dock/DockManager.h>
 #include "UI/UITestPanel.h"
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
-#include "UI/UISplitter.h"
 #include "Camera/EditorCamera.h"
 
 #include <LeirEngine/Input/Keyboard.h>
@@ -50,13 +50,6 @@
 
 namespace {
     const float kBottomBarHeight = 30.0f;
-    const float kDebugPanelMargin = 10.0f;
-    const float kDebugPanelWidth = 280.0f;
-    const float kSplitterHalfWidth = 3.0f;
-    const float kHierarchyMinWidth = 140.0f;
-    const float kHierarchyMaxWidth = 600.0f;
-    const float kInspectorMinWidth = 180.0f;
-    const float kInspectorMaxWidth = 600.0f;
 }
 
 class EditorApp : public Leir::CoreApplication {
@@ -113,12 +106,8 @@ protected:
         auto& scene = sceneManager.CreateScene("Main Scene");
         sceneManager.SetActiveScene(&scene);
 
-        // Panel widths (editable via splitters, persisted to settings)
-        m_HierarchyWidth = Leir::LeirSettings::Get().layout.hierarchy_width;
-        m_InspectorWidth = Leir::LeirSettings::Get().layout.inspector_width;
-
-        // Viewport size: real area between Hierarchy and Inspector, minus bottom bar
-        m_ViewportW = (uint32_t)std::max(1.0f, GetWidth() - m_HierarchyWidth - m_InspectorWidth);
+        // Initial viewport size (refined each frame from the dock layout)
+        m_ViewportW = (uint32_t)std::max(1.0f, GetWidth() - 600.0f);
         m_ViewportH = (uint32_t)std::max(1.0f, GetHeight() - kBottomBarHeight);
 
         // Create RenderTexture for the viewport. The UI/layout is in logical
@@ -215,31 +204,28 @@ protected:
         m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
         m_Canvas->ConnectToInputSystem();
 
-        // ---- Editor Layout ----
-        // Root editor panel (full screen)
-        auto* root = new Leir::UIPanel();
-        root->SetName("EditorRoot");
-        root->SetColor({0.12f, 0.12f, 0.14f, 1.0f});
-        root->GetRect().anchor = Leir::AnchorSet::Stretch();
-        root->GetRect().offset = {};
-        m_Canvas->AddChild(root);
+        // ---- Editor Layout (dock system) ----
+        // The dock manager is the full-screen root. It leaves the bottom 30px
+        // free for the status bar.
+        m_DockManager = new Leir::DockManager();
+        m_DockManager->SetName("EditorDock");
+        m_DockManager->SetFont(m_FontSmall.get());
+        m_DockManager->GetRect().anchor = Leir::AnchorSet::Stretch();
+        m_DockManager->GetRect().offset = {0.0f, 0.0f, 0.0f, -kBottomBarHeight};
+        m_Canvas->AddChild(m_DockManager);
 
-        // Viewport panel (center-right area)
+        // Viewport panel (rendered from the shared RenderTexture)
         m_ViewportPanel = new Leir::UIViewportPanel();
         m_ViewportPanel->SetName("Viewport");
         m_ViewportPanel->SetRenderTexture(m_ViewportRT.get());
-        m_ViewportPanel->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
-        root->AddChild(m_ViewportPanel);
 
-        // Hierarchy panel (left)
+        // Hierarchy panel (left dock pane)
         auto* hierarchy = new Leir::UIPanel();
         hierarchy->SetName("Hierarchy");
         hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
-        hierarchy->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
         hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
         hierarchy->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         hierarchy->SetSpacing(2.0f);
-        root->AddChild(hierarchy);
 
         auto* hierarchyTitle = new Leir::UILabel();
         hierarchyTitle->SetName("HierarchyTitle");
@@ -249,15 +235,13 @@ protected:
         hierarchyTitle->SetSizePolicy(Leir::SizePolicy::Fixed);
         hierarchy->AddChild(hierarchyTitle);
 
-        // Inspector panel (right)
+        // Inspector panel (right dock pane)
         auto* inspector = new Leir::UIPanel();
         inspector->SetName("Inspector");
         inspector->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
-        inspector->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
         inspector->SetLayoutMode(Leir::LayoutMode::Column);
         inspector->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
         inspector->SetSpacing(2.0f);
-        root->AddChild(inspector);
 
         auto* inspectorTitle = new Leir::UILabel();
         inspectorTitle->SetName("InspectorTitle");
@@ -277,60 +261,64 @@ protected:
         m_InspectorTransformPanel->SetTargetObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
 
-        // Bottom bar
+        // Bottom bar (sibling of the dock, pinned to the bottom)
         auto* bottomBar = new Leir::UIImage();
         bottomBar->SetName("BottomBar");
         bottomBar->GetRect().anchor = {0.0f, 1.0f, 1.0f, 1.0f};
         bottomBar->GetRect().offset = {0.0f, -30.0f, 0.0f, 0.0f};
         bottomBar->SetColor({0.1f, 0.1f, 0.12f, 1.0f});
-        root->AddChild(bottomBar);
+        m_Canvas->AddChild(bottomBar);
 
         auto* statusLabel = new Leir::UILabel();
         statusLabel->SetName("StatusLabel");
-        statusLabel->SetText("Editor Online | Click der. + WASD para camara libre");
+        statusLabel->SetText("Editor Online | Click der. + WASD para camara libre | Arrastra tabs para reacomodar");
         statusLabel->SetFont(m_FontSmall.get());
         statusLabel->SetColor({0.5f, 0.8f, 0.5f, 1.0f});
         statusLabel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
         statusLabel->GetRect().offset = {8.0f, -28.0f, 600.0f, 0.0f};
-        root->AddChild(statusLabel);
+        m_Canvas->AddChild(statusLabel);
 
-        m_Canvas->UpdateLayout();
-
-        m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
-
-        // Test panel (bottom-left inside viewport)
+        // Debug test panels (docked, no longer floating)
         m_TestPanel = new UITestPanel();
         m_TestPanel->SetName("DebugTestPanel");
-        m_TestPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
         m_TestPanel->SetFont(m_FontSmall.get());
-        root->AddChild(m_TestPanel);
-
         m_TestPanel->SetTargetObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
 
-        // Camera Test panel (bottom-right inside viewport)
         m_CameraTestPanel = new CameraTestPanel();
         m_CameraTestPanel->SetName("DebugCameraPanel");
-        m_CameraTestPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
         m_CameraTestPanel->SetFont(m_FontSmall.get());
-        root->AddChild(m_CameraTestPanel);
-
         m_CameraTestPanel->SetCameraObject(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Camera")));
 
-        // TextArea Debug Panel (top-right, above CameraTestPanel)
         m_TextAreaDebugPanel = new TextAreaDebugPanel();
         m_TextAreaDebugPanel->SetName("DebugTextAreaPanel");
-        m_TextAreaDebugPanel->GetRect().anchor = {1.0f, 1.0f, 1.0f, 1.0f};
         m_TextAreaDebugPanel->SetFont(m_FontSmall.get());
-        root->AddChild(m_TextAreaDebugPanel);
 
-        // Debug Text Panel (on the left side of viewport, below TestPanel)
         m_DebugTextPanel = new DebugTextPanel();
         m_DebugTextPanel->SetName("DebugTextPanel");
-        m_DebugTextPanel->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
         m_DebugTextPanel->SetFont(m_FontSmall.get());
-        root->AddChild(m_DebugTextPanel);
+
+        // Register dockable panels (core ones are not closeable)
+        m_DockManager->RegisterPanel("Hierarchy", "Hierarchy", hierarchy, false);
+        m_DockManager->RegisterPanel("Viewport", "Viewport", m_ViewportPanel, false);
+        m_DockManager->RegisterPanel("Inspector", "Inspector", inspector, false);
+        m_DockManager->RegisterPanel("TestPanel", "Test", m_TestPanel, true);
+        m_DockManager->RegisterPanel("CameraTestPanel", "Camera", m_CameraTestPanel, true);
+        m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
+        m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
+
+        // Restore a persisted layout, or fall back to the default one
+        const std::string& dockJson = Leir::LeirSettings::Get().dock.layout;
+        if (dockJson.empty())
+            m_DockManager->BuildDefaultLayout();
+        else if (!m_DockManager->LoadLayout(dockJson))
+            m_DockManager->BuildDefaultLayout();
+
+        m_DockManager->SetOnLayoutChanged([this]() {
+            Leir::LeirSettings::Get().dock.layout = m_DockManager->SerializeLayout();
+            Leir::LeirSettings::Get().Save();
+        });
 
         // Sync scene camera from EditorCamera initial position
         auto* camObj = scene.FindObjectByName("Camera");
@@ -339,38 +327,11 @@ protected:
             camObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
         }
 
-        // Resizable splitters between Hierarchy|Viewport and Viewport|Inspector
-        m_HierarchySplitter = new UISplitter();
-        m_HierarchySplitter->SetName("HierarchySplitter");
-        m_HierarchySplitter->GetRect().anchor = {0.0f, 0.0f, 0.0f, 1.0f};
-        m_HierarchySplitter->SetMinWidth(kHierarchyMinWidth);
-        m_HierarchySplitter->SetMaxWidth(kHierarchyMaxWidth);
-        m_HierarchySplitter->SetCurrentWidthGetter([this]() { return m_HierarchyWidth; });
-        m_HierarchySplitter->SetOnResize([this](float w) { m_HierarchyWidth = w; });
-        m_HierarchySplitter->SetOnDragEnd([this]() {
-            Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
-            Leir::LeirSettings::Get().Save();
-        });
-        root->AddChild(m_HierarchySplitter);
+        m_Canvas->UpdateLayout();
 
-        m_InspectorSplitter = new UISplitter();
-        m_InspectorSplitter->SetName("InspectorSplitter");
-        m_InspectorSplitter->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
-        m_InspectorSplitter->SetMinWidth(kInspectorMinWidth);
-        m_InspectorSplitter->SetMaxWidth(kInspectorMaxWidth);
-        m_InspectorSplitter->SetCurrentWidthGetter([this]() { return m_InspectorWidth; });
-        m_InspectorSplitter->SetOnResize([this](float w) { m_InspectorWidth = w; });
-        m_InspectorSplitter->SetDragInverted(true);
-        m_InspectorSplitter->SetOnDragEnd([this]() {
-            Leir::LeirSettings::Get().SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
-            Leir::LeirSettings::Get().Save();
-        });
-        root->AddChild(m_InspectorSplitter);
+        m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
 
-        // Apply current panel widths to all panel offsets
-        ApplyPanelLayout();
-
-        spdlog::info("Scene hierarchy created with viewport system");
+        spdlog::info("Scene hierarchy created with dock system");
     }
 
     void OnUpdate(float deltaTime) override
@@ -378,10 +339,15 @@ protected:
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 
-        // Editor camera controls (right-click + WASD free-fly)
+        // Editor camera controls (right-click + WASD free-fly). The viewport is
+        // now the content of a dock pane, so walk ancestors up to it.
         auto* hovered = m_Canvas->GetHoveredElement();
-        bool inViewport = m_ViewportPanel && hovered &&
-            (hovered == m_ViewportPanel || hovered->GetParent() == m_ViewportPanel);
+        bool inViewport = false;
+        if (m_ViewportPanel && hovered) {
+            for (Leir::UIElement* e = hovered; e; e = e->GetParent()) {
+                if (e == m_ViewportPanel) { inViewport = true; break; }
+            }
+        }
         bool rightDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right);
         bool middleDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Middle);
 
@@ -411,7 +377,6 @@ protected:
 
         // Update UI layout on resize
         if (m_Canvas) {
-            ApplyPanelLayout();
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
             m_Canvas->UpdateLayout();
         }
@@ -421,6 +386,9 @@ protected:
 
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
+
+        if (m_DockManager)
+            m_DockManager->Process();
 
         if (m_TestPanel)
             m_TestPanel->Refresh();
@@ -462,7 +430,8 @@ protected:
     {
         spdlog::info("Editor shutting down");
         auto& settings = Leir::LeirSettings::Get();
-        settings.SetLayoutWidths(m_HierarchyWidth, m_InspectorWidth);
+        // Persist the dock tree (tabs, splits, ratios, closed panels)
+        settings.dock.layout = m_DockManager ? m_DockManager->SerializeLayout() : "";
         // Persist window placement so the next launch restores it. In fullscreen
         // the saved windowed rect is kept untouched (monitor size would be wrong).
         if (!settings.window.fullscreen) {
@@ -471,6 +440,13 @@ protected:
                 settings.window.maximized = IsMaximized();
         }
         settings.Save();
+        // Destroy the dock tree (content panels stay owned by the editor).
+        // Remove it from the canvas first so the canvas dtor never sees it freed.
+        if (m_DockManager) {
+            m_Canvas->RemoveChild(m_DockManager);
+            delete m_DockManager;
+            m_DockManager = nullptr;
+        }
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
         auto& sm = Leir::SceneManager::GetInstance();
@@ -497,48 +473,6 @@ protected:
     }
 
 private:
-    void ApplyPanelLayout()
-    {
-        float w = (float)GetWidth();
-        float h = (float)GetHeight();
-
-        auto findRoot = [&]() -> Leir::UIElement* {
-            Leir::UIElement* root = m_Canvas.get();
-            if (root && !root->GetChildren().empty())
-                return root->GetChildren().front();
-            return nullptr;
-        };
-        Leir::UIElement* rootEl = findRoot();
-        if (!rootEl || !m_ViewportPanel) return;
-
-        m_HierarchyWidth = std::clamp(m_HierarchyWidth, kHierarchyMinWidth, kHierarchyMaxWidth);
-        m_InspectorWidth = std::clamp(m_InspectorWidth, kInspectorMinWidth, kInspectorMaxWidth);
-
-        if (auto* hierarchy = dynamic_cast<Leir::UIPanel*>(rootEl->FindChildByName("Hierarchy")))
-            hierarchy->GetRect().offset = {0.0f, 0.0f, m_HierarchyWidth, -kBottomBarHeight};
-
-        if (auto* inspector = dynamic_cast<Leir::UIPanel*>(rootEl->FindChildByName("Inspector")))
-            inspector->GetRect().offset = {-m_InspectorWidth, 0.0f, 0.0f, -kBottomBarHeight};
-
-        m_ViewportPanel->GetRect().offset = {m_HierarchyWidth, 0.0f, -m_InspectorWidth, -kBottomBarHeight};
-
-        // Debug panels anchored to the viewport edges
-        if (m_TestPanel)
-            m_TestPanel->GetRect().offset = {m_HierarchyWidth + kDebugPanelMargin, -260.0f, m_HierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -30.0f};
-        if (m_DebugTextPanel)
-            m_DebugTextPanel->GetRect().offset = {m_HierarchyWidth + kDebugPanelMargin, -430.0f, m_HierarchyWidth + kDebugPanelMargin + kDebugPanelWidth, -270.0f};
-        if (m_CameraTestPanel)
-            m_CameraTestPanel->GetRect().offset = {-(m_InspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -200.0f, -(m_InspectorWidth + kDebugPanelMargin), -30.0f};
-        if (m_TextAreaDebugPanel)
-            m_TextAreaDebugPanel->GetRect().offset = {-(m_InspectorWidth + kDebugPanelMargin) - kDebugPanelWidth, -400.0f, -(m_InspectorWidth + kDebugPanelMargin), -210.0f};
-
-        // Splitters sit exactly on the panel boundaries
-        if (m_HierarchySplitter)
-            m_HierarchySplitter->GetRect().offset = {m_HierarchyWidth - kSplitterHalfWidth, 0.0f, m_HierarchyWidth + kSplitterHalfWidth, -kBottomBarHeight};
-        if (m_InspectorSplitter)
-            m_InspectorSplitter->GetRect().offset = {-m_InspectorWidth - kSplitterHalfWidth, 0.0f, -m_InspectorWidth + kSplitterHalfWidth, -kBottomBarHeight};
-    }
-
     void UpdateViewportRenderTarget()
     {
         if (!m_ViewportRT || !m_ViewportPanel)
@@ -584,16 +518,13 @@ private:
     std::unique_ptr<Leir::Font> m_FontSmall;
     std::unique_ptr<Leir::UIDebugOverlay> m_DebugOverlay;
 
+    // Dock system
+    Leir::DockManager* m_DockManager = nullptr;
+
     // Viewport system
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::UIViewportPanel* m_ViewportPanel = nullptr;
     EditorCamera m_EditorCamera;
-
-    // Panel layout state (resizable via splitters, persisted to settings)
-    float m_HierarchyWidth = 264.0f;
-    float m_InspectorWidth = 290.0f;
-    UISplitter* m_HierarchySplitter = nullptr;
-    UISplitter* m_InspectorSplitter = nullptr;
 
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;

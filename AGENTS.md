@@ -86,11 +86,12 @@ cmake --build build/linux-debug
 - Sections:
   - `window`: `width`, `height`, `pos_x`, `pos_y` (`INT_MIN` = unset → centered on first run), `fullscreen`, `maximized`, `vsync`, `hidpi` (uses system DPI scale; `false` = fixed 1× UI)
   - `debug`: `ui_outlines` (toggles green UI bounding-box outlines), `show_overlay` (toggles UIDebugOverlay)
-  - `layout`: `hierarchy_width`, `inspector_width` (editor panel widths, resized via UISplitter)
+  - `layout`: `hierarchy_width`, `inspector_width` (legacy, unused since the dock system)
+  - `dock`: `layout` (serialized dock tree as JSON string; empty = default layout)
 - `Save()` creates the config directory if missing (`create_directories`)
 - If file doesn't exist, written with defaults on first `Load()` call
 - `LeirSettings::Get().Load()` called in `main()` before app creation
-- Editor reads settings for window size / fullscreen / position / maximized; saves on splitter drag end and on shutdown (`OnShutdown`)
+- Editor reads settings for window size / fullscreen / position / maximized and the dock layout; saves on splitter drag end, panel close, and shutdown (`OnShutdown`)
 - Window placement persistence: `CoreApplication` tracks the "normal rect" (size/pos only when not maximized and not fullscreen) via GLFW size/pos callbacks, so exiting maximized or fullscreen never corrupts the saved windowed rect. Position is restored via `glfwSetWindowPos` (centered if unset), maximized via `glfwMaximizeWindow`, both ignored in fullscreen
 
 ## HiDPI (DPI awareness)
@@ -389,24 +390,67 @@ void BeginSwapchainOverlay();                     // transition swapchain + begi
 - `BeginFrame(true)` used by editor to skip the 3D scene render pass (renders to offscreen RT instead)
 - `BeginSwapchainOverlay()` transitions swapchain image and begins the overlay render pass — called after viewport rendering is complete, before UI rendering
 
-## Editor Layout
+## Editor Layout (dock system)
+
+The editor's layout is built with the dock system (see "Dock System" below). The old
+fixed-width panels (`ApplyPanelLayout`, `UISplitter`, `hierarchy_width`/`inspector_width`)
+are gone; the `DockManager` is the full-screen root and panels are dockable tabs.
 
 ```
 Canvas
-  └── root (UIPanel "EditorRoot", full screen, alpha 1.0)
-        ├── UIViewportPanel ("Viewport", anchor 0,0–1,1 offset 200,0–-220,-30)
-        ├── Hierarchy (UIPanel, anchor 0,0–0,1 offset 0,0–200,-30)
-        │     └── HierarchyTitle (UILabel)
-        ├── Inspector (UIPanel, anchor 1,0–1,1 offset -220,0–0,-30)
-        │     └── InspectorTitle (UILabel)
-        ├── BottomBar (UIImage, anchor 0,1–1,1 offset 0,-30–0,0)
-        ├── StatusLabel (UILabel, anchor 0,1–0,1 offset 8,-28–600,0)
-        ├── UITestPanel ("DebugTestPanel", bottom-left inside viewport)
-        │     └── fields: Position X/Y/Z, Rotation X/Y/Z, Scale X/Y/Z → Cube
-        └── CameraTestPanel ("DebugCameraPanel", bottom-right inside viewport)
-              └── fields: Position X/Y/Z, Rotation X/Y/Z → Camera
-[DebugOverlay panel added as sibling of root]
+  ├── DockManager ("EditorDock", Stretch, offset 0,0–0,-30)   ← bottom 30px free
+  │     └── DockSplitNode H [0.17, 0.66, 0.17]
+  │           ├── DockPane: [DockTabBar: Hierarchy] → content "Hierarchy"
+  │           ├── DockSplitNode V [0.8, 0.2]
+  │           │     ├── DockPane: [DockTabBar: Viewport] → content UIViewportPanel
+  │           │     └── DockPane: [DockTabBar: Test | Camera | Debug Text | Text Area]
+  │           │                       → UITestPanel / CameraTestPanel / DebugTextPanel / TextAreaDebugPanel
+  │           └── DockPane: [DockTabBar: Inspector] → content "Inspector" (+ InspectorTransformPanel)
+  ├── BottomBar (UIImage, anchor 0,1–1,1 offset 0,-30–0,0)
+  └── StatusLabel (UILabel, anchor 0,1–0,1 offset 8,-28–600,0)
+[UIDebugOverlay panel added as sibling of DockManager (explicit overlay layer)]
 ```
+
+Default ratios: H 0.17/0.66/0.17, inner V 0.8/0.2. Panels Hierarchy/Viewport/Inspector are
+not closeable; the four debug panels are. Drag tabs to re-dock (edges = split, center =
+tab-merge); drag the 6px splitters to resize; layout persists to
+`settings.json → dock.layout` on splitter drag-end, close, and shutdown.
+
+## Dock System
+
+Docking engine in `engine/include/LeirEngine/UI/Dock/` (headers) + `engine/src/UI/Dock/`
+(sources). The dock tree IS the UI tree: every node is a `UIElement`/`UIPanel`, so it
+inherits layout, hit-test, input and rendering.
+
+- `DockPanel` — registry entry `{ id, title, content: UIElement*, closeable }`. Owned by
+  the `DockManager` (`unique_ptr`); the content subtree is owned by the caller.
+- `DockNode` → `DockSplitNode` (`orientation` H/V, `ratios[]`, 6px `DockSplitter`s) and
+  `DockPane` (Column: `DockTabBar` + active content host).
+- `DockTabBar` / `DockTab` — Row of tabs; pointer-down activates the tab and starts a dock
+  drag via `DockManager::BeginTabDrag`; rightmost 16px of a closeable tab closes it.
+- `DockManager` — root: panel registry, tree ops (`SplitPane`/`MergeIntoPane`/`ClosePanel`),
+  drag & drop with `DockDropOverlay` (ghost + highlighted zone, overlay layer), JSON
+  serialization via nlohmann, `SetOnLayoutChanged` callback for persistence.
+- `DockSplitNode::ComputeLayout` — overrides the virtual `UIElement::ComputeLayout` to
+  position children by ratios (absolute TopLeft + per-child `ComputeLayout` calls).
+- `DockDropZone` — `Left/Right/Top/Bottom` = split, `Center` = tab-merge (center 50% box).
+- **Deferred close**: `DockTab` close clicks call `RequestClosePanel` (the tab must finish
+  dispatching before being deleted); `DockManager::Process()` runs it once per frame (editor
+  calls it in `OnUpdate`). After any structural mutation the manager calls
+  `ClearDanglingPointers()` → `UICanvas::ClearHoverAndFocus()` (clears hover/focus without
+  callbacks — safe after element deletion).
+- **Ratios**: `DockSplitNode::AddNode` does NOT normalize (keeps the requested fractions
+  exact); `DragSplitter`/`RemoveNode` re-normalize. Persisted ratios are stable across
+  save/load round-trips.
+- Persistence: `LeirSettings::dock.layout` (string JSON). Editor restores on startup
+  (`LoadLayout`), falls back to `BuildDefaultLayout` when empty/invalid, and
+  `PlaceMissingPanels` re-adds active registered panels not present in the tree.
+- Editor teardown order (`OnShutdown`): serialize layout → save settings → remove the dock
+  manager from the canvas → delete it (content stays owned by the editor) → destroy the
+  viewport RT → destroy the scene.
+- Overlay routing in `UIRenderer`: an element (or any ancestor) with `IsOverlayLayer()` is
+  drawn in the top batch. The name-prefix `"Debug"` heuristic was removed;
+  `UIDebugOverlay` and `DockDropOverlay` set the flag explicitly.
 
 ### EditorCamera
 

@@ -1,0 +1,9 @@
+﻿MSBuild version 17.14.40+3e7442088 for .NET Framework
+
+  Jolt.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\jolt-build\Debug\Jolt.lib
+  glfw.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\glfw-build\src\Debug\glfw3.lib
+  glm.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\glm-build\glm\Debug\glm.lib
+  spdlog.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\spdlog-build\Debug\spdlogd.lib
+  LeirEngine.vcxproj -> C:\projects\leir_engine\build\windows-debug\engine\Debug\LeirEngine.dll
+  LeirEngineEditor.vcxproj -> C:\projects\leir_engine\build\windows-debug\editor\Debug\LeirEngineEditor.exe
+  LeirEnginePhysicsDemo.vcxproj -> C:\projects\leir_engine\build\windows-debug\examples\PhysicsDemo\Debug\LeirEnginePhysicsDemo.exe

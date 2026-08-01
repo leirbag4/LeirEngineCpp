@@ -43,6 +43,13 @@ add_library(LeirEngine SHARED
     src/UI/UIViewportPanel.cpp
     src/UI/UITextArea.cpp
     src/UI/ScrollView.cpp
+    src/UI/Dock/DockNode.cpp
+    src/UI/Dock/DockSplitNode.cpp
+    src/UI/Dock/DockPane.cpp
+    src/UI/Dock/DockTabBar.cpp
+    src/UI/Dock/DockSplitter.cpp
+    src/UI/Dock/DockDropOverlay.cpp
+    src/UI/Dock/DockManager.cpp
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp
     src/Physics/RigidBody.cpp

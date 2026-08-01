@@ -74,6 +74,8 @@ bool LeirSettings::Load(const std::string& path)
         layout.hierarchy_width = j.value("layout", nlohmann::json::object()).value("hierarchy_width", 264.0f);
         layout.inspector_width = j.value("layout", nlohmann::json::object()).value("inspector_width", 290.0f);
 
+        dock.layout = j.value("dock", nlohmann::json::object()).value("layout", "");
+
         spdlog::info("Settings loaded from '{}'", m_Path);
         return true;
     } catch (const std::exception& e) {
@@ -102,6 +104,7 @@ bool LeirSettings::Save()
     j["debug"]["ui_event_log"] = debug.ui_event_log;
     j["layout"]["hierarchy_width"] = layout.hierarchy_width;
     j["layout"]["inspector_width"] = layout.inspector_width;
+    j["dock"]["layout"] = dock.layout;
 
     try {
         namespace fs = std::filesystem;
@@ -145,6 +148,7 @@ void LeirSettings::SetDefaults()
     debug.ui_event_log = false;
     layout.hierarchy_width = 300.0f;
     layout.inspector_width = 300.0f;
+    dock.layout.clear();
 }
 
 } // namespace Leir

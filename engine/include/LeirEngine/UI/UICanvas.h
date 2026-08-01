@@ -32,6 +32,10 @@ public:
 
     UIElement* GetHoveredElement() const { return m_HoveredElement; }
 
+    // Drops hover/focus state WITHOUT firing exit/blur callbacks. Safe to call
+    // after an element (e.g. a dock tab closed by the user) has been deleted.
+    void ClearHoverAndFocus() { m_HoveredElement = nullptr; m_FocusElement = nullptr; }
+
     void CapturePointer(UIElement* element) { m_CaptureElement = element; }
     void ReleasePointer() { m_CaptureElement = nullptr; }
     UIElement* GetCaptureElement() const { return m_CaptureElement; }

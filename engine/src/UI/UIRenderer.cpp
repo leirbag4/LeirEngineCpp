@@ -8,6 +8,7 @@
 #include "LeirEngine/UI/UITextInput.h"
 #include "LeirEngine/UI/UITextArea.h"
 #include "LeirEngine/UI/UIViewportPanel.h"
+#include "LeirEngine/UI/Dock/DockTabBar.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
 #include "LeirEngine/Rendering/RenderTexture.h"
@@ -304,11 +305,11 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
         if (!elem->IsActive()) continue;
         const auto& cr = elem->GetComputedRect();
 
-        bool isDebug = (elem->GetName().rfind("Debug", 0) == 0);
+        bool isDebug = elem->IsOverlayLayer();
         if (!isDebug) {
             UIElement* p = elem->GetParent();
             while (p) {
-                if (p->GetName().rfind("Debug", 0) == 0) { isDebug = true; break; }
+                if (p->IsOverlayLayer()) { isDebug = true; break; }
                 p = p->GetParent();
             }
         }
@@ -377,6 +378,41 @@ void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
                 vd.verts[3] = {{x1, y1}, {1, 1}, {1,1,1,1}};
                 vd.texture = vp->GetRenderTexture();
                 m_ViewportDraws.push_back(vd);
+            }
+        } else if (auto* tab = dynamic_cast<DockTab*>(elem)) {
+            const bool active = tab->IsActive();
+            Batch(nullptr, cr, {0, 0, 1, 1},
+                active ? Vector4{0.23f, 0.23f, 0.27f, 1.0f}
+                       : Vector4{0.15f, 0.15f, 0.18f, 1.0f});
+
+            Font* f = tab->GetFont();
+            DockPanel* tabPanel = tab->GetPanel();
+            if (f && f->GetAtlasTexture() && tabPanel) {
+                float lineH = f->GetLineHeight();
+                float ascender = f->GetAscender();
+                float baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
+                Vector4 textColor = active
+                    ? Vector4{1.0f, 1.0f, 1.0f, 1.0f}
+                    : Vector4{0.72f, 0.72f, 0.72f, 1.0f};
+
+                auto rawQuads = f->LayoutText(tabPanel->title, cr.z - 32.0f);
+                for (size_t i = 0; i < rawQuads.size(); i += 2) {
+                    const auto& r = rawQuads[i];
+                    const auto& uv = rawQuads[i + 1];
+                    Vector4 textRect = {cr.x + 8.0f + r.x, baselineY + r.y, r.z, r.w};
+                    Batch(f->GetAtlasTexture(), textRect, uv, textColor);
+                }
+
+                if (tabPanel->closeable) {
+                    auto xq = f->LayoutText("x", 0.0f);
+                    float closeX = cr.x + cr.z - 16.0f;
+                    for (size_t i = 0; i < xq.size(); i += 2) {
+                        const auto& r = xq[i];
+                        const auto& uv = xq[i + 1];
+                        Vector4 textRect = {closeX + r.x, baselineY + r.y, r.z, r.w};
+                        Batch(f->GetAtlasTexture(), textRect, uv, {0.85f, 0.55f, 0.55f, 1.0f});
+                    }
+                }
             }
         } else if (auto* label = dynamic_cast<UILabel*>(elem)) {
             if (label->GetFont() && label->GetFont()->GetAtlasTexture()) {

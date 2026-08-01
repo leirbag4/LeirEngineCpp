@@ -36,6 +36,10 @@ public:
         float inspector_width = 300.0f;
     } layout;
 
+    struct {
+        std::string layout;   // serialized dock tree (JSON); empty = default
+    } dock;
+
     // Resolved platform config path (<config>/LeirEngine/settings.json)
     const std::string& GetPath() const { return m_Path; }
 
