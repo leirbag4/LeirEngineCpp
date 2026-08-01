@@ -14,6 +14,7 @@ class DockNode;
 class DockPane;
 class DockTab;
 class DockDropOverlay;
+class DockSplitNode;
 class Font;
 
 enum class LEIR_API DockDropZone {
@@ -77,7 +78,12 @@ public:
 
 private:
     void DestroyTree();
-    void ReplaceNode(DockNode* oldNode, DockNode* newNode);
+    // Replaces `oldNode` with `newNode` inside `parentSplit`. If `parentSplit`
+    // is null, `oldNode` is the root (the manager adopts `newNode` directly).
+    // The parent must be passed explicitly: SplitPane re-parents the target
+    // pane into the new split before replacing it, so computing the parent
+    // from `oldNode->GetParent()` would point at the new split itself.
+    void ReplaceNode(DockNode* oldNode, DockNode* newNode, DockSplitNode* parentSplit);
     void RemovePanelFromPane(DockPanel* panel);
     void CleanupEmptyPanes();
     bool CleanupNode(DockNode* node);

@@ -327,9 +327,23 @@ void DockManager::SplitPane(DockPanel* panel, DockPane* target, DockDropZone zon
     if (!panel || !target)
         return;
 
+    // Dropping a panel onto its own pane: just focus it (same as a center drop).
+    if (target->Contains(panel)) {
+        target->SetActivePanel(panel);
+        NotifyLayoutChanged();
+        return;
+    }
+
     const DockOrientation ori = (zone == DockDropZone::Left || zone == DockDropZone::Right)
         ? DockOrientation::Horizontal : DockOrientation::Vertical;
     const bool newFirst = (zone == DockDropZone::Left || zone == DockDropZone::Top);
+
+    // Capture target's ORIGINAL parent before the new split re-parents it.
+    // AddNode(target, ...) moves target under `split` (UIElement::AddChild
+    // auto-reparents), so computing the parent later would resolve to the new
+    // split itself and create a self-referencing tree (panel disappears).
+    DockSplitNode* parentSplit = dynamic_cast<DockSplitNode*>(target->GetParent());
+    const float parentRatio = parentSplit ? parentSplit->GetRatioForChild(target) : 0.5f;
 
     DockPane* newPane = new DockPane(this);
     newPane->SetName("Pane:" + panel->id);
@@ -346,7 +360,23 @@ void DockManager::SplitPane(DockPanel* panel, DockPane* target, DockDropZone zon
         split->AddNode(newPane, 0.5f);
     }
 
-    ReplaceNode(target, split);
+    if (parentSplit) {
+        // Swap target for the new split inside the ORIGINAL parent. target is
+        // no longer a UI child of parentSplit (AddNode moved it), but it is
+        // still in parentSplit's m_NodeChildren, so ReplaceChild swaps the
+        // node entry and adopts `split` as a UI child. The ratio is preserved
+        // so the surrounding layout does not shift.
+        parentSplit->ReplaceChild(target, split, parentRatio);
+    } else {
+        // target was the root; the manager adopts the new split directly.
+        RemoveChild(target);
+        m_Root = split;
+        split->GetRect().anchor = AnchorSet::Stretch();
+        split->GetRect().offset = {};
+        AddChild(split);
+        PushOverlayToTop();
+    }
+
     CleanupEmptyPanes();
     ClearDanglingPointers();
     NotifyLayoutChanged();
@@ -444,11 +474,10 @@ void DockManager::DestroyTree()
     }
 }
 
-void DockManager::ReplaceNode(DockNode* oldNode, DockNode* newNode)
+void DockManager::ReplaceNode(DockNode* oldNode, DockNode* newNode, DockSplitNode* parentSplit)
 {
-    auto* parent = dynamic_cast<DockSplitNode*>(oldNode->GetParent());
-    if (parent) {
-        parent->ReplaceChild(oldNode, newNode, parent->GetRatioForChild(oldNode));
+    if (parentSplit) {
+        parentSplit->ReplaceChild(oldNode, newNode, parentSplit->GetRatioForChild(oldNode));
         return;
     }
 
@@ -501,7 +530,7 @@ bool DockManager::CleanupNode(DockNode* node)
     if (split->GetNodeCount() == 1) {
         DockNode* only = split->GetNode(0);
         split->RemoveNode(only);
-        ReplaceNode(split, only);
+        ReplaceNode(split, only, dynamic_cast<DockSplitNode*>(split->GetParent()));
         delete split;
         return false;
     }

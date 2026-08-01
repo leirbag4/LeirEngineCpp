@@ -4,7 +4,12 @@
   glfw.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\glfw-build\src\Debug\glfw3.lib
   glm.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\glm-build\glm\Debug\glm.lib
   spdlog.vcxproj -> C:\projects\leir_engine\build\windows-debug\_deps\spdlog-build\Debug\spdlogd.lib
-  UIDebugOverlay.cpp
+  DockManager.cpp
+  DockPane.cpp
+  DockSplitter.cpp
+  DockTabBar.cpp
+  Generating Code...
+     Creating library C:/projects/leir_engine/build/windows-debug/engine/Debug/LeirEngine.lib and object C:/projects/leir_engine/build/windows-debug/engine/Debug/LeirEngine.exp
   LeirEngine.vcxproj -> C:\projects\leir_engine\build\windows-debug\engine\Debug\LeirEngine.dll
   main.cpp
   LeirEngineEditor.vcxproj -> C:\projects\leir_engine\build\windows-debug\editor\Debug\LeirEngineEditor.exe
