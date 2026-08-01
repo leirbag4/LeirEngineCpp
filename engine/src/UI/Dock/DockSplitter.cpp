@@ -26,6 +26,9 @@ bool DockSplitter::OnPointerDown(const Vector2& pos)
     m_Dragging = true;
     m_DragStart = pos;
 
+    if (m_Node)
+        m_Node->BeginSplitterDrag(m_Index);
+
     UIElement* e = this;
     while (e) {
         if (auto* canvas = dynamic_cast<UICanvas*>(e)) {

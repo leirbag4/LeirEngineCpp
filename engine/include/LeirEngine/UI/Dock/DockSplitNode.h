@@ -32,7 +32,10 @@ public:
     void RemoveNode(DockNode* child);
     void ReplaceChild(DockNode* oldNode, DockNode* newNode, float ratio);
 
-    // Adjust the two ratios around splitter `index` by pixelDelta (px).
+    // Adjust the two ratios around splitter `index` by pixelDelta (px). The
+    // delta is measured from the ratio snapshot taken by BeginSplitterDrag,
+    // so the splitter tracks the mouse exactly (no cumulative drift).
+    void BeginSplitterDrag(size_t index);
     void DragSplitter(size_t index, float pixelDelta);
 
     float GetSplitterWidth() const { return 6.0f; }
@@ -48,6 +51,8 @@ private:
     std::vector<DockNode*> m_NodeChildren;
     std::vector<float> m_Ratios;
     std::vector<DockSplitter*> m_Splitters;
+    float m_DragStartA = 0.0f;
+    float m_DragStartB = 0.0f;
 };
 
 } // namespace Leir

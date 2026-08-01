@@ -67,6 +67,14 @@ void DockSplitNode::ReplaceChild(DockNode* oldNode, DockNode* newNode, float rat
     NormalizeRatios();
 }
 
+void DockSplitNode::BeginSplitterDrag(size_t index)
+{
+    if (index + 1 >= m_Ratios.size())
+        return;
+    m_DragStartA = m_Ratios[index];
+    m_DragStartB = m_Ratios[index + 1];
+}
+
 void DockSplitNode::DragSplitter(size_t index, float pixelDelta)
 {
     if (index >= m_Splitters.size() || index + 1 >= m_NodeChildren.size())
@@ -79,22 +87,16 @@ void DockSplitNode::DragSplitter(size_t index, float pixelDelta)
     const float splitterW = GetSplitterWidth();
     const float usable = std::max(1.0f, innerLen - (float)(m_NodeChildren.size() - 1) * splitterW);
 
-    const float delta = pixelDelta / usable;
-
-    const size_t n = m_NodeChildren.size();
-    float a = m_Ratios[index];
-    float b = m_Ratios[index + 1];
-    float others = 0.0f;
-    for (size_t j = 0; j < n; ++j)
-        if (j != index && j != index + 1)
-            others += m_Ratios[j];
-
+    // Track from the ratio snapshot taken at drag start, so the boundary moves
+    // exactly 1:1 with the mouse (adding to the current ratio would re-add all
+    // prior movement and drift progressively further).
     const float minFrac = 0.05f;
-    float newA = a + delta;
-    newA = std::clamp(newA, minFrac, std::max(minFrac, 1.0f - others - minFrac));
+    const float pairSum = m_DragStartA + m_DragStartB;
+    float newA = m_DragStartA + pixelDelta / usable;
+    newA = std::clamp(newA, minFrac, std::max(minFrac, pairSum - minFrac));
 
     m_Ratios[index] = newA;
-    m_Ratios[index + 1] = std::max(minFrac, (a + b) - newA);
+    m_Ratios[index + 1] = pairSum - newA;
     NormalizeRatios();
 }
 
