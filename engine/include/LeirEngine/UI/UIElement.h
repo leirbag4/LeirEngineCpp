@@ -48,6 +48,10 @@ public:
     UIElement* GetParent() const { return m_Parent; }
 
     void AddChild(UIElement* child);
+    // Inserts a child at a specific position in the children vector (used to
+    // reorder tabs in a dock tab bar). Auto-reparents like AddChild; the index
+    // is clamped to [0, size()].
+    void InsertChildAt(UIElement* child, size_t index);
     void RemoveChild(UIElement* child);
     const std::vector<UIElement*>& GetChildren() const { return m_Children; }
 

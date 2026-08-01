@@ -37,6 +37,15 @@ DockTab* DockTabBar::AddTab(DockPanel* panel)
     return tab;
 }
 
+DockTab* DockTabBar::InsertTab(DockPanel* panel, size_t index)
+{
+    auto* tab = new DockTab();
+    tab->SetName("Tab:" + panel->title);
+    tab->Setup(panel, m_Pane, m_Manager, m_Font);
+    InsertChildAt(tab, std::min(index, GetChildren().size()));
+    return tab;
+}
+
 void DockTabBar::RemoveTab(DockPanel* panel)
 {
     for (auto* c : GetChildren()) {

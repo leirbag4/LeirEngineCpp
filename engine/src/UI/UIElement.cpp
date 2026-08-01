@@ -33,6 +33,15 @@ void UIElement::AddChild(UIElement* child)
     child->m_Parent = this;
 }
 
+void UIElement::InsertChildAt(UIElement* child, size_t index)
+{
+    if (child->m_Parent)
+        child->m_Parent->RemoveChild(child);
+    index = std::min(index, m_Children.size());
+    m_Children.insert(m_Children.begin() + index, child);
+    child->m_Parent = this;
+}
+
 void UIElement::RemoveChild(UIElement* child)
 {
     auto it = std::find(m_Children.begin(), m_Children.end(), child);

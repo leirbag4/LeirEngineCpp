@@ -27,6 +27,13 @@ public:
     void SetActivePanel(DockPanel* panel);
     void SetActiveTab(int index);
 
+    // Inserts a tab at a specific index in both the tab list and the tab bar.
+    void InsertTab(DockPanel* panel, size_t index);
+    // Reorders `panel` to the insertion point implied by `pos.x` against the
+    // tab bar's tabs. Returns true if the order changed.
+    bool ReorderTabTo(DockPanel* panel, const Vector2& pos);
+
+    DockTabBar* GetTabBar() const { return m_TabBar; }
     DockManager* GetDockManager() const { return m_Manager; }
 
 private:

@@ -21,9 +21,10 @@ public:
     Font* GetFont() const { return m_Font; }
 
     DockTab* AddTab(DockPanel* panel);
+    // Inserts a tab at a specific index in the row (used for tab reordering).
+    DockTab* InsertTab(DockPanel* panel, size_t index);
     void RemoveTab(DockPanel* panel);
     DockTab* FindTab(DockPanel* panel) const;
-
     Vector2 GetMinSize() const override;
 
 private:

@@ -5,6 +5,28 @@
 
 namespace Leir {
 
+namespace {
+
+// Number of tabs in `bar` whose center X lies strictly left of `x`. This is
+// the insertion index for a dropped tab at position `x`.
+int GetTabIndexAtX(const DockTabBar* bar, float x)
+{
+    if (!bar)
+        return 0;
+    int idx = 0;
+    for (auto* c : bar->GetChildren()) {
+        const auto* tab = dynamic_cast<const DockTab*>(c);
+        if (!tab)
+            continue;
+        const auto& cr = tab->GetComputedRect();
+        if (cr.x + cr.z * 0.5f < x)
+            ++idx;
+    }
+    return idx;
+}
+
+} // namespace
+
 DockPane::DockPane(DockManager* manager)
     : DockNode(DockNodeType::Pane)
     , m_Manager(manager)
@@ -91,6 +113,39 @@ void DockPane::RemoveTab(DockPanel* panel)
     } else if (idx < (size_t)m_ActiveIndex) {
         m_ActiveIndex--;
     }
+}
+
+void DockPane::InsertTab(DockPanel* panel, size_t index)
+{
+    if (!panel)
+        return;
+    index = std::min(index, m_Tabs.size());
+    m_Tabs.insert(m_Tabs.begin() + index, panel);
+    if (m_TabBar)
+        m_TabBar->InsertTab(panel, index);
+    if (m_ContentHost == nullptr)
+        SetActivePanel(panel);
+}
+
+bool DockPane::ReorderTabTo(DockPanel* panel, const Vector2& pos)
+{
+    auto it = std::find(m_Tabs.begin(), m_Tabs.end(), panel);
+    if (it == m_Tabs.end())
+        return false;
+    const int curIdx = (int)(it - m_Tabs.begin());
+
+    // Index in the ORIGINAL order. When moving right, removing the tab first
+    // shifts the remaining tabs left by one, so the insertion point drops by 1.
+    int newIdx = GetTabIndexAtX(m_TabBar, pos.x);
+    if (newIdx > curIdx)
+        --newIdx;
+    if (newIdx == curIdx)
+        return false;
+
+    RemoveTab(panel);
+    InsertTab(panel, (size_t)newIdx);
+    SetActivePanel(panel);
+    return true;
 }
 
 void DockPane::SetActivePanel(DockPanel* panel)

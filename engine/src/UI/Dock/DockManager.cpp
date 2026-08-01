@@ -59,6 +59,16 @@ DockPane* FindFirstPaneRecursive(DockNode* node)
     return nullptr;
 }
 
+// True when `pos` falls on the pane's tab bar strip (vs. its content area).
+bool PosOverTabBar(const DockPane* pane, const Vector2& pos)
+{
+    const DockTabBar* bar = pane->GetTabBar();
+    if (!bar)
+        return false;
+    const auto& cr = bar->GetComputedRect();
+    return pos.y >= cr.y && pos.y <= cr.y + cr.w;
+}
+
 nlohmann::json SerializeNodeJson(const DockNode* node)
 {
     if (auto* split = dynamic_cast<const DockSplitNode*>(node)) {
@@ -327,8 +337,12 @@ void DockManager::SplitPane(DockPanel* panel, DockPane* target, DockDropZone zon
     if (!panel || !target)
         return;
 
-    // Dropping a panel onto its own pane: just focus it (same as a center drop).
-    if (target->Contains(panel)) {
+    // Dropping a panel onto its own pane with no other tabs: just focus it
+    // (pure self-drop, same as a center drop). When the pane shares tabs with
+    // other panels, edge drops still split the pane so the dragged tab moves
+    // into its own new zone (RemovePanelFromPane strips it from the shared
+    // pane, leaving the sibling tabs behind).
+    if (target->Contains(panel) && target->GetTabCount() <= 1) {
         target->SetActivePanel(panel);
         NotifyLayoutChanged();
         return;
@@ -423,29 +437,55 @@ void DockManager::OnPointerMove(const Vector2& pos)
     m_HoverPane = FindPaneAt(m_Root, pos);
     m_HoverZone = m_HoverPane ? ComputeZone(m_HoverPane, pos) : DockDropZone::None;
 
+    // Reorder gesture: dragging a tab over its own pane's tab bar (with
+    // sibling tabs present) reorders instead of split/merge, so show only the
+    // ghost — no misleading zone highlight.
+    const bool reorderGesture = m_HoverPane && m_HoverPane->Contains(m_DragPanel)
+        && m_HoverPane->GetTabCount() > 1 && PosOverTabBar(m_HoverPane, pos);
+
     if (m_DragTab) {
         const auto& cr = m_DragTab->GetComputedRect();
         if (m_Overlay)
             m_Overlay->SetGhostRect({pos.x - m_GrabOffset.x, pos.y - m_GrabOffset.y, cr.z, cr.w});
     }
 
-    if (m_HoverPane && m_HoverZone != DockDropZone::None && m_Overlay)
+    if (reorderGesture) {
+        if (m_Overlay)
+            m_Overlay->HideZone();
+    } else if (m_HoverPane && m_HoverZone != DockDropZone::None && m_Overlay) {
         m_Overlay->SetZoneRect(ZoneRectFor(m_HoverPane, m_HoverZone), {0.3f, 0.6f, 1.0f, 0.30f});
-    else if (m_Overlay)
+    } else if (m_Overlay) {
         m_Overlay->HideZone();
+    }
 }
 
 bool DockManager::OnPointerUp(const Vector2& pos)
 {
-    (void)pos;
     if (!m_DragPanel)
         return false;
 
     if (m_Dragging && m_HoverPane && m_HoverZone != DockDropZone::None) {
-        if (m_HoverZone == DockDropZone::Center)
-            MergeIntoPane(m_DragPanel, m_HoverPane);
-        else
-            SplitPane(m_DragPanel, m_HoverPane, m_HoverZone);
+        DockPane* pane = m_HoverPane;
+        if (pane->Contains(m_DragPanel)) {
+            // Dropping on the pane that already hosts the dragged tab.
+            if (pane->GetTabCount() > 1 && PosOverTabBar(pane, pos)) {
+                // Tab-bar reorder (same pane).
+                if (pane->ReorderTabTo(m_DragPanel, pos)) {
+                    ClearDanglingPointers();
+                    NotifyLayoutChanged();
+                }
+            } else if (m_HoverZone == DockDropZone::Center) {
+                pane->SetActivePanel(m_DragPanel);
+                NotifyLayoutChanged();
+            } else {
+                // Edge drop on the shared pane: split it (Feature 1).
+                SplitPane(m_DragPanel, pane, m_HoverZone);
+            }
+        } else if (m_HoverZone == DockDropZone::Center) {
+            MergeIntoPane(m_DragPanel, pane);
+        } else {
+            SplitPane(m_DragPanel, pane, m_HoverZone);
+        }
     }
 
     if (m_Overlay)
