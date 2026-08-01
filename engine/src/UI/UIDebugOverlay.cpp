@@ -99,13 +99,17 @@ void UIDebugOverlay::Update(float deltaTime)
     else
         m_HoverLabel->SetText("Hover: --");
 
-    // Event tracking
-    if (hovered != m_LastHovered) {
-        if (hovered)
-            m_LastEvent = "Hover: " + hovered->GetName();
-        else if (m_LastHovered)
-            m_LastEvent = "Exit: " + m_LastHovered->GetName();
-        m_LastHovered = hovered;
+    // Event tracking. Uses the hovered element's NAME rather than retaining a
+    // pointer to it: when the user docks a panel the previously-hovered element
+    // can be deleted, and dereferencing a freed element corrupts its std::string
+    // (→ bad_alloc on the next concatenation).
+    std::string hoveredName = hovered ? hovered->GetName() : std::string();
+    if (hoveredName != m_LastHoveredName) {
+        if (!hoveredName.empty())
+            m_LastEvent = "Hover: " + hoveredName;
+        else if (!m_LastHoveredName.empty())
+            m_LastEvent = "Exit: " + m_LastHoveredName;
+        m_LastHoveredName = hoveredName;
         m_LastEventFrames = 0;
     }
 

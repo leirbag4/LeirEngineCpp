@@ -37,8 +37,10 @@ private:
     int m_FrameCount = 0;
     float m_CurrentFps = 0.0f;
 
-    // Event tracking
-    class UIElement* m_LastHovered = nullptr;
+    // Event tracking (stores the hovered element's NAME, not a raw pointer:
+    // dock operations can delete the previously-hovered element between
+    // frames, so retaining the pointer would be a use-after-free).
+    std::string m_LastHoveredName;
     std::string m_LastEvent;
     int m_LastEventFrames = 0;
 };
