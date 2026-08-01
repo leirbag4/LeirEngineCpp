@@ -1,8 +1,8 @@
 # TODO: Sistema de docking profesional (tabs + anidamiento)
 
 Milestone Fase 1 (ventana única). El multi-window (ventanas flotantes del SO) es Fase 2
-de este documento. Estado: **Fase 1-3 completas**. Pendiente futuro: Vulkan teardown
-(recursos no destruidos antes de `vkDestroyDevice`, registrado en `TODO.md`).
+de este documento. Estado: **Fase 1-3 completas**. Teardown de Vulkan verificado
+(`VUID-vkDestroyDevice-device-05137` resuelto, ver `TODO.md`).
 
 ---
 
@@ -120,8 +120,9 @@ DockDropOverlay  → feedback visual (ghost + zona destacada) en la capa overlay
   columna; guard de `SplitPane` ahora solo aplica a self-drop puro `GetTabCount() <= 1`).
   Verificado manualmente.
 - Pendiente: resize de ventana, HiDPI, viewport RT + camera sync (verificado en sesiones
-  previas), docs AGENTS.md (verificado), **Vulkan teardown** (`VUID-vkDestroyDevice-device-05137`
-  → registrado en `TODO.md`).
+  previas), docs AGENTS.md (verificado). Teardown de Vulkan ✅ (2 corridas limpias con
+  validation layers; fixes en `Material::RecreatePipeline` y liberación de subtrees de
+  contenido en `OnShutdown` — ver `TODO.md`).
 
 ### Fase 2 del milestone — Multi-window (flotantes), NO incluida en esta iteración
 - Refactor de `VulkanDevice` a swapchain por ventana (`SwapchainTarget`; device/queues

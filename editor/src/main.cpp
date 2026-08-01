@@ -64,6 +64,18 @@ namespace {
     const float kBottomBarHeight = 30.0f;
 }
 
+// UIElement's dtor only nulls child parent pointers; it does not free children.
+// The editor owns the dock content subtrees, so they are freed here recursively.
+void DeleteUiSubtree(Leir::UIElement* element)
+{
+    if (!element)
+        return;
+    auto children = element->GetChildren();
+    for (auto* c : children)
+        DeleteUiSubtree(c);
+    delete element;
+}
+
 // ---- Crash diagnostics (temporary) ----
 // Writes the exact CRT/STL failure reason to a file so we can diagnose the
 // "Debug Error! abort() has been called" dialog seen when docking panels.
@@ -348,6 +360,7 @@ protected:
 
         // Hierarchy panel (left dock pane)
         auto* hierarchy = new Leir::UIPanel();
+        m_HierarchyPanel = hierarchy;
         hierarchy->SetName("Hierarchy");
         hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
@@ -364,6 +377,7 @@ protected:
 
         // Inspector panel (right dock pane)
         auto* inspector = new Leir::UIPanel();
+        m_InspectorPanel = inspector;
         inspector->SetName("Inspector");
         inspector->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
         inspector->SetLayoutMode(Leir::LayoutMode::Column);
@@ -580,6 +594,25 @@ protected:
             delete m_DockManager;
             m_DockManager = nullptr;
         }
+        // The dock tree only reparents the content panels out on delete; the
+        // editor owns them (UIElement dtor doesn't free children), so free the
+        // whole subtrees here. The InspectorTransformPanel is a child of the
+        // Inspector content, so it is covered by m_InspectorPanel.
+        DeleteUiSubtree(m_ViewportPanel);
+        m_ViewportPanel = nullptr;
+        DeleteUiSubtree(m_HierarchyPanel);
+        m_HierarchyPanel = nullptr;
+        DeleteUiSubtree(m_InspectorPanel);
+        m_InspectorPanel = nullptr;
+        DeleteUiSubtree(m_TestPanel);
+        m_TestPanel = nullptr;
+        DeleteUiSubtree(m_CameraTestPanel);
+        m_CameraTestPanel = nullptr;
+        DeleteUiSubtree(m_TextAreaDebugPanel);
+        m_TextAreaDebugPanel = nullptr;
+        DeleteUiSubtree(m_DebugTextPanel);
+        m_DebugTextPanel = nullptr;
+        m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
         auto& sm = Leir::SceneManager::GetInstance();
@@ -653,6 +686,8 @@ private:
 
     // Dock system
     Leir::DockManager* m_DockManager = nullptr;
+    Leir::UIPanel* m_HierarchyPanel = nullptr;
+    Leir::UIPanel* m_InspectorPanel = nullptr;
 
     // Viewport system
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;

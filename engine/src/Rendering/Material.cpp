@@ -72,6 +72,12 @@ void Material::RecreatePipeline(VkRenderPass renderPass)
         vkDestroyPipelineLayout(dev, m_PipelineLayout, nullptr);
         m_PipelineLayout = VK_NULL_HANDLE;
     }
+    // CreatePipeline() re-allocates m_UBOSetLayout; free the previous one so a
+    // repeated RecreatePipeline doesn't leak a descriptor set layout.
+    if (m_UBOSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(dev, m_UBOSetLayout, nullptr);
+        m_UBOSetLayout = VK_NULL_HANDLE;
+    }
     CreatePipeline(renderPass);
 }
 

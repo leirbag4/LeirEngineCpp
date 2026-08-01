@@ -44,7 +44,7 @@
 - [x] `Light` component (directional, point, spot)
 - [x] Sprite 2D overlay system (pipeline, SpriteRenderer, SpriteSheet, push constants con uvRect)
 - [ ] MoltenVK integration para macOS/iOS
-- [ ] Limpiar recursos en teardown: `VUID-vkDestroyDevice-device-05137` (VkBuffer/Image/ShaderModule/Pipeline/DescriptorSet/etc. no destruidos antes de `vkDestroyDevice`). Detectado al cerrar el editor tras usar el dock (ver sesión de docking). Bugs de limpieza separados de la funcionalidad.
+- [x] Limpiar recursos en teardown: `VUID-vkDestroyDevice-device-05137` (recursos no destruidos antes de `vkDestroyDevice`). Verificado: 2 corridas limpias con validation layers (dock ops + resize de ventana/swapchain, cerrar app → sin VUID). Fixes: `Material::RecreatePipeline` destruye el `m_UBOSetLayout` viejo antes de recrear (fuga latente de `VkDescriptorSetLayout`); el editor ahora libera todos los subtrees de contenido del dock (`DeleteUiSubtree`) en `OnShutdown` (antes `hierarchy`/`inspector`/paneles debug quedaban huérfanos y nunca se borraban).
 
 ## Fase 3 — Physics (Jolt)
 - [x] Integrar Jolt Physics via CMake FetchContent
