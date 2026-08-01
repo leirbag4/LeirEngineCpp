@@ -194,12 +194,12 @@ acepta `flags` y el pool de la UI se crea con el flag.
 
 # Fase 6 (en curso)
 
-- **Soporte HiDPI** — base implementada (pasos 0-3 de `TODO_HIDPI.md`): UI/input en coordenadas
-  lógicas, `dpr` solo en swapchain/RT, toggle `settings.window.hidpi` (default true), ventana
-  creada a `lógico × scale`, `InputManager::ToLogical` (Windows), `screenSize` lógico en UIRenderer,
-  RT del viewport a `lógico × dpr`. **Pendiente**: verificación visual del usuario a 125%/100% y
-  toggle off (Paso 4), docs en AGENTS.md.
-- **Colapso de paneles + docking básico** (colapsar/expandir Hierarchy/Inspector + arrastrar título a zonas de drop). Pendiente, después de verificar HiDPI.
+- **Soporte HiDPI** — base implementada + **verificación del usuario completada** (Paso 4 de
+  `TODO_HIDPI.md`, 2026-07-31): UI/input en coordenadas lógicas, `dpr` solo en swapchain/RT,
+  toggle `settings.window.hidpi` (default true), ventana creada a `lógico × scale`,
+  `InputManager::ToLogical` (Windows), `screenSize` lógico en UIRenderer, RT del viewport a
+  `lógico × dpr`, fix de arranque maximizado. Docs en AGENTS.md actualizadas.
+- **Colapso de paneles + docking básico** (colapsar/expandir Hierarchy/Inspector + arrastrar título a zonas de drop). Pendiente (próximo paso).
 - **Refinar `InvalidateViewportDescriptor`** — pendiente: mover ownership del descriptor set a `RenderTexture` (alloc en ctor, re-write en resize, destroy en dtor; eliminar cache + invalidate; pool con growth).
 - Más ideas a futuro: docking completo con pestañas/flotantes (requiere multi-window), `renderScale` (pixel-perfect 2D / screen percentage 3D).
 

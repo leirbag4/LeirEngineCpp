@@ -3,7 +3,7 @@
 Documentación conceptual + plan de implementación del soporte HiDPI para LeirEngine
 (engine + editor, cross-platform: Windows / macOS / Linux).
 
-Estado: **EN CURSO** (ver plan al final).
+Estado: **IMPLEMENTADO y VERIFICADO en Windows** (ver plan al final).
 
 ---
 
@@ -109,6 +109,11 @@ GLFW. En las 3 plataformas se usa el mismo código.
 - `UIRenderer`: push-constant `screenSize` = tamaño lógico del canvas (no swapchain).
 - Editor: `settings.window.hidpi` (default true); RT del viewport = `lógico × dpr` (3D nítido);
   camera aspect en lógico; `OnContentScaleChanged` loguea (layout/RT se re-sincronizan por frame).
+- **Fix de arranque maximizado** (encontrado durante la verificación): el ctor ya no pisa
+  `m_Width/m_Height` con el rect windowed guardado (`if (maximized) { m_Width = width; ... }`
+  eliminado). `UpdateNormalRect` descarta el estado maximizado, así que los lógicos conservan el
+  tamaño real maximizado; antes la UI quedaba estirada (~1.49×) y el mouse desfasado hasta que un
+  resize posterior disparara `HandleWindowResize`.
 
 ---
 
@@ -205,11 +210,14 @@ píxeles finales = unidades_lógicas × dpr × renderScale
 - `OnContentScaleChanged` → loguea (layout/RT se re-sincronizan cada frame en `OnUpdate`).
 - Ctor pasa `settings.window.hidpi`.
 
-### Paso 4 — Verificación (pendiente de prueba visual del usuario)
+### Paso 4 — Verificación ✅ (usuario, 2026-07-31)
 - A 125%: UI **más grande que antes** (igual que el resto de Windows), texto nítido nativo (1.25×
-  píxeles, sin stretch), mouse alineado, splitters correctos, ventana = 1346×700 lógicos.
-- A 100%: idéntico visual a hoy.
-- Toggle off (`hidpi: false`): comportamiento "Fixed 1×" actual.
+  píxeles, sin stretch), mouse alineado, splitters correctos, ventana = 1346×700 lógicos. ✅
+- A 100%: idéntico visual a hoy. ✅
+- Toggle off (`hidpi: false`): comportamiento "Fixed 1×" actual. ✅
+- Arranque maximizado (`maximized: true`, con y sin HiDPI): tamaño lógico correcto y mouse
+  alineado desde el primer frame (fix del ctor). ✅ (logs: `logical 1536x793` = fb÷1.25 con
+  HiDPI, `logical 1920x991` == fb en Fixed.)
 
 ### Pendientes a futuro (fuera de esta iteración)
 - `renderScale`: pixel-perfect 2D (RT base + nearest + integer scaling), screen percentage 3D.
