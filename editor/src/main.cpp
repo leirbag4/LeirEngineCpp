@@ -557,8 +557,6 @@ private:
             return;
 
         m_ViewportRT->Resize(fw, fh);
-        if (m_UIRenderer)
-            m_UIRenderer->InvalidateViewportDescriptor(m_ViewportRT.get());
 
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         auto* cameraObj = scene ? scene->FindObjectByName("Camera") : nullptr;

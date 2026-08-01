@@ -1,6 +1,7 @@
 #include "LeirEngine/Rendering/RenderTexture.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
 #include <stdexcept>
+#include <vector>
 
 namespace Leir {
 
@@ -10,12 +11,14 @@ RenderTexture::RenderTexture(VulkanDevice* device, uint32_t width, uint32_t heig
     CreateRenderPass();
     CreateSampler();
     CreateResources();
+    CreateDescriptorResources();
 }
 
 RenderTexture::~RenderTexture()
 {
     auto dev = m_Device->GetDevice();
     vkDeviceWaitIdle(dev);
+    DestroyDescriptorResources();
     DestroyResources();
     if (m_Sampler) vkDestroySampler(dev, m_Sampler, nullptr);
     if (m_RenderPass) vkDestroyRenderPass(dev, m_RenderPass, nullptr);
@@ -32,6 +35,7 @@ void RenderTexture::Resize(uint32_t width, uint32_t height)
     m_Width = width;
     m_Height = height;
     CreateResources();
+    UpdateDescriptor();
 }
 
 void RenderTexture::CreateRenderPass()
@@ -254,6 +258,60 @@ VkDescriptorImageInfo RenderTexture::GetDescriptorInfo() const
     info.imageView = m_ColorImageView;
     info.sampler = m_Sampler;
     return info;
+}
+
+void RenderTexture::CreateDescriptorResources()
+{
+    auto dev = m_Device->GetDevice();
+
+    // Layout (structurally identical to UIRenderer's UI texture layout: binding 0,
+    // combined image sampler, fragment). Descriptor sets from this layout are
+    // compatible with the UI pipeline layout.
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    m_DescSetLayout = m_Device->CreateDescriptorSetLayout({ binding });
+
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
+    };
+    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 1);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = m_DescPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &m_DescSetLayout;
+    if (vkAllocateDescriptorSets(dev, &allocInfo, &m_DescriptorSet) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate render texture descriptor set");
+
+    UpdateDescriptor();
+}
+
+void RenderTexture::UpdateDescriptor()
+{
+    auto dev = m_Device->GetDevice();
+    VkDescriptorImageInfo imgInfo = GetDescriptorInfo();
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_DescriptorSet;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &imgInfo;
+    vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
+}
+
+void RenderTexture::DestroyDescriptorResources()
+{
+    auto dev = m_Device->GetDevice();
+    if (m_DescPool) vkDestroyDescriptorPool(dev, m_DescPool, nullptr);
+    if (m_DescSetLayout) vkDestroyDescriptorSetLayout(dev, m_DescSetLayout, nullptr);
+    m_DescriptorSet = VK_NULL_HANDLE;
+    m_DescPool = VK_NULL_HANDLE;
+    m_DescSetLayout = VK_NULL_HANDLE;
 }
 
 } // namespace Leir

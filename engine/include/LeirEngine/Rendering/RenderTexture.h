@@ -17,6 +17,7 @@ public:
     void EndRender(VkCommandBuffer cmd);
 
     VkDescriptorImageInfo GetDescriptorInfo() const;
+    VkDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
     uint32_t GetWidth() const { return m_Width; }
     uint32_t GetHeight() const { return m_Height; }
     VkFramebuffer GetFramebuffer() const { return m_Framebuffer; }
@@ -29,6 +30,9 @@ private:
     void CreateSampler();
     void CreateResources();
     void DestroyResources();
+    void CreateDescriptorResources();
+    void UpdateDescriptor();
+    void DestroyDescriptorResources();
 
     VulkanDevice* m_Device;
     uint32_t m_Width, m_Height;
@@ -44,6 +48,10 @@ private:
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;
     VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
     VkSampler m_Sampler = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayout m_DescSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_DescPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_DescriptorSet = VK_NULL_HANDLE;
 };
 
 } // namespace Leir

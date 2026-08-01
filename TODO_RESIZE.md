@@ -200,7 +200,7 @@ acepta `flags` y el pool de la UI se crea con el flag.
   `InputManager::ToLogical` (Windows), `screenSize` lógico en UIRenderer, RT del viewport a
   `lógico × dpr`, fix de arranque maximizado. Docs en AGENTS.md actualizadas.
 - **Colapso de paneles + docking básico** (colapsar/expandir Hierarchy/Inspector + arrastrar título a zonas de drop). Pendiente (próximo paso).
-- **Refinar `InvalidateViewportDescriptor`** — pendiente: mover ownership del descriptor set a `RenderTexture` (alloc en ctor, re-write en resize, destroy en dtor; eliminar cache + invalidate; pool con growth).
+- **Refinar `InvalidateViewportDescriptor`** — IMPLEMENTADA (2026-07-31, ver `TODO_DESCRIPTORS_VIEWPORT.md`): ownership del descriptor set movido a `RenderTexture` (alloc en ctor, re-write en resize, destroy en dtor; eliminados cache + invalidate + `FREE_DESCRIPTOR_SET_BIT` del pool de la UI). El pool de la UI queda solo para texturas; cada viewport tiene su propio pool.
 - Más ideas a futuro: docking completo con pestañas/flotantes (requiere multi-window), `renderScale` (pixel-perfect 2D / screen percentage 3D).
 
 

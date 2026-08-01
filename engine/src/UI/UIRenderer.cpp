@@ -38,8 +38,7 @@ UIRenderer::UIRenderer(VulkanDevice* device)
     std::vector<VkDescriptorPoolSize> poolSizes = {
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 }
     };
-    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 64,
-        VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
+    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 64);
 
     // Pipeline layout
     VkPushConstantRange pushRange{};
@@ -158,45 +157,6 @@ void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const 
     m_DebugQuadTextures.push_back(texture ? texture : m_FallbackTex);
 }
 
-VkDescriptorSet UIRenderer::GetOrCreateVpDescSet(RenderTexture* rt)
-{
-    auto it = m_VpDescCache.find(rt);
-    if (it != m_VpDescCache.end())
-        return it->second;
-
-    VkDescriptorSet newSet;
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = m_DescPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &m_DescSetLayout;
-    if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-        spdlog::error("UIRenderer: failed to allocate viewport desc set");
-        return VK_NULL_HANDLE;
-    }
-    VkDescriptorImageInfo imgInfo = rt->GetDescriptorInfo();
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = newSet;
-    write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &imgInfo;
-    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-    m_VpDescCache[rt] = newSet;
-    return newSet;
-}
-
-void UIRenderer::InvalidateViewportDescriptor(RenderTexture* rt)
-{
-    auto it = m_VpDescCache.find(rt);
-    if (it == m_VpDescCache.end())
-        return;
-    if (m_DescPool != VK_NULL_HANDLE && it->second != VK_NULL_HANDLE)
-        vkFreeDescriptorSets(m_Device->GetDevice(), m_DescPool, 1, &it->second);
-    m_VpDescCache.erase(it);
-}
-
 void UIRenderer::Flush(VkCommandBuffer cmd)
 {
     size_t regCount = m_QuadTextures.size();
@@ -282,7 +242,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     // 2. Viewports (middle layer)
     uint32_t vpBase = (uint32_t)(regCount * 4);
     for (size_t i = 0; i < vpCount; ++i) {
-        VkDescriptorSet ds = GetOrCreateVpDescSet(m_ViewportDraws[i].texture);
+        VkDescriptorSet ds = m_ViewportDraws[i].texture->GetDescriptorSet();
         if (ds == VK_NULL_HANDLE) continue;
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             m_PipelineLayout, 0, 1, &ds, 0, nullptr);

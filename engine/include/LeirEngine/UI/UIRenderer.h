@@ -30,14 +30,11 @@ public:
     ~UIRenderer();
 
     void Render(VkCommandBuffer cmd, UICanvas* canvas);
-    void InvalidateViewportDescriptor(RenderTexture* rt);
 
 private:
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void Flush(VkCommandBuffer cmd);
-
-    VkDescriptorSet GetOrCreateVpDescSet(RenderTexture* rt);
 
     VulkanDevice* m_Device;
 
@@ -55,7 +52,6 @@ private:
     Texture2D* m_FallbackTex = nullptr;
 
     std::vector<ViewportDraw> m_ViewportDraws;
-    std::unordered_map<RenderTexture*, VkDescriptorSet> m_VpDescCache;
 
     std::vector<UIVertex> m_DebugVertices;
     std::vector<Texture2D*> m_DebugQuadTextures;
