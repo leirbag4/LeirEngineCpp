@@ -110,12 +110,9 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     if (!fullscreen) {
         int x, y;
         glfwGetWindowPos(m_Window, &x, &y);
-        if (maximized) {
-            // Window size already reflects the maximized size; keep the
-            // requested restored size instead.
-            m_Width = width;
-            m_Height = height;
-        }
+        // UpdateNormalRect discards the maximized state (keeps the last saved
+        // windowed rect), so m_Width/m_Height retain the actual logical size
+        // (maximized) instead of the restored size.
         UpdateNormalRect(x, y, m_Width, m_Height);
     }
 
