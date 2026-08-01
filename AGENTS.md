@@ -434,6 +434,17 @@ inherits layout, hit-test, input and rendering.
 - `DockSplitNode::ComputeLayout` — overrides the virtual `UIElement::ComputeLayout` to
   position children by ratios (absolute TopLeft + per-child `ComputeLayout` calls).
 - `DockDropZone` — `Left/Right/Top/Bottom` = split, `Center` = tab-merge (center 50% box).
+- **Tab reorder (same pane)**: dragging a tab over its own pane's **tab bar** (when the pane
+  has other tabs) reorders it on drop — the tab is repositioned by X against the sibling
+  tab centers (`DockPane::ReorderTabTo`; `UIElement::InsertChildAt` +
+  `DockTabBar::InsertTab` + `DockPane::InsertTab`). The zone highlight is hidden during
+  this gesture so it reads as a reorder, not a split. `OnPointerUp` uses the real drop
+  position (the pointer is captured during drag, so there is no per-tab hover).
+- **Split on own shared pane**: edge drops (Left/Right/Top/Bottom) on a pane that *also
+  hosts the dragged tab* split the pane when it has ≥2 tabs (`SplitPane`'s self-drop guard
+  only short-circuits when `GetTabCount() <= 1`). The dragged tab leaves the shared pane
+  into the new zone; the siblings stay behind. Center drop on the same pane still just
+  focuses the tab.
 - **Deferred close**: `DockTab` close clicks call `RequestClosePanel` (the tab must finish
   dispatching before being deleted); `DockManager::Process()` runs it once per frame (editor
   calls it in `OnUpdate`). After any structural mutation the manager calls
@@ -727,4 +738,10 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - HiDPI base (see `TODO_HIDPI.md`): `CoreApplication` ctor takes `hidpi` and creates the window at `logical × scale` physical px; `GetWidth/GetHeight` are now **logical** (`framebuffer ÷ GetContentScale()`), `GetFramebufferWidth/Height` physical, `GetContentScale()` (1.0 when HiDPI disabled); `OnContentScaleChanged()` virtual via `glfwSetWindowContentScaleCallback`. `InputManager::ToLogical()` divides cursor pos by the effective scale on Windows (physical there for DPI-aware processes, no-op on mac/linux), fed by `SetContentScale()`. `UIRenderer` push-constant `screenSize` = logical canvas size. Editor viewport `RenderTexture` sized at `logical × dpr`. `LeirSettings.window` added `hidpi` (default `true`). Diagnostic logs: DPI awareness context + surface currentExtent
 - Maximized-start fix (`CoreApplication` ctor): removed the `if (maximized) { m_Width = width; m_Height = height; }` overwrite — it clobbered the logical canvas size with the saved windowed size while `UpdateNormalRect` ignores the maximized state anyway. Starting maximized left the UI stretched (~1.49×) and mouse misaligned until a resize event fired; now `m_Width/m_Height` keep the real maximized logical size.
 - `RenderTexture` descriptor ownership (see `TODO_DESCRIPTORS_VIEWPORT.md`): the viewport descriptor set moved from `UIRenderer` (lazy cache `m_VpDescCache` + manual `InvalidateViewportDescriptor`) into `RenderTexture` — created in ctor, re-written in `Resize()`, destroyed in dtor, with its own `VkDescriptorSetLayout` + pool. UI binds `rt->GetDescriptorSet()` directly; stale-descriptor-by-forgetfulness is now impossible. Removed `UIRenderer::GetOrCreateVpDescSet`, `InvalidateViewportDescriptor`, `m_VpDescCache`, and `FREE_DESCRIPTOR_SET_BIT` from the UI texture pool (now textures-only). Editor no longer invalidates on viewport resize.
+- `UIElement::InsertChildAt(child, index)`: new public API — inserts a child at a given position in `m_Children` (clamped, auto-reparents like `AddChild`). Used to reorder tabs in a dock tab bar.
+- `DockPane::InsertTab(panel, index)` + `DockTabBar::InsertTab(panel, index)`: insert a tab at a specific index in both the tab list and the tab bar row.
+- `DockPane::ReorderTabTo(panel, pos)`: same-pane **tab reorder** — computes the insertion index from `pos.x` against sibling tab centers (adjusting `-1` when moving right so removal shifts the remaining tabs), then `RemoveTab` + `InsertTab` + `SetActivePanel`. Returns whether the order changed.
+- `DockPane::GetTabBar()`: accessor added so `DockManager` can test drop position against the tab-bar strip.
+- `DockManager::OnPointerUp` (DockManager.cpp): uses the real drop position (was discarded via `(void)pos`). Same-pane drops now: over the tab bar with ≥2 tabs → `ReorderTabTo`; Center → focus; edges → split. Other panes keep merge/split. `OnPointerMove` hides the zone highlight during a reorder gesture (own pane, ≥2 tabs, over tab bar) so only the ghost is shown.
+- `DockManager::SplitPane` self-drop guard relaxed: was `if (target->Contains(panel))` (any drop on the pane hosting the tab did nothing); now only short-circuits a pure self-drop when `target->GetTabCount() <= 1`. Edge drops on a shared pane (≥2 tabs) now split the pane and move the dragged tab into the new zone.
 

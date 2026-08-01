@@ -1,7 +1,8 @@
 # TODO: Sistema de docking profesional (tabs + anidamiento)
 
 Milestone Fase 1 (ventana única). El multi-window (ventanas flotantes del SO) es Fase 2
-de este documento. Estado: **Fase 1-2 completas; Fase 3 en curso (verificación manual)**.
+de este documento. Estado: **Fase 1-3 completas**. Pendiente futuro: Vulkan teardown
+(recursos no destruidos antes de `vkDestroyDevice`, registrado en `TODO.md`).
 
 ---
 
@@ -64,6 +65,18 @@ DockDropOverlay  → feedback visual (ghost + zona destacada) en la capa overlay
 3. `DockManager::OnPointerUp`: aplicar split/merge o cancelar; ocultar overlay; release.
    Fuera de cualquier pane → cancelar (Fase 1) / flotar (Fase 2).
 
+### Gestos (drop sobre el pane del propio tab)
+
+- **Reorder (tab bar del mismo pane, ≥2 tabs)**: `DockPane::ReorderTabTo(panel, pos)`
+  reinserta el tab por X contra los centros de los tabs hermanos
+  (`UIElement::InsertChildAt` + `DockTabBar::InsertTab` + `DockPane::InsertTab`). El
+  highlight de zona se oculta durante el gesto (solo ghost).
+- **Split en pane propio compartido (bordes, ≥2 tabs)**: el guard de `SplitPane`
+  (`target->Contains(panel)`) solo corto-circuita cuando `GetTabCount() <= 1` (self-drop
+  puro). Con ≥2 tabs, los bordes parten la columna y el tab arrastrado pasa a la nueva
+  zona; los hermanos se quedan.
+- **Center en el pane propio**: solo enfoca el tab (no-op).
+
 ---
 
 ## Fases
@@ -95,13 +108,20 @@ DockDropOverlay  → feedback visual (ghost + zona destacada) en la capa overlay
 - `settings.json`: sección `dock` (árbol serializado). Save en drag-end/close/shutdown;
   load al iniciar; si falta/inválido → layout default.
 
-### Fase 3 — Verificación
+### Fase 3 — Verificación ✅
 - Build engine + editor ✅ (ambos targets OK).
 - Persistencia round-trip ✅ (salir/reabrir; ratios estables tras fix de
   `AddNode`/`NormalizeRatios`; verificado en runtime).
-- Pendiente (manual): tab-merge, splits 4 direcciones, anidamiento, close tabs debug,
-  drag sin romper capture, clamps de ratios, resize de ventana, HiDPI, viewport RT +
-  camera sync, docs AGENTS.md.
+- Tab-merge ✅, splits 4 direcciones ✅, anidamiento ✅, close tabs debug ✅,
+  drag sin romper capture ✅, clamps de ratios ✅.
+- **Reorder de tabs en el mismo pane** ✅ (drop sobre la tab bar del pane propio con ≥2
+  tabs; `ReorderTabTo` reinserta por X). Verificado manualmente.
+- **Split en el pane propio compartido** ✅ (borde de un pane con ≥2 tabs parte la
+  columna; guard de `SplitPane` ahora solo aplica a self-drop puro `GetTabCount() <= 1`).
+  Verificado manualmente.
+- Pendiente: resize de ventana, HiDPI, viewport RT + camera sync (verificado en sesiones
+  previas), docs AGENTS.md (verificado), **Vulkan teardown** (`VUID-vkDestroyDevice-device-05137`
+  → registrado en `TODO.md`).
 
 ### Fase 2 del milestone — Multi-window (flotantes), NO incluida en esta iteración
 - Refactor de `VulkanDevice` a swapchain por ventana (`SwapchainTarget`; device/queues
