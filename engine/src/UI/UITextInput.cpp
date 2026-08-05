@@ -4,7 +4,7 @@
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/Keyboard.h"
 #include <cstdlib>
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -36,11 +36,11 @@ void UITextInput::OnPointerExit()
 
 bool UITextInput::OnPointerDown(const Vector2& pos)
 {
-    spdlog::trace("[TextInput '{}'] OnPointerDown frame={}", GetName().c_str(), m_FrameCounter);
+    XConsole::Trace("[TextInput '{}'] OnPointerDown frame={}", GetName().c_str(), m_FrameCounter);
     ResetCaretBlink();
 
     if (m_AutoSelect && !m_Focused) {
-        spdlog::trace("[TextInput '{}'] Auto-select all (first focus)", GetName().c_str());
+        XConsole::Trace("[TextInput '{}'] Auto-select all (first focus)", GetName().c_str());
         m_SelectionStart = 0;
         m_CursorPos = (int)m_Text.size();
         m_LastClickFrame = m_FrameCounter;
@@ -69,7 +69,7 @@ bool UITextInput::OnPointerDown(const Vector2& pos)
     m_LastClickPos = m_CursorPos;
 
     if (doubleClick) {
-        spdlog::trace("[TextInput '{}'] Double-click detected (frames={} posDiff={})", GetName().c_str(), framesSinceLast, posDiff);
+        XConsole::Trace("[TextInput '{}'] Double-click detected (frames={} posDiff={})", GetName().c_str(), framesSinceLast, posDiff);
         SelectWordAt(m_CursorPos);
         m_Dragging = false;
         return true;

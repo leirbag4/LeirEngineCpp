@@ -13,7 +13,7 @@
 #include "LeirEngine/Core/Transform.h"
 #include "LeirEngine/Scene/Scene.h"
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <cstring>
 
 
@@ -195,7 +195,7 @@ void RenderPipeline::CreateSpriteResources()
     Image fallbackImage(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     m_Sprite.fallbackTexture = new Texture2D(m_Device, fallbackImage);
 
-    spdlog::info("Sprite pipeline created");
+    XConsole::Println("Sprite pipeline created");
 }
 
 void RenderPipeline::DestroySpriteResources()
@@ -311,7 +311,7 @@ void RenderPipeline::RenderOverlay(VkCommandBuffer cmd, Scene* scene)
     }
 
     if (draws.empty()) {
-        spdlog::warn("RenderOverlay: no sprites to draw");
+        XConsole::PrintWarning("RenderOverlay: no sprites to draw");
         return;
     }
 
@@ -361,7 +361,7 @@ void RenderPipeline::RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &m_Sprite.descSetLayout;
         if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-            spdlog::error("RenderSprite: failed to allocate descriptor set");
+            XConsole::PrintError("RenderSprite: failed to allocate descriptor set");
             return;
         }
 
@@ -420,7 +420,7 @@ void RenderPipeline::RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* rende
         allocInfo.pSetLayouts = &uboLayout;
 
         if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &m_UBOSets[frame]) != VK_SUCCESS) {
-            spdlog::error("Failed to allocate UBO descriptor set");
+            XConsole::PrintError("Failed to allocate UBO descriptor set");
             return;
         }
 

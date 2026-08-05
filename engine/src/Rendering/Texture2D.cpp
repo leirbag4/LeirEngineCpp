@@ -3,7 +3,8 @@
 
 #include <stb_image.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
+#include <stdexcept>
 
 namespace Leir {
 
@@ -54,7 +55,7 @@ Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
     bool useFallback = false;
 
     if (!pixels) {
-        spdlog::error("Failed to load texture: {}", path);
+        XConsole::PrintError("Failed to load texture: {}", path);
         pixels = fallback;
         texWidth = texHeight = 1;
         texChannels = 4;
@@ -66,7 +67,7 @@ Texture2D::Texture2D(VulkanDevice* device, const std::string& path)
     if (!useFallback)
         stbi_image_free(pixels);
 
-    spdlog::info("Texture loaded: {} ({}x{})", path, m_Width, m_Height);
+    XConsole::Println("Texture loaded: {} ({}x{})", path, m_Width, m_Height);
 }
 
 Texture2D::Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,

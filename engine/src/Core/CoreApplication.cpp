@@ -6,7 +6,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -31,7 +31,7 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     , m_HidpiEnabled(hidpi)
 {
     if (!glfwInit()) {
-        spdlog::critical("Failed to initialize GLFW");
+        XConsole::PrintError("Failed to initialize GLFW");
         std::exit(EXIT_FAILURE);
     }
 
@@ -60,7 +60,7 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     m_Window = glfwCreateWindow(createW, createH, title, monitor, nullptr);
     if (!m_Window) {
-        spdlog::critical("Failed to create GLFW window");
+        XConsole::PrintError("Failed to create GLFW window");
         glfwTerminate();
         std::exit(EXIT_FAILURE);
     }
@@ -75,13 +75,13 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
             glfwMaximizeWindow(m_Window);
     }
 
-    spdlog::info("GLFW window created ({}x{} physical)", createW, createH);
+    XConsole::Println("GLFW window created ({}x{} physical)", createW, createH);
 
 #ifdef _WIN32
     {
         // Diagnostic: report the actual DPI awareness context (Paso 0 HiDPI)
         DpiAwareness awareness = GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
-        spdlog::info("DPI awareness: {}", (int)awareness);
+        XConsole::Println("DPI awareness: {}", (int)awareness);
     }
 #endif
 
@@ -101,7 +101,7 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
     m_Width = (int)std::lround(m_FbWidth / effScale);
     m_Height = (int)std::lround(m_FbHeight / effScale);
 
-    spdlog::info("Window sizes: logical {}x{}, framebuffer {}x{}, contentScale {:.2f}",
+    XConsole::Println("Window sizes: logical {}x{}, framebuffer {}x{}, contentScale {:.2f}",
         m_Width, m_Height, m_FbWidth, m_FbHeight, m_ContentScale);
 
     // Seed the tracked normal rect with the restored (windowed) values. In

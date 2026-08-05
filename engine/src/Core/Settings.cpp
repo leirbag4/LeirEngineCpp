@@ -3,7 +3,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
-#include <spdlog/spdlog.h>
+#include <exception>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -47,7 +48,7 @@ bool LeirSettings::Load(const std::string& path)
 
     std::ifstream f(m_Path);
     if (!f.is_open()) {
-        spdlog::warn("Settings file '{}' not found, creating with defaults", m_Path);
+        XConsole::PrintWarning("Settings file '{}' not found, creating with defaults", m_Path);
         SetDefaults();
         Save();
         return true;
@@ -76,10 +77,10 @@ bool LeirSettings::Load(const std::string& path)
 
         dock.layout = j.value("dock", nlohmann::json::object()).value("layout", "");
 
-        spdlog::info("Settings loaded from '{}'", m_Path);
+        XConsole::Println("Settings loaded from '{}'", m_Path);
         return true;
     } catch (const std::exception& e) {
-        spdlog::error("Failed to parse settings file '{}': {}", m_Path, e.what());
+        XConsole::PrintError("Failed to parse settings file '{}': {}", m_Path, e.what());
         SetDefaults();
         return false;
     }
@@ -114,14 +115,14 @@ bool LeirSettings::Save()
 
         std::ofstream f(m_Path);
         if (!f.is_open()) {
-            spdlog::error("Failed to write settings file '{}'", m_Path);
+            XConsole::PrintError("Failed to write settings file '{}'", m_Path);
             return false;
         }
         f << j.dump(4);
-        spdlog::info("Settings saved to '{}'", m_Path);
+        XConsole::Println("Settings saved to '{}'", m_Path);
         return true;
     } catch (const std::exception& e) {
-        spdlog::error("Failed to save settings: {}", e.what());
+        XConsole::PrintError("Failed to save settings: {}", e.what());
         return false;
     }
 }

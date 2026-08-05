@@ -13,7 +13,7 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 JPH_SUPPRESS_WARNINGS
 
@@ -78,7 +78,7 @@ void PhysicsWorld::Init() {
     m_PhysicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
     m_Initialized = true;
-    spdlog::info("PhysicsWorld initialized");
+    XConsole::Println("PhysicsWorld initialized");
 }
 
 void PhysicsWorld::Shutdown() {
@@ -98,7 +98,7 @@ void PhysicsWorld::Shutdown() {
     JPH::Factory::sInstance = nullptr;
 
     m_Initialized = false;
-    spdlog::info("PhysicsWorld shutdown");
+    XConsole::Println("PhysicsWorld shutdown");
 }
 
 PhysicsWorld::~PhysicsWorld() {

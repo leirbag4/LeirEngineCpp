@@ -45,13 +45,6 @@ FetchContent_Declare(soloud
     GIT_TAG master
 )
 
-# spdlog — logging
-FetchContent_Declare(spdlog
-    GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG v1.x
-    GIT_SHALLOW TRUE
-)
-
 # nlohmann/json — JSON serialization
 FetchContent_Declare(nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -71,4 +64,4 @@ FetchContent_Declare(cereal
     GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(glfw glm stb jolt soloud spdlog nlohmann_json cereal)
+FetchContent_MakeAvailable(glfw glm stb jolt soloud nlohmann_json cereal)

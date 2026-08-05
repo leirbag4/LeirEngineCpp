@@ -3,7 +3,7 @@
 #include "LeirEngine/UI/Dock/DockManager.h"
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/Input/InputManager.h"
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -32,7 +32,7 @@ bool DockSplitter::OnPointerDown(const Vector2& pos)
     UIElement* e = this;
     while (e) {
         if (auto* canvas = dynamic_cast<UICanvas*>(e)) {
-            spdlog::trace("[DockSplitter] capturing pointer for drag");
+            XConsole::Trace("[DockSplitter] capturing pointer for drag");
             canvas->CapturePointer(this);
             break;
         }

@@ -5,7 +5,7 @@
 #include "LeirEngine/Rendering/Mesh.h"
 #include "LeirEngine/Rendering/RenderPipeline.h"
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -109,7 +109,7 @@ void Material::CreateDescriptorSet()
     allocInfo.pSetLayouts = &m_DescriptorSetLayout;
 
     if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &m_DescriptorSet) != VK_SUCCESS)
-        spdlog::error("Failed to allocate material descriptor set");
+        XConsole::PrintError("Failed to allocate material descriptor set");
 }
 
 void Material::UpdateDescriptorSet()

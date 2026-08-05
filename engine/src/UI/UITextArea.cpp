@@ -3,7 +3,7 @@
 #include "LeirEngine/Input/Key.h"
 #include "LeirEngine/Input/Keyboard.h"
 #include <cstdlib>
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -218,7 +218,7 @@ bool UITextArea::OnPointerDown(const Vector2& pos)
     m_LastClickPos = m_CursorPos;
 
     if (doubleClick) {
-        spdlog::trace("[TextArea '{}'] Double-click detected (frames={} posDiff={})", GetName().c_str(), framesSinceLast, posDiff);
+        XConsole::Trace("[TextArea '{}'] Double-click detected (frames={} posDiff={})", GetName().c_str(), framesSinceLast, posDiff);
         SelectWordAt(m_CursorPos);
         m_Dragging = false;
         return true;

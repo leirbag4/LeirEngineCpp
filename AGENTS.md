@@ -16,7 +16,7 @@ A cross-platform C++ game engine built from scratch with Vulkan.
 | Image loading | stb_image, stb_image_write |
 | Fonts | stb_truetype + FreeType |
 | Serialization | nlohmann/json, cereal (binary) |
-| Logging | spdlog |
+| Logging | XConsole (propio, sin deps) |
 | Docs | Doxygen → HTML |
 
 ## Project Layout
@@ -93,6 +93,17 @@ cmake --build build/linux-debug
 - `LeirSettings::Get().Load()` called in `main()` before app creation
 - Editor reads settings for window size / fullscreen / position / maximized and the dock layout; saves on splitter drag end, panel close, and shutdown (`OnShutdown`)
 - Window placement persistence: `CoreApplication` tracks the "normal rect" (size/pos only when not maximized and not fullscreen) via GLFW size/pos callbacks, so exiting maximized or fullscreen never corrupts the saved windowed rect. Position is restored via `glfwSetWindowPos` (centered if unset), maximized via `glfwMaximizeWindow`, both ignored in fullscreen
+
+## XConsole Logging
+
+Own logging system (`Core/Log.h` + `Core/Log.cpp`), no external dependency (replaced spdlog).
+
+- `enum class LogLevel { Trace, Debug, Info, Warning, Error }` — levels are a verbosity *filter*: messages below the current level are discarded at the source (Trace/Debug are "silent by default").
+- API: `XConsole::Println` (Info), `PrintWarning`, `PrintError` (Error → **stderr**), `Trace`, `Debug`, `SetLevel`, `GetLevel`, `GetMessages()`, `Clear()`. All are `Leir::XConsole::`.
+- Formatting: `{}` + specs `{:.Nf}`, `{:Nd}`, `{:0Nd}` via a runtime variadic formatter (`std::any` + `std::ostringstream`). Format strings may be non-literal.
+- Output: `[HH:MM:SS.mmm] [level] message` → stdout (info/warn/debug/trace) and stderr (error). Every emitted message is also kept in a 1000-entry ring buffer (`GetMessages`) that will feed the future editor `ConsolePanel`.
+- Thread-safe (std::mutex; Jolt runs multithreaded). State lives in function-local statics in `Log.cpp`.
+- `ConsolePanel` (dockeable, filter buttons Info/Warn/Error, Unity-style) is **pending** — see `TODO_LOG_SYSTEM.md`.
 
 ## HiDPI (DPI awareness)
 
@@ -673,7 +684,7 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `FindPrevWordBoundary(from)` / `FindNextWordBoundary(from)` — word jump boundaries (Ctrl+Left/Right)
 - Double-click detection: two `OnPointerDown` within ≤15 frames (~250ms) AND `|pos1-pos2| ≤ 3` characters
 - Monotonic `m_FrameCounter` (never wraps, never resets by blink) for reliable timing
-- `spdlog::trace` logged on each double-click with framesSinceLast and posDiff
+- `XConsole::Trace` logged on each double-click with framesSinceLast and posDiff
 
 ### Ctrl+A select all
 - `Keyboard::IsDown(LeftControl|RightControl) && Key::A` → `m_SelectionStart = 0`, `m_CursorPos = len`
@@ -702,6 +713,8 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 
 ## Previous Changes Summary
 
+- `XConsole` logging system (`Core/Log.h` + `Core/Log.cpp`): own logger replacing spdlog. `LogLevel` enum (Trace/Debug/Info/Warning/Error, verbosity filter), API `Println`/`PrintWarning`/`PrintError`/`Trace`/`Debug`/`SetLevel`/`GetLevel`/`GetMessages`/`Clear`, runtime `{}` formatter (`std::any` + `ostringstream`; specs `{:.Nf}`/`{:Nd}`/`{:0Nd}`), 1000-entry thread-safe ring buffer, stdout (info/warn/debug/trace) + stderr (error). All state in function-local statics (no static-init-order issues).
+- spdlog removed: deleted FetchContent from `dependencies/CMakeLists.txt`, `spdlog::spdlog` from `engine/CMakeLists.txt` (added `Log.cpp`), migrated 94 call-sites in 20 files (`info`→`Println`, `warn`→`PrintWarning`, `error`/`critical`→`PrintError`, `trace`→`Trace`; `set_level`→`SetLevel`), editor/example qualified as `Leir::XConsole::`. Re-added `<exception>`/`<stdexcept>` where spdlog provided them transitively (Settings, Shader, Texture2D, DockManager). New doc `TODO_LOG_SYSTEM.md` (concepts, API, migration, future `ConsolePanel`).
 - `Settings.h`: added `debug.show_overlay` field
 - `UICanvas::GetHoveredElement()` added for editor camera viewport detection
 - `Keyboard.h`: added `#include <string>` for `GetPressedKeysString()`

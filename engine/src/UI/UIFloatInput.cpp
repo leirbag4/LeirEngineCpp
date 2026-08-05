@@ -1,7 +1,7 @@
 #include "LeirEngine/UI/UIFloatInput.h"
 #include <cstdlib>
 #include <cctype>
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -32,13 +32,13 @@ void UIFloatInput::SetValue(float v)
 bool UIFloatInput::OnTextInput(uint32_t codepoint)
 {
     if (!m_Focused) {
-        spdlog::trace("[FloatInput] OnTextInput ignored (not focused)");
+        XConsole::Trace("[FloatInput] OnTextInput ignored (not focused)");
         return false;
     }
 
     char c = (char)codepoint;
     if (std::isdigit(c) || c == '.' || c == '-' || c == '+') {
-        spdlog::trace("[FloatInput] Accept char '{}' text='{}'",
+        XConsole::Trace("[FloatInput] Accept char '{}' text='{}'",
             c, GetText().c_str());
         ResetCaretBlink();
         if (HasSelection())
@@ -46,36 +46,36 @@ bool UIFloatInput::OnTextInput(uint32_t codepoint)
         InsertChar(codepoint);
         return true;
     }
-    spdlog::trace("[FloatInput] Reject char '{}' (codepoint={})", c, codepoint);
+    XConsole::Trace("[FloatInput] Reject char '{}' (codepoint={})", c, codepoint);
     return false;
 }
 
 bool UIFloatInput::OnKeyDown(int key)
 {
     if (!m_Focused) {
-        spdlog::trace("[FloatInput] OnKeyDown ignored (not focused)");
+        XConsole::Trace("[FloatInput] OnKeyDown ignored (not focused)");
         return false;
     }
 
     if (key == 257 || key == 335) {
-        spdlog::trace("[FloatInput] Enter key -> CommitValue");
+        XConsole::Trace("[FloatInput] Enter key -> CommitValue");
         CommitValue();
         return true;
     }
 
-    spdlog::trace("[FloatInput] KeyDown key={}, forwarding to base", key);
+    XConsole::Trace("[FloatInput] KeyDown key={}, forwarding to base", key);
     return UITextInput::OnKeyDown(key);
 }
 
 void UIFloatInput::OnFocus()
 {
-    spdlog::trace("[FloatInput] OnFocus");
+    XConsole::Trace("[FloatInput] OnFocus");
     UITextInput::OnFocus();
 }
 
 void UIFloatInput::OnBlur()
 {
-    spdlog::trace("[FloatInput] OnBlur (was focused={})", m_Focused);
+    XConsole::Trace("[FloatInput] OnBlur (was focused={})", m_Focused);
     if (m_Focused) {
         CommitValue();
     }

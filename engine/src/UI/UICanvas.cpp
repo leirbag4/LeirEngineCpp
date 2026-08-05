@@ -1,7 +1,7 @@
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/Input/EventQueue.h"
 #include "LeirEngine/Core/Settings.h"
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <string>
 
 namespace Leir {
@@ -83,16 +83,16 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
     Vector2 pos = e.position;
     const bool trace = LeirSettings::Get().debug.ui_event_log;
 
-    spdlog::trace("[Canvas] ProcessPointerEvent: source={} action={} pos=({:.1f},{:.1f}) btn={} capture={}",
+    XConsole::Trace("[Canvas] ProcessPointerEvent: source={} action={} pos=({:.1f},{:.1f}) btn={} capture={}",
         (int)e.source, (int)e.action, pos.x, pos.y, (int)e.button,
         m_CaptureElement ? m_CaptureElement->GetName().c_str() : "null");
 
     // If an element has captured the pointer, route everything to it
     if (m_CaptureElement && e.action != EventAction::Press) {
-        spdlog::trace("[Canvas] Captured -> {} (action={})",
+        XConsole::Trace("[Canvas] Captured -> {} (action={})",
             m_CaptureElement->GetName().c_str(), (int)e.action);
         if (trace)
-            spdlog::info("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) btn={} -> captured '{}'",
+            XConsole::Println("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) btn={} -> captured '{}'",
                 (int)e.source, (int)e.action, pos.x, pos.y, (int)e.button,
                 m_CaptureElement->GetName().c_str());
         if (e.action == EventAction::Move)
@@ -100,9 +100,9 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         else if (e.action == EventAction::Release) {
             m_CaptureElement->OnPointerUp(pos);
             if (trace)
-                spdlog::info("[UIEvent] Release -> captured '{}' ended",
+                XConsole::Println("[UIEvent] Release -> captured '{}' ended",
                     m_CaptureElement->GetName().c_str());
-            spdlog::trace("[Canvas] ReleaseCapture");
+            XConsole::Trace("[Canvas] ReleaseCapture");
             m_CaptureElement = nullptr;
         }
         return;
@@ -110,7 +110,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 
     UIElement* hit = nullptr;
     HitTest(pos, hit);
-    spdlog::trace("[Canvas] HitTest: {} (prev hover: {})",
+    XConsole::Trace("[Canvas] HitTest: {} (prev hover: {})",
         hit ? hit->GetName().c_str() : "null",
         m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
 
@@ -126,7 +126,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             m_HoveredElement->OnPointerEnter(pos);
         }
         if (trace)
-            spdlog::info("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) hover -> '{}'",
+            XConsole::Println("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) hover -> '{}'",
                 (int)e.source, (int)e.action, pos.x, pos.y,
                 m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
     }
@@ -147,7 +147,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
                 if (trace && target) tried += " -> " + target->GetName();
             }
 
-            spdlog::trace("[Canvas] Press target: {} (hit: {})",
+            XConsole::Trace("[Canvas] Press target: {} (hit: {})",
                 target ? target->GetName().c_str() : "null",
                 hit->GetName().c_str());
 
@@ -157,15 +157,15 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
                 SetFocus(hit);
 
             if (trace)
-                spdlog::info("[UIEvent] Press pos=({:.1f},{:.1f}) hit='{}' tried=[{}] handled='{}' focus='{}' capture='{}'",
+                XConsole::Println("[UIEvent] Press pos=({:.1f},{:.1f}) hit='{}' tried=[{}] handled='{}' focus='{}' capture='{}'",
                     pos.x, pos.y, hit->GetName().c_str(), tried.c_str(),
                     target ? target->GetName().c_str() : "null",
                     m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
                     m_CaptureElement ? m_CaptureElement->GetName().c_str() : "null");
         } else {
-            spdlog::trace("[Canvas] Press on empty area, clearing focus");
+            XConsole::Trace("[Canvas] Press on empty area, clearing focus");
             if (trace)
-                spdlog::info("[UIEvent] Press pos=({:.1f},{:.1f}) hit=null (empty area), focus cleared",
+                XConsole::Println("[UIEvent] Press pos=({:.1f},{:.1f}) hit=null (empty area), focus cleared",
                     pos.x, pos.y);
             ClearFocus();
         }
@@ -177,14 +177,14 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             UIElement* target = hit;
             while (target && !target->OnPointerUp(pos))
                 target = target->GetParent();
-            spdlog::trace("[Canvas] Release target: {}",
+            XConsole::Trace("[Canvas] Release target: {}",
                 target ? target->GetName().c_str() : "null");
             if (trace)
-                spdlog::info("[UIEvent] Release pos=({:.1f},{:.1f}) hit='{}' handled='{}'",
+                XConsole::Println("[UIEvent] Release pos=({:.1f},{:.1f}) hit='{}' handled='{}'",
                     pos.x, pos.y, hit->GetName().c_str(),
                     target ? target->GetName().c_str() : "null");
         } else if (trace) {
-            spdlog::info("[UIEvent] Release pos=({:.1f},{:.1f}) hit=null", pos.x, pos.y);
+            XConsole::Println("[UIEvent] Release pos=({:.1f},{:.1f}) hit=null", pos.x, pos.y);
         }
     }
 }
@@ -192,11 +192,11 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
 void UICanvas::SetFocus(UIElement* element)
 {
     if (m_FocusElement == element) return;
-    spdlog::trace("[Canvas] Focus change: {} -> {}",
+    XConsole::Trace("[Canvas] Focus change: {} -> {}",
         m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
         element ? element->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        spdlog::info("[UIEvent] Focus change: '{}' -> '{}'",
+        XConsole::Println("[UIEvent] Focus change: '{}' -> '{}'",
             m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
             element ? element->GetName().c_str() : "null");
     if (m_FocusElement)
@@ -208,11 +208,11 @@ void UICanvas::SetFocus(UIElement* element)
 
 void UICanvas::SendTextInput(uint32_t codepoint)
 {
-    spdlog::trace("[Canvas] SendTextInput: codepoint={} ('{}') focus={}",
+    XConsole::Trace("[Canvas] SendTextInput: codepoint={} ('{}') focus={}",
         codepoint, (char)codepoint,
         m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        spdlog::info("[UIEvent] Text '{}' -> focus '{}'",
+        XConsole::Println("[UIEvent] Text '{}' -> focus '{}'",
             (char)codepoint,
             m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
@@ -221,10 +221,10 @@ void UICanvas::SendTextInput(uint32_t codepoint)
 
 void UICanvas::SendKeyDown(int key)
 {
-    spdlog::trace("[Canvas] SendKeyDown: key={} focus={}",
+    XConsole::Trace("[Canvas] SendKeyDown: key={} focus={}",
         key, m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        spdlog::info("[UIEvent] Key {} -> focus '{}'",
+        XConsole::Println("[UIEvent] Key {} -> focus '{}'",
             key, m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
         m_FocusElement->OnKeyDown(key);

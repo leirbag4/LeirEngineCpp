@@ -18,7 +18,7 @@
 #include "LeirEngine/Core/Settings.h"
 
 #include <algorithm>
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -109,7 +109,7 @@ UIRenderer::UIRenderer(VulkanDevice* device)
             m_VertexMemories[f]);
     }
 
-    spdlog::info("UIRenderer created");
+    XConsole::Println("UIRenderer created");
 }
 
 UIRenderer::~UIRenderer()
@@ -167,7 +167,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     size_t totalVerts = m_Vertices.size() + vpCount * 4 + m_DebugVertices.size();
     if (totalVerts == 0) return;
     if ((int)totalVerts > m_MaxVertices) {
-        spdlog::warn("UIRenderer: overflow");
+        XConsole::PrintWarning("UIRenderer: overflow");
         m_Vertices.clear(); m_QuadTextures.clear();
         m_ViewportDraws.clear();
         m_DebugVertices.clear(); m_DebugQuadTextures.clear();
@@ -220,7 +220,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &m_DescSetLayout;
             if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-                spdlog::error("UIRenderer: failed to allocate desc set");
+                XConsole::PrintError("UIRenderer: failed to allocate desc set");
                 continue;
             }
             VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
@@ -263,7 +263,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &m_DescSetLayout;
             if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-                spdlog::error("UIRenderer: failed to allocate debug desc set");
+                XConsole::PrintError("UIRenderer: failed to allocate debug desc set");
                 continue;
             }
             VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();

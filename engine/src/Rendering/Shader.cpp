@@ -1,8 +1,9 @@
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <fstream>
+#include <stdexcept>
 
 namespace Leir {
 
@@ -31,7 +32,7 @@ Shader::Shader(VulkanDevice* device, const std::string& vertexPath, const std::s
         m_StageInfos.push_back(info);
     }
 
-    spdlog::info("Shader loaded: {} + {}", vertexPath, fragmentPath);
+    XConsole::Println("Shader loaded: {} + {}", vertexPath, fragmentPath);
 }
 
 Shader::~Shader()

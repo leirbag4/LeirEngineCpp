@@ -7,7 +7,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <cstring>
 
 namespace Leir {
@@ -18,7 +18,7 @@ Image::Image(const std::string& path)
     stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
     if (!pixels) {
-        spdlog::error("Image: failed to load {}", path);
+        XConsole::PrintError("Image: failed to load {}", path);
         m_Width = 1;
         m_Height = 1;
         m_Data.resize(4, 255);
@@ -32,7 +32,7 @@ Image::Image(const std::string& path)
     memcpy(m_Data.data(), pixels, m_Data.size());
     stbi_image_free(pixels);
 
-    spdlog::info("Image loaded: {} ({}x{})", path, m_Width, m_Height);
+    XConsole::Println("Image loaded: {} ({}x{})", path, m_Width, m_Height);
 }
 
 Image::Image(uint32_t width, uint32_t height, const Vector4& color)
@@ -84,9 +84,9 @@ void Image::SavePNG(const std::string& path) const
     int result = stbi_write_png(path.c_str(), (int)m_Width, (int)m_Height, 4,
                                 m_Data.data(), (int)m_Width * 4);
     if (result)
-        spdlog::info("Image saved: {}", path);
+        XConsole::Println("Image saved: {}", path);
     else
-        spdlog::error("Image: failed to save {}", path);
+        XConsole::PrintError("Image: failed to save {}", path);
 }
 
 std::unique_ptr<Image> Image::Clone() const

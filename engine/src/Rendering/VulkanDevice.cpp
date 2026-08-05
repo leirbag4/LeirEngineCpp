@@ -3,7 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 #include <set>
 #include <cstring>
 #include <algorithm>
@@ -42,7 +42,7 @@ VulkanDevice::VulkanDevice(GLFWwindow* window, const VulkanDeviceConfig& config)
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
-    spdlog::info("Vulkan device initialized");
+    XConsole::Println("Vulkan device initialized");
 }
 
 VulkanDevice::~VulkanDevice()
@@ -115,10 +115,10 @@ void VulkanDevice::CreateInstance()
     }
 
     if (vkCreateInstance(&createInfo, nullptr, &m_Instance) != VK_SUCCESS) {
-        spdlog::critical("Failed to create Vulkan instance");
+        XConsole::PrintError("Failed to create Vulkan instance");
         throw std::runtime_error("Vulkan instance creation failed");
     }
-    spdlog::info("Vulkan instance created");
+    XConsole::Println("Vulkan instance created");
 }
 
 // ---- Debug Messenger ----
@@ -138,7 +138,7 @@ void VulkanDevice::SetupDebugMessenger()
         m_Instance, "vkCreateDebugUtilsMessengerEXT");
     if (func) {
         if (func(m_Instance, &info, nullptr, &m_DebugMessenger) != VK_SUCCESS) {
-            spdlog::warn("Failed to set up Vulkan debug messenger");
+            XConsole::PrintWarning("Failed to set up Vulkan debug messenger");
         }
     }
 }
@@ -150,9 +150,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::DebugCallback(
     void* /*userData*/)
 {
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-        spdlog::error("Vulkan: {}", data->pMessage);
+        XConsole::PrintError("Vulkan: {}", data->pMessage);
     else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        spdlog::warn("Vulkan: {}", data->pMessage);
+        XConsole::PrintWarning("Vulkan: {}", data->pMessage);
     return VK_FALSE;
 }
 
@@ -186,7 +186,7 @@ void VulkanDevice::PickPhysicalDevice()
 
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
-    spdlog::info("GPU: {} (type: {})", props.deviceName,
+    XConsole::Println("GPU: {} (type: {})", props.deviceName,
         props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "discrete" : "integrated");
 }
 
@@ -241,7 +241,7 @@ SwapchainSupport VulkanDevice::QuerySwapchainSupport(VkPhysicalDevice device) co
 {
     SwapchainSupport support;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_Surface, &support.capabilities);
-    spdlog::info("Surface capabilities: currentExtent {}x{}, min {}x{}, max {}x{}",
+    XConsole::Println("Surface capabilities: currentExtent {}x{}, min {}x{}, max {}x{}",
         support.capabilities.currentExtent.width, support.capabilities.currentExtent.height,
         support.capabilities.minImageExtent.width, support.capabilities.minImageExtent.height,
         support.capabilities.maxImageExtent.width, support.capabilities.maxImageExtent.height);

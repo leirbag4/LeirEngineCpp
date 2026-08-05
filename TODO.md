@@ -6,7 +6,7 @@
 
 ## Fase 0 — Setup Inicial
 - [x] Crear estructura de directorios del proyecto
-- [x] `dependencies/CMakeLists.txt` con FetchContent (GLFW, GLM, Vulkan, stb, Jolt, SoLoud, spdlog, nlohmann_json, cereal)
+- [x] `dependencies/CMakeLists.txt` con FetchContent (GLFW, GLM, Vulkan, stb, Jolt, SoLoud, nlohmann_json, cereal)
 - [x] `CMakeLists.txt` raíz con superbuild
 - [x] `CMakePresets.json` (windows-debug, windows-release, linux-debug)
 - [x] `engine/CMakeLists.txt` → compila `LeirEngine.dll` / `LeirEngine.so`
@@ -28,7 +28,7 @@
 - [x] Sistema de componentes: `addComponent<T>`, `getComponent<T>`, `hasComponent<T>`, `removeComponent<T>`
 - [x] `Application` (main loop, deltaTime, init/shutdown, SceneManager + InputManager integrados)
 - [x] `InputManager` (wrap GLFW: keyboard, mouse, gamepad, edge detection)
-- [x] Logging con spdlog integrado
+- [x] Logging propio `XConsole` (Core/Log.h + Log.cpp) — reemplaza spdlog: formatter runtime, ring buffer 1000, stdout/stderr. Ver `TODO_LOG_SYSTEM.md`
 
 ## Fase 2 — Renderer (Vulkan)
 - [x] `RHI` (Render Hardware Interface): Device, Swapchain, CommandBuffer
@@ -91,7 +91,7 @@
 - [ ] `HierarchyPanel` (árbol de objetos en Scene) — hoy es solo un panel estático con título
 - [x] `InspectorPanel` — `InspectorTransformPanel` (transform en vivo; falta listado de componentes)
 - [x] `SceneViewPanel` (viewport 3D con `UIViewportPanel` + RenderTexture + EditorCamera)
-- [ ] `ConsolePanel` (output de spdlog en tiempo real)
+- [ ] `ConsolePanel` (output de `XConsole` en tiempo real, dockeable, filtros Info/Warn/Error — ver `TODO_LOG_SYSTEM.md`)
 - [ ] `ProjectPanel` (explorador de archivos)
 - [ ] Gizmos 3D (translate, rotate, scale handles)
 - [ ] Selección de objetos con raycast

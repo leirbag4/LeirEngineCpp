@@ -1,5 +1,5 @@
 #include "UIDragFloatInput.h"
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 UIDragFloatInput::UIDragFloatInput()
 {
@@ -64,7 +64,7 @@ bool UIDragFloatInput::OnPointerDown(const Leir::Vector2& pos)
     bool onLabel = pos.x >= lr.x && pos.x <= lr.x + lr.z &&
                    pos.y >= lr.y && pos.y <= lr.y + lr.w;
 
-    spdlog::trace("[DragInput '{}'] OnPointerDown pos=({:.1f},{:.1f}) labelRect=({:.1f},{:.1f},{:.1f},{:.1f}) onLabel={}",
+    Leir::XConsole::Trace("[DragInput '{}'] OnPointerDown pos=({:.1f},{:.1f}) labelRect=({:.1f},{:.1f},{:.1f},{:.1f}) onLabel={}",
         m_Label->GetText().c_str(), pos.x, pos.y, lr.x, lr.y, lr.z, lr.w, onLabel);
 
     if (!onLabel) return false;
@@ -77,7 +77,7 @@ bool UIDragFloatInput::OnPointerDown(const Leir::Vector2& pos)
     while (e) {
         auto* c = dynamic_cast<Leir::UICanvas*>(e);
         if (c) {
-            spdlog::trace("[DragInput] Capturing pointer for drag");
+            Leir::XConsole::Trace("[DragInput] Capturing pointer for drag");
             c->CapturePointer(this);
             break;
         }
@@ -93,7 +93,7 @@ void UIDragFloatInput::OnPointerMove(const Leir::Vector2& pos)
 
     float delta = (pos.x - m_DragStartX) * 0.01f;
     float newVal = m_DragStartValue + delta;
-    spdlog::trace("[DragInput] DragMove: dragStartX={:.1f} currentX={:.1f} delta={:.4f} value={:.3f}",
+    Leir::XConsole::Trace("[DragInput] DragMove: dragStartX={:.1f} currentX={:.1f} delta={:.4f} value={:.3f}",
         m_DragStartX, pos.x, delta, newVal);
     SetValue(newVal);
     if (m_OnValueChanged)
@@ -103,7 +103,7 @@ void UIDragFloatInput::OnPointerMove(const Leir::Vector2& pos)
 bool UIDragFloatInput::OnPointerUp(const Leir::Vector2& pos)
 {
     if (!m_Dragging) return false;
-    spdlog::trace("[DragInput] DragEnd");
+    Leir::XConsole::Trace("[DragInput] DragEnd");
     m_Dragging = false;
     return true;
 }

@@ -43,7 +43,7 @@
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 #include <memory>
 #include <algorithm>
@@ -214,7 +214,7 @@ public:
 protected:
     void OnInit() override
     {
-        spdlog::info("Editor initialized");
+        Leir::XConsole::Println("Editor initialized");
 
         Leir::VulkanDeviceConfig config;
         config.appName = "LeirEngine Editor";
@@ -331,7 +331,7 @@ protected:
             fclose(testFont);
             fontPath = "C:/Windows/Fonts/consola.ttf";
         } else {
-            spdlog::warn("No system font found, text will not render");
+            Leir::XConsole::PrintWarning("No system font found, text will not render");
         }
 
         if (!fontPath.empty()) {
@@ -461,9 +461,9 @@ protected:
                 Leir::LeirSettings::Get().dock.layout = m_DockManager->SerializeLayout();
                 Leir::LeirSettings::Get().Save();
             } catch (const std::exception& e) {
-                spdlog::error("Dock layout serialization failed: {}", e.what());
+                Leir::XConsole::PrintError("Dock layout serialization failed: {}", e.what());
             } catch (...) {
-                spdlog::error("Dock layout serialization failed (unknown error)");
+                Leir::XConsole::PrintError("Dock layout serialization failed (unknown error)");
             }
         });
 
@@ -478,7 +478,7 @@ protected:
 
         m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
 
-        spdlog::info("Scene hierarchy created with dock system");
+        Leir::XConsole::Println("Scene hierarchy created with dock system");
     }
 
     void OnUpdate(float deltaTime) override
@@ -575,7 +575,7 @@ protected:
 
     void OnShutdown() override
     {
-        spdlog::info("Editor shutting down");
+        Leir::XConsole::Println("Editor shutting down");
         auto& settings = Leir::LeirSettings::Get();
         // Persist the dock tree (tabs, splits, ratios, closed panels)
         settings.dock.layout = m_DockManager ? m_DockManager->SerializeLayout() : "";
@@ -634,7 +634,7 @@ protected:
         // DPI changed (e.g. monitor moved / system scale changed). The logical
         // size is updated by the framebuffer callback; re-layout and re-size
         // the viewport RT happen each frame, so just log the change.
-        spdlog::info("Content scale changed to {:.2f} (logical {}x{})",
+        Leir::XConsole::Println("Content scale changed to {:.2f} (logical {}x{})",
             GetContentScale(), GetWidth(), GetHeight());
     }
 
@@ -665,7 +665,7 @@ private:
                 cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 100.0f);
         }
 
-        spdlog::info("Viewport resized to {}x{} ({}x{} physical)", w, h, fw, fh);
+        Leir::XConsole::Println("Viewport resized to {}x{} ({}x{} physical)", w, h, fw, fh);
     }
 
     std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
@@ -705,7 +705,7 @@ private:
 
 int main()
 {
-    spdlog::set_level(spdlog::level::trace);
+    Leir::XConsole::SetLevel(Leir::LogLevel::Trace);
 
     std::set_terminate(&OnTerminate);
     _set_invalid_parameter_handler(&OnInvalidParam);
@@ -717,10 +717,10 @@ int main()
         EditorApp app;
         app.Run();
     } catch (const std::exception& e) {
-        spdlog::critical("Uncaught exception in main: {}", e.what());
+        Leir::XConsole::PrintError("Uncaught exception in main: {}", e.what());
         return 1;
     } catch (...) {
-        spdlog::critical("Uncaught unknown exception in main");
+        Leir::XConsole::PrintError("Uncaught unknown exception in main");
         return 1;
     }
 

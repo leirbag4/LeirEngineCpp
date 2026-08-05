@@ -6,7 +6,7 @@
 #include <stb_truetype.h>
 
 #include <cstdio>
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -15,7 +15,7 @@ Font::Font(VulkanDevice* device, const std::string& ttfPath, int fontSize)
 {
     FILE* f = fopen(ttfPath.c_str(), "rb");
     if (!f) {
-        spdlog::error("Font: failed to open {}", ttfPath);
+        XConsole::PrintError("Font: failed to open {}", ttfPath);
         m_LineHeight = (float)fontSize;
         m_Ascender = (float)fontSize;
         m_SpaceWidth = (float)fontSize * 0.5f;
@@ -31,7 +31,7 @@ Font::Font(VulkanDevice* device, const std::string& ttfPath, int fontSize)
 
     stbtt_fontinfo info;
     if (!stbtt_InitFont(&info, m_TTFData.data(), 0)) {
-        spdlog::error("Font: failed to init {}", ttfPath);
+        XConsole::PrintError("Font: failed to init {}", ttfPath);
         m_LineHeight = (float)fontSize;
         m_Ascender = (float)fontSize;
         m_SpaceWidth = (float)fontSize * 0.5f;
@@ -80,7 +80,7 @@ Font::Font(VulkanDevice* device, const std::string& ttfPath, int fontSize)
 
     BuildAtlas();
 
-    spdlog::info("Font loaded: {} ({}px, {} glyphs)", ttfPath, fontSize, m_PackedGlyphs.size());
+    XConsole::Println("Font loaded: {} ({}px, {} glyphs)", ttfPath, fontSize, m_PackedGlyphs.size());
 }
 
 Font::~Font() = default;
@@ -137,7 +137,7 @@ void Font::BuildAtlas()
 
         // Skip glyph if it doesn't fit vertically
         if (cursorY + pg.h + 1 > atlasH) {
-            spdlog::warn("Font: glyph {} (codepoint {}) exceeds atlas height, skipping", pg.codepoint, pg.codepoint);
+            XConsole::PrintWarning("Font: glyph {} (codepoint {}) exceeds atlas height, skipping", pg.codepoint, pg.codepoint);
             continue;
         }
 

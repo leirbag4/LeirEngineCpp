@@ -17,7 +17,7 @@
 #include <LeirEngine/Physics/Collider.h>
 #include <LeirEngine/Input/Mouse.h>
 
-#include <spdlog/spdlog.h>
+#include "LeirEngine/Core/Log.h"
 
 #include <memory>
 #include <vector>
@@ -39,7 +39,7 @@ public:
 protected:
     void OnInit() override
     {
-        spdlog::info("Physics Demo initializing");
+        Leir::XConsole::Println("Physics Demo initializing");
 
         // ---- Vulkan ----
         Leir::VulkanDeviceConfig config;
@@ -132,7 +132,7 @@ protected:
             }
         }
 
-        spdlog::info("Physics Demo initialized — 9 boxes + ground");
+        Leir::XConsole::Println("Physics Demo initialized — 9 boxes + ground");
     }
 
     void OnUpdate(float deltaTime) override
@@ -180,7 +180,7 @@ protected:
                     ++renderable;
             }
             auto& t = m_CameraObj->GetTransform();
-            spdlog::info("Frame {}: cam=({:.1f},{:.1f},{:.1f}) objs={}", 
+            Leir::XConsole::Println("Frame {}: cam=({:.1f},{:.1f},{:.1f}) objs={}", 
                 frameCount, t.GetWorldPosition().x, t.GetWorldPosition().y, t.GetWorldPosition().z, renderable);
         }
     }
@@ -197,7 +197,7 @@ protected:
 
     void OnShutdown() override
     {
-        spdlog::info("Shutting down Physics Demo");
+        Leir::XConsole::Println("Shutting down Physics Demo");
 
         auto& sm = Leir::SceneManager::GetInstance();
         sm.DestroyScene("Main Scene");
@@ -223,7 +223,7 @@ private:
 
 int main()
 {
-    spdlog::set_level(spdlog::level::info);
+    Leir::XConsole::SetLevel(Leir::LogLevel::Info);
 
     PhysicsDemo app;
     app.Run();

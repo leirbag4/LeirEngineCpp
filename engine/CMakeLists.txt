@@ -1,6 +1,7 @@
 add_library(LeirEngine SHARED
     src/Core/CoreApplication.cpp
     src/Core/Settings.cpp
+    src/Core/Log.cpp
     src/Core/CoreObject.cpp
     src/Core/Component.cpp
     src/Core/Transform.cpp
@@ -103,7 +104,6 @@ target_link_libraries(LeirEngine
     PUBLIC
         glfw
         glm
-        spdlog::spdlog
     PRIVATE
         nlohmann_json::nlohmann_json
         cereal::cereal

@@ -9,7 +9,8 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
-#include <spdlog/spdlog.h>
+#include <exception>
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -249,7 +250,7 @@ bool DockManager::LoadLayout(const std::string& json)
         }
         return true;
     } catch (const std::exception& e) {
-        spdlog::error("DockManager: failed to parse dock layout: {}", e.what());
+        XConsole::PrintError("DockManager: failed to parse dock layout: {}", e.what());
         BuildDefaultLayout();
         return false;
     }
@@ -411,7 +412,7 @@ void DockManager::BeginTabDrag(DockTab* tab, const Vector2& pos)
     UIElement* e = this;
     while (e) {
         if (auto* canvas = dynamic_cast<UICanvas*>(e)) {
-            spdlog::trace("[DockManager] capturing pointer for tab drag");
+            XConsole::Trace("[DockManager] capturing pointer for tab drag");
             canvas->CapturePointer(this);
             break;
         }
