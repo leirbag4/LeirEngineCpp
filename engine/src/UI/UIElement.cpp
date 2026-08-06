@@ -279,9 +279,11 @@ void UIElement::ComputeColumnLayout(const Vector2& availableSize)
         switch (child->m_SizePolicy) {
             case SizePolicy::Fixed:
                 childH = child->GetMinSize().y;
+                childW = std::max(child->GetMinSize().x, innerW);
                 break;
             case SizePolicy::Content:
                 childH = std::max(child->GetContentSize().y, child->GetMinSize().y);
+                childW = std::max(std::max(child->GetContentSize().x, child->GetMinSize().x), innerW);
                 break;
             case SizePolicy::Fill:
                 childH = std::max(fillTotal, child->GetMinSize().y);

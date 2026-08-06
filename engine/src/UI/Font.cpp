@@ -207,8 +207,8 @@ Vector2 Font::MeasureText(const std::string& text, float maxWidth) const
 {
     if (text.empty()) return {0.0f, m_LineHeight};
 
-    float x = 0, y = 0;
-    float w = 0, h = m_LineHeight;
+    float x = 0.0f, y = 0.0f;
+    float lineW = 0.0f, blockW = 0.0f, h = m_LineHeight;
     for (size_t i = 0; i < text.size();) {
         uint32_t cp = (unsigned char)text[i];
         if (cp < 0x80) { ++i; }
@@ -217,10 +217,13 @@ Vector2 Font::MeasureText(const std::string& text, float maxWidth) const
         else { ++i; continue; }
 
         if (cp == '\n') {
-            if (x > w) w = x;
-            x = 0;
-            y += m_LineHeight;
-            h += m_LineHeight;
+            if (lineW > blockW) blockW = lineW;
+            x = 0.0f; lineW = 0.0f;
+            y += m_LineHeight; h += m_LineHeight;
+            continue;
+        }
+        if (cp == ' ') {
+            x += m_SpaceWidth;
             continue;
         }
 
@@ -228,18 +231,21 @@ Vector2 Font::MeasureText(const std::string& text, float maxWidth) const
         if (it == m_GlyphCache.end()) it = m_GlyphCache.find(63);
         if (it == m_GlyphCache.end()) continue;
 
-        float nextX = x + it->second.advance;
+        const auto& g = it->second;
+        float nextX = x + g.advance;
         if (maxWidth > 0 && nextX > maxWidth && x > 0) {
-            if (x > w) w = x;
-            x = 0;
-            y += m_LineHeight;
-            h += m_LineHeight;
-            nextX = it->second.advance;
+            if (lineW > blockW) blockW = lineW;
+            x = 0.0f; lineW = 0.0f;
+            y += m_LineHeight; h += m_LineHeight;
+            nextX = g.advance;
         }
+
+        float glyphRight = x + g.bearing.x + g.size.x;
+        if (glyphRight > lineW) lineW = glyphRight;
         x = nextX;
     }
-    if (x > w) w = x;
-    return {w, h};
+    if (lineW > blockW) blockW = lineW;
+    return {blockW, h};
 }
 
 std::vector<Vector4> Font::LayoutText(const std::string& text, float maxWidth) const

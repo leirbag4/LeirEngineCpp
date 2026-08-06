@@ -101,6 +101,7 @@ void ScrollView::OnLayoutComputed()
 {
     const auto& cr = GetComputedRect();
     const float availW = std::max(1.0f, GetViewportSize().x);
+    const float layoutW = std::max(availW, GetContentSize().x);
 
     // Clamp to the current content size before positioning.
     m_ScrollOffset.x = std::clamp(m_ScrollOffset.x, 0.0f, std::max(0.0f, GetMaxScrollX()));
@@ -111,9 +112,9 @@ void ScrollView::OnLayoutComputed()
         m_Content->GetRect().anchor = AnchorSet::TopLeft();
         m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
         m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + availW;
+        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + layoutW;
         m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
-        m_Content->ComputeLayout({availW, 8192.0f});
+        m_Content->ComputeLayout({layoutW, 8192.0f});
     }
 
     SyncScrollbar();
@@ -122,9 +123,9 @@ void ScrollView::OnLayoutComputed()
     if (m_Content) {
         m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
         m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + availW;
+        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + layoutW;
         m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
-        m_Content->ComputeLayout({availW, 8192.0f});
+        m_Content->ComputeLayout({layoutW, 8192.0f});
     }
 }
 
@@ -145,7 +146,7 @@ void ScrollView::SyncScrollbar()
             m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_VScrollbar->GetRect().offset = {
                 cr.x + cr.z - m_ScrollbarWidth - 2.0f, cr.y + 2.0f,
-                cr.x + cr.z - 2.0f, cr.y + cr.w - 2.0f
+                cr.x + cr.z - 2.0f, hOverflow ? (cr.y + cr.w - m_ScrollbarWidth - 2.0f) : (cr.y + cr.w - 2.0f)
             };
             m_VScrollbar->ComputeLayout({cr.z, cr.w});
 
@@ -163,7 +164,8 @@ void ScrollView::SyncScrollbar()
             m_HScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_HScrollbar->GetRect().offset = {
                 cr.x + 2.0f, cr.y + cr.w - m_ScrollbarWidth - 2.0f,
-                cr.x + cr.z - 2.0f, cr.y + cr.w - 2.0f
+                vOverflow ? (cr.x + cr.z - m_ScrollbarWidth - 2.0f) : (cr.x + cr.z - 2.0f),
+                cr.y + cr.w - 2.0f
             };
             m_HScrollbar->ComputeLayout({cr.z, cr.w});
 
