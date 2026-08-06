@@ -81,10 +81,10 @@ void ScrollView::OnLayoutComputed()
     // Content is laid out at absolute coords so descendants inherit real positions.
     if (m_Content) {
         m_Content->GetRect().anchor = AnchorSet::TopLeft();
-        m_Content->GetRect().offset.left = cr.x + m_ScrollOffset.x;
-        m_Content->GetRect().offset.top = cr.y + m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x + m_ScrollOffset.x + availW;
-        m_Content->GetRect().offset.bottom = cr.y + m_ScrollOffset.y + 8192.0f;
+        m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
+        m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
+        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + availW;
+        m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
         m_Content->ComputeLayout({availW, 8192.0f});
     }
 
@@ -92,10 +92,10 @@ void ScrollView::OnLayoutComputed()
 
     // The scrollbar callback may have adjusted the offset; re-apply.
     if (m_Content) {
-        m_Content->GetRect().offset.left = cr.x + m_ScrollOffset.x;
-        m_Content->GetRect().offset.top = cr.y + m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x + m_ScrollOffset.x + availW;
-        m_Content->GetRect().offset.bottom = cr.y + m_ScrollOffset.y + 8192.0f;
+        m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
+        m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
+        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + availW;
+        m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
         m_Content->ComputeLayout({availW, 8192.0f});
     }
 }
@@ -113,8 +113,11 @@ void ScrollView::SyncScrollbar()
     m_VScrollbar->SetActive(overflow);
 
     if (overflow) {
-        m_VScrollbar->GetRect().anchor = {1.0f, 0.0f, 1.0f, 1.0f};
-        m_VScrollbar->GetRect().offset = {-(m_ScrollbarWidth + 2.0f), 2.0f, -2.0f, -2.0f};
+        m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
+        m_VScrollbar->GetRect().offset = {
+            cr.x + cr.z - m_ScrollbarWidth - 2.0f, cr.y + 2.0f,
+            cr.x + cr.z - 2.0f, cr.y + cr.w - 2.0f
+        };
         m_VScrollbar->ComputeLayout({cr.z, cr.w});
 
         m_VScrollbar->SetRange(viewportH, contentH);
@@ -165,7 +168,7 @@ void ScrollView::OnPointerMove(const Vector2& pos)
     if (m_Dragging) {
         Vector2 delta = pos - m_DragStart;
         Vector2 off = m_ScrollStart;
-        off.y += delta.y;
+        off.y -= delta.y;
         SetScrollOffset(off);
     }
 }
