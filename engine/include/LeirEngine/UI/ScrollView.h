@@ -7,8 +7,8 @@
 namespace Leir {
 
 // Clipped scroll container: the content is scissored to the ScrollView rect and
-// may be scrolled via mouse wheel or drag. A vertical UIScrollbar is managed
-// internally (visible only when the content overflows).
+// may be scrolled via mouse wheel or drag. Vertical and horizontal UIScrollbars
+// are managed internally (visible only when the content overflows).
 class LEIR_API ScrollView : public UIElement {
 public:
     ScrollView();
@@ -28,6 +28,13 @@ public:
     void SetScrollbarWidth(float w) { m_ScrollbarWidth = w; }
     float GetScrollbarWidth() const { return m_ScrollbarWidth; }
 
+    // Enable/disable each scrollbar. A disabled scrollbar is not shown and does
+    // not reserve space in the viewport.
+    void SetVerticalScrollbarEnabled(bool enabled) { m_VScrollbarEnabled = enabled; }
+    bool IsVerticalScrollbarEnabled() const { return m_VScrollbarEnabled; }
+    void SetHorizontalScrollbarEnabled(bool enabled) { m_HScrollbarEnabled = enabled; }
+    bool IsHorizontalScrollbarEnabled() const { return m_HScrollbarEnabled; }
+
     // Content size and visible viewport size (along both axes).
     Vector2 GetContentSize() const;
     Vector2 GetViewportSize() const;
@@ -36,6 +43,7 @@ public:
     float GetMaxScrollX() const;
 
     UIScrollbar* GetVerticalScrollbar() const { return m_VScrollbar; }
+    UIScrollbar* GetHorizontalScrollbar() const { return m_HScrollbar; }
 
     bool OnScroll(float delta) override;
     bool OnPointerDown(const Vector2& pos) override;
@@ -52,11 +60,14 @@ private:
     Vector2 m_ScrollOffset = {0.0f, 0.0f};
     UIElement* m_Content = nullptr;
     UIScrollbar* m_VScrollbar = nullptr;
+    UIScrollbar* m_HScrollbar = nullptr;
     bool m_Dragging = false;
     Vector2 m_DragStart = {0.0f, 0.0f};
     Vector2 m_ScrollStart = {0.0f, 0.0f};
     float m_LineHeight = 16.0f;
     float m_ScrollbarWidth = 10.0f;
+    bool m_VScrollbarEnabled = true;
+    bool m_HScrollbarEnabled = true;
 };
 
 } // namespace Leir
