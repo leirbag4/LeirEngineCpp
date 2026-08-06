@@ -144,3 +144,126 @@ del contenido. Verificado por el usuario en el editor.
 - Estilos de scrollbar (thumb con hover/pressed states, ancho configurable por
   skin).
 - Pooling de rects de clip en `Flush` si algún día se bachea por textura.
+
+## Plan 2026-08-06 — Clip escopado al viewport de contenido (fix texto bajo scrollbars)
+
+### Estado del bug (usuario verificó visualmente)
+
+El scrollbar horizontal ya funciona (drag/rueda/thumb/esquina), pero al aparecer
+la scrollbar vertical:
+
+1. Las **últimas letras** de cada línea quedan tapadas por la barra vertical.
+2. Se ve una **línea finita** por donde pasan las letras debajo de la scrollbar
+   horizontal y al costado de la vertical.
+
+### Causa raíz (confirmada en código)
+
+- La layout YA reserva el espacio de las barras: `GetViewportSize()` devuelve
+  `W − scrollbarWidth` (y alto análogo), y `OnLayoutComputed` posiciona el
+  contenido con `layoutW = max(availW, GetContentSize().x)`. Es decir, el diseño
+  es **Modelo A (reserva de espacio)**.
+- Pero el **clip no está escopado**: `ScrollView` tiene `SetClip(true)` y su rect
+  de clip es el rectángulo COMPLETO (`W × H`). `UIRenderer::RenderElement` usa ese
+  rect como scissor para todos los hijos (contenido Y barras, que hoy comparten el
+  mismo padre).
+- Consecuencia: en overflow horizontal el texto se extiende hasta `W` (no hasta
+  `W − barra`) → pasa por debajo de la barra vertical opaca (letras tapadas), y las
+  barras tienen un **inset de 2px** (`SyncScrollbar` usa `- 2.0f`) que deja un
+  hueco en el borde donde el texto se filtra → la "línea finita".
+
+No es una optimización: es una inconsistencia entre layout (reserva) y clip (no
+escopado). Ver explicación de modelos A/B en la discusión.
+
+### Decisión: Modelo A puro (igual que Unity `ScrollRect` / HTML `scrollbar-gutter: stable`)
+
+Estructura objetivo:
+
+```
+ScrollView (sin clip directo en el contenido; o clip = rect completo solo para
+            no cullar las barras)
+├── m_Viewport   ← NUEVO UIElement interno, SetClip(true), rect = área de
+│   │                contenido {x, y, W − bw, H − bw}
+│   └── m_Content ← se reparenta acá (hijo del viewport, no del ScrollView)
+├── m_VScrollbar (hijo del ScrollView → renderiza en su franja, afuera del clip)
+└── m_HScrollbar (ídem)
+```
+
+Así el contenido se recorta estrictamente al área útil y las barras quedan como
+siblings (nunca solapan texto, cero sliver). Es el patrón `RectMask` de Unity /
+`QAbstractScrollArea` de Qt / gutter estable de web.
+
+### Cambios en `engine/src/UI/ScrollView.cpp` / `.h`
+
+1. **Nuevo miembro `m_Viewport`** (`unique_ptr<UIElement>` con `SetClip(true)`),
+   creado en el ctor. `SetContent` reparenta `m_Content` como hijo del viewport
+   (mantener reordenamiento topmost de las barras para hit-test).
+2. **Layout del viewport**: en `OnLayoutComputed`, posicionar `m_Viewport` en
+   absoluto al área de contenido:
+   - con V bar activa: `x .. x + W − bw` (y el alto completo salvo H bar);
+   - con H bar activa: `y .. y + H − bw`;
+   - sin barras: el área completa.
+   El rect del viewport reemplaza al "layoutW/availW" del contenido actual: el
+   contenido sigue siendo ancho `max(natural, viewportW)` pero el clip del
+   viewport lo recorta (ya no hace falta que el clip del ScrollView sea el que
+   recorta).
+3. **`GetViewportSize`** se deriva del rect de `m_Viewport` (única fuente de
+   verdad para clamps, `SetRange`, drag, wheel y `SyncScrollbar`).
+4. **Scrollbars**: mantener la esquina (V inferior frena ante H bar y viceversa),
+   pero **revisar el inset de 2px**: con el clip escopado ya no hay filtraciones;
+   decidir si se quita el inset (barras flush al viewport, sin hueco decorativo
+   por donde se vea el fondo) o se mantiene como margen (el hueco queda vacío, no
+   con texto pasando). Ajustar la franja para que el track pegue justo con el
+   borde del viewport.
+5. **Hit-test**: como el contenido ahora es hijo del viewport (más chico que el
+   ScrollView), el hit-test del strip de las barras queda libre automáticamente;
+   igual mantener las barras como hijos topmost del ScrollView (no del viewport).
+6. **Drag/wheel** leen clamps del viewport; sin otros cambios de lógica.
+
+### Verificación
+
+- Build completo DLL + editor.
+- Correr el editor con la línea larga de test (`HORIZONTAL SCROLL TEST ...` en
+  `main.cpp`): scrollear a `maxX` → las letras terminan justo en el borde del
+  viewport, la barra vertical ya NO tapa las últimas letras y no hay línea finita
+  por la que se vea pasar el texto.
+- Probar resize del panel (las barras aparecen/desaparecen) → el clip del viewport
+  acompaña sin sliver ni culling incorrecto del contenido.
+- Preguntar al usuario si se mantiene la línea de test o se remueve antes de cerrar.
+
+### Notas de contexto (para el registro)
+
+- Sistemas profesionales: Windows clásico = Modelo A (reserva); Windows 11,
+  macOS/iOS, GTK = Modelo B (overlay translúcido auto-hide); Unity `ScrollRect`,
+  Unreal `ScrollBox`, Qt `QAbstractScrollArea` = Modelo A con viewport+scrollbar
+  siblings; web = ambos vía CSS (`scrollbar-gutter: stable` = A, overlay scrollbars
+  = B). Nuestro diseño apunta a A; el bug era que el clip no seguía a la reserva.
+- El modelo B (overlay) NO aplica a un log/consola opaca: las barras A transparentan
+  contenido a propósito y se ocultan; un log necesita siempre visible y opaco → A.
+
+### Implementación 2026-08-06 (Opción 1, build OK)
+
+Se hizo la Opción 1 (nodo interno `m_Viewport`, Modelo A puro):
+
+- `ScrollView.h`: nuevo miembro `UIElement* m_Viewport`; `ApplyContentLayout`
+  declarada con `(float layoutW, float layoutH)`.
+- `ScrollView.cpp`:
+  - ctor: `m_Viewport = new UIElement()` con `SetClip(true)`, añadido como primer
+    hijo; las barras siguen siendo hijos directos del ScrollView (topmost para
+    hit-test, siblings del viewport).
+  - `~ScrollView`: elimina también `m_Viewport` (RemoveChild + delete).
+  - `SetContent`: `m_Content` se reparentea al viewport (no al ScrollView); después
+    se reordenan las barras a topmost.
+  - `OnLayoutComputed`: posiciona el viewport absoluto sobre el área utilizable
+    (`{cr.x, cr.y, cr.x+availW, cr.y+availH}`) y llama `m_Viewport->ComputeLayout`
+    para refrescar su computedRect/clip; luego `ApplyContentLayout`; `SyncScrollbar`;
+    y por último reaplica `ApplyContentLayout` (idempotente) ante el ajuste de
+    offset hecho por el callback de la barra.
+  - `ApplyContentLayout`: el contenido se acopla al **origen absoluto del viewport**
+    (`vp.x/y`) y se desplaza con `-ScrollOffset`, así hereda la posición global real
+    y queda dentro del clip del viewport (nunca alcanza las franjas de las barras).
+- Efecto: el clip del contenido = viewport (`W − barra`); las barras quedan fuera
+  del clip → no se tapan las últimas letras ni queda la línea finita.
+
+Verificado: build DLL+editor OK; editor corre sin stderr/VUID; la barra horizontal
+sigue capturando su drag (hit-test topmost OK). Pendiente: confirmación visual del
+usuario de que ya no se tapan letras ni hay línea finita al scrollear a `maxX`.

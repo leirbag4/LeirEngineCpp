@@ -10,6 +10,15 @@ ScrollView::ScrollView()
     SetClip(true);
     SetName("ScrollView");
 
+    // Internal viewport node: clips the content to the usable area. The content
+    // becomes its child, while the scrollbars remain children of the ScrollView
+    // (siblings of the viewport) so they render in their own strip and never
+    // overlap/clip the text (Model A — like Unity ScrollRect / scrollbar-gutter).
+    m_Viewport = new UIElement();
+    m_Viewport->SetClip(true);
+    m_Viewport->SetName("ScrollViewViewport");
+    AddChild(m_Viewport);
+
     m_VScrollbar = new UIScrollbar(true);
     m_VScrollbar->SetName("ScrollViewScrollbar");
     AddChild(m_VScrollbar);
@@ -31,6 +40,11 @@ ScrollView::ScrollView()
 
 ScrollView::~ScrollView()
 {
+    if (m_Viewport) {
+        RemoveChild(m_Viewport);
+        delete m_Viewport;
+        m_Viewport = nullptr;
+    }
     if (m_VScrollbar) {
         RemoveChild(m_VScrollbar);
         delete m_VScrollbar;
@@ -44,18 +58,18 @@ ScrollView::~ScrollView()
 void ScrollView::SetContent(UIElement* content)
 {
     if (m_Content) {
-        RemoveChild(m_Content);
+        m_Viewport->RemoveChild(m_Content);
         m_Content = nullptr;
     }
     m_Content = content;
     if (content) {
-        AddChild(content);
+        m_Viewport->AddChild(content);
         content->GetRect().anchor = AnchorSet::TopLeft();
     }
     // Keep the scrollbars as the topmost children so they are hit-tested and
-    // rendered above the (tall) content rect — otherwise the content column
-    // covers the horizontal bar's strip and presses on the thumb hit it
-    // instead, dragging the content and inverting the thumb direction.
+    // rendered above the content — the content lives inside the clipped viewport
+    // (a sibling of the scrollbars), so it can never press on the thumb / cover
+    // the bar strip.
     if (m_VScrollbar) {
         RemoveChild(m_VScrollbar);
         AddChild(m_VScrollbar);
@@ -101,32 +115,43 @@ void ScrollView::OnLayoutComputed()
 {
     const auto& cr = GetComputedRect();
     const float availW = std::max(1.0f, GetViewportSize().x);
+    const float availH = std::max(1.0f, GetViewportSize().y);
     const float layoutW = std::max(availW, GetContentSize().x);
+    const float layoutH = std::max(availH, std::max(GetContentSize().y, 1.0f));
 
     // Clamp to the current content size before positioning.
     m_ScrollOffset.x = std::clamp(m_ScrollOffset.x, 0.0f, std::max(0.0f, GetMaxScrollX()));
     m_ScrollOffset.y = std::clamp(m_ScrollOffset.y, 0.0f, std::max(0.0f, GetMaxScrollY()));
 
-    // Content is laid out at absolute coords so descendants inherit real positions.
-    if (m_Content) {
-        m_Content->GetRect().anchor = AnchorSet::TopLeft();
-        m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
-        m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + layoutW;
-        m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
-        m_Content->ComputeLayout({layoutW, 8192.0f});
-    }
+    // The viewport is a Free child of the ScrollView; position it over the usable
+    // area (absolute coords) and refresh its computed rect so its clip region is
+    // exactly the content surface (never reaching the scrollbar strips).
+    m_Viewport->GetRect().anchor = AnchorSet::TopLeft();
+    m_Viewport->GetRect().offset = {cr.x, cr.y, cr.x + availW, cr.y + availH};
+    m_Viewport->ComputeLayout({availW, availH});
+
+    ApplyContentLayout(layoutW, layoutH);
 
     SyncScrollbar();
 
-    // The scrollbar callback may have adjusted the offset; re-apply.
-    if (m_Content) {
-        m_Content->GetRect().offset.left = cr.x - m_ScrollOffset.x;
-        m_Content->GetRect().offset.top = cr.y - m_ScrollOffset.y;
-        m_Content->GetRect().offset.right = cr.x - m_ScrollOffset.x + layoutW;
-        m_Content->GetRect().offset.bottom = cr.y - m_ScrollOffset.y + 8192.0f;
-        m_Content->ComputeLayout({layoutW, 8192.0f});
-    }
+    // The scrollbar callback may have adjusted the offset; re-apply (idempotent).
+    ApplyContentLayout(layoutW, layoutH);
+}
+
+void ScrollView::ApplyContentLayout(float layoutW, float layoutH)
+{
+    if (!m_Viewport || !m_Content)
+        return;
+    // Content is docked to the viewport's absolute origin and scrolled from
+    // there, so it inherits the real global position and stays inside the
+    // viewport's clip region.
+    const auto& vp = m_Viewport->GetComputedRect();
+    m_Content->GetRect().anchor = AnchorSet::TopLeft();
+    m_Content->GetRect().offset.left = vp.x - m_ScrollOffset.x;
+    m_Content->GetRect().offset.top = vp.y - m_ScrollOffset.y;
+    m_Content->GetRect().offset.right = vp.x - m_ScrollOffset.x + layoutW;
+    m_Content->GetRect().offset.bottom = vp.y - m_ScrollOffset.y + layoutH;
+    m_Content->ComputeLayout({layoutW, layoutH});
 }
 
 void ScrollView::SyncScrollbar()

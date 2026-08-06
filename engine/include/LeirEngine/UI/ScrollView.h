@@ -54,10 +54,11 @@ protected:
     void OnLayoutComputed() override;
 
 private:
-    void ApplyContentLayout();
+    void ApplyContentLayout(float layoutW, float layoutH);
     void SyncScrollbar();
 
     Vector2 m_ScrollOffset = {0.0f, 0.0f};
+    UIElement* m_Viewport = nullptr;
     UIElement* m_Content = nullptr;
     UIScrollbar* m_VScrollbar = nullptr;
     UIScrollbar* m_HScrollbar = nullptr;
