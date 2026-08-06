@@ -79,6 +79,18 @@ scrollbar, auto-follow al fondo. Apoyado en la infraestructura nueva del engine
   `Trace` y `Flush()` trunca de forma no destructiva — ver
   `TODO_UI_EVENT_FLOOD.md`. Verificado: `[Console] rebuilt` **1 total** en todo
   un sweep del mouse (antes 1 por pointer event).
+- **Bug del flash al resize de docksplitters (2026-08-06)**: arrastrar un
+  splitter hacía parpadear el texto (horizontal: flash al soltar con
+  "Settings Saved"; vertical: texto invisible hasta soltar, titilando). Causa:
+  `Refresh()` corría **después** de `UpdateLayout()` en `OnUpdate` → los labels
+  recién creados por `RebuildLines` tenían `m_ComputedRect = {0,0,0,0}` y el
+  clip del `ScrollView` los cullaba (intersección 0 → `return`) → **1 frame
+  vacío por rebuild**. Fix: mover `Refresh()` **antes** de `UpdateLayout()`
+  (main.cpp) → los labels nuevos quedan con layout el mismo frame. Además el log
+  `"Viewport resized"` de `UpdateViewportRenderTarget()` era Info **por frame**
+  durante un drag vertical (rebuild cada frame) → ahora está **debounced**
+  (`m_PendingW/H` + `m_LastLoggedW/H`): un drag entero emite 0 mensajes y
+  exactamente 1 al estabilizarse. Verificado por el usuario.
 
 ## Roadmap
 

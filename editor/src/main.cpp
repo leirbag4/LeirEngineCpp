@@ -38,6 +38,7 @@
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
 #include "UI/ConsolePanel.h"
+#include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "Camera/EditorCamera.h"
 
@@ -446,6 +447,10 @@ protected:
         m_ConsolePanel->SetName("ConsolePanel");
         m_ConsolePanel->SetFont(m_FontSmall.get());
 
+        m_DebugPanel = new DebugPanel();
+        m_DebugPanel->SetName("DebugPanel");
+        m_DebugPanel->SetFont(m_FontSmall.get());
+
         // Register dockable panels (core ones are not closeable)
         m_DockManager->RegisterPanel("Hierarchy", "Hierarchy", hierarchy, false);
         m_DockManager->RegisterPanel("Viewport", "Viewport", m_ViewportPanel, false);
@@ -455,6 +460,7 @@ protected:
         m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
         m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
         m_DockManager->RegisterPanel("ConsolePanel", "Console", m_ConsolePanel, true);
+        m_DockManager->RegisterPanel("DebugPanel", "Debug Panel", m_DebugPanel, true);
 
         // Restore a persisted layout, or fall back to the default one
         const std::string& dockJson = Leir::LeirSettings::Get().dock.layout;
@@ -628,6 +634,8 @@ protected:
         m_DebugTextPanel = nullptr;
         DeleteUiSubtree(m_ConsolePanel);
         m_ConsolePanel = nullptr;
+        DeleteUiSubtree(m_DebugPanel);
+        m_DebugPanel = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
@@ -671,8 +679,20 @@ private:
         uint32_t fw = (uint32_t)std::max(1.0f, (float)std::lround(w * dpr));
         uint32_t fh = (uint32_t)std::max(1.0f, (float)std::lround(h * dpr));
 
-        if (fw == m_ViewportRT->GetWidth() && fh == m_ViewportRT->GetHeight())
+        if (fw == m_ViewportRT->GetWidth() && fh == m_ViewportRT->GetHeight()) {
+            // Size settled: if a resize was applied but not yet logged, emit the
+            // message once now (debounce). During a continuous splitter drag the
+            // size changes every frame, so nothing is logged until it stops.
+            if (m_HasPendingResizeLog &&
+                (m_PendingW != m_LastLoggedW || m_PendingH != m_LastLoggedH)) {
+                Leir::XConsole::Println("Viewport resized to {}x{} ({}x{} physical)",
+                    m_PendingW, m_PendingH, m_PendingFw, m_PendingFh);
+                m_LastLoggedW = m_PendingW;
+                m_LastLoggedH = m_PendingH;
+                m_HasPendingResizeLog = false;
+            }
             return;
+        }
 
         m_ViewportRT->Resize(fw, fh);
 
@@ -683,7 +703,11 @@ private:
                 cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 100.0f);
         }
 
-        Leir::XConsole::Println("Viewport resized to {}x{} ({}x{} physical)", w, h, fw, fh);
+        m_PendingW = w;
+        m_PendingH = h;
+        m_PendingFw = fw;
+        m_PendingFh = fh;
+        m_HasPendingResizeLog = true;
     }
 
     std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
@@ -717,9 +741,20 @@ private:
     DebugTextPanel* m_DebugTextPanel = nullptr;
     ConsolePanel* m_ConsolePanel = nullptr;
     TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
+    DebugPanel* m_DebugPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
+
+    // Debounce for the "Viewport resized" log: track the last applied resize
+    // and only print once the size stops changing (splitter drags settle).
+    uint32_t m_PendingW = 0;
+    uint32_t m_PendingH = 0;
+    uint32_t m_PendingFw = 0;
+    uint32_t m_PendingFh = 0;
+    uint32_t m_LastLoggedW = 0;
+    uint32_t m_LastLoggedH = 0;
+    bool m_HasPendingResizeLog = false;
 };
 
 int main()

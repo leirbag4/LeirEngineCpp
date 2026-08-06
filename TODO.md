@@ -74,6 +74,7 @@
 - [x] `UIScrollView`
 - [x] `UIScrollbar` (scrollbars en ScrollView — ver `TODO_UI_SCROLLBARS.md`; UITextArea scroll offset pendiente en `TODO_UI_INPUT.md` F3.1/F3.3)
 - [x] Bug ScrollView arreglado (track del scrollbar no cubría el alto + drag/thumb/rueda invertidos): `SyncScrollbar` con coordenadas absolutas + contenido en `cr - scrollOffset` + drag touch-style — ver `TODO_UI_SCROLLBARS.md`
+- [x] Bug consola: flash al resize de docksplitters (rebuild de líneas corría tras el layout → 1 frame culled) — `ConsolePanel::Refresh()` movido antes de `UpdateLayout()`; log "Viewport Resized" debounced (0 msgs por drag, 1 al soltar) — ver `TODO_UI_CONSOLE.md`
 - [x] `UITextInput` (caret, click-to-position, drag selection, double-click word, Ctrl+A, Ctrl+arrow)
 - [x] `UITextArea` (multiline: líneas lógicas, selección multi-línea, navegación Up/Down)
 - [x] `UIFloatInput` (input numérico que filtra `[0-9+-.]`, commit en Enter/Blur)

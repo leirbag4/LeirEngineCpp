@@ -8,6 +8,7 @@ add_executable(LeirEngineEditor
     src/UI/TextAreaDebugPanel.cpp
     src/UI/ConsolePanel.cpp
     src/UI/InspectorTransformPanel.cpp
+    src/UI/DebugPanel.cpp
 )
 
 target_include_directories(LeirEngineEditor
