@@ -37,6 +37,7 @@
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
+#include "UI/ConsolePanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "Camera/EditorCamera.h"
 
@@ -318,6 +319,7 @@ protected:
 
         // ---- UI System ----
         m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_VulkanDevice.get());
+        m_UIRenderer->SetContentScale(GetContentScale());
 
         std::string fontPath;
         FILE* testFont = nullptr;
@@ -440,6 +442,10 @@ protected:
         m_DebugTextPanel->SetName("DebugTextPanel");
         m_DebugTextPanel->SetFont(m_FontSmall.get());
 
+        m_ConsolePanel = new ConsolePanel();
+        m_ConsolePanel->SetName("ConsolePanel");
+        m_ConsolePanel->SetFont(m_FontSmall.get());
+
         // Register dockable panels (core ones are not closeable)
         m_DockManager->RegisterPanel("Hierarchy", "Hierarchy", hierarchy, false);
         m_DockManager->RegisterPanel("Viewport", "Viewport", m_ViewportPanel, false);
@@ -448,6 +454,7 @@ protected:
         m_DockManager->RegisterPanel("CameraTestPanel", "Camera", m_CameraTestPanel, true);
         m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
         m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
+        m_DockManager->RegisterPanel("ConsolePanel", "Console", m_ConsolePanel, true);
 
         // Restore a persisted layout, or fall back to the default one
         const std::string& dockJson = Leir::LeirSettings::Get().dock.layout;
@@ -547,6 +554,8 @@ protected:
             m_TextAreaDebugPanel->Refresh();
         if (m_InspectorTransformPanel)
             m_InspectorTransformPanel->Refresh();
+        if (m_ConsolePanel)
+            m_ConsolePanel->Refresh();
     }
 
     void OnRender() override
@@ -612,6 +621,8 @@ protected:
         m_TextAreaDebugPanel = nullptr;
         DeleteUiSubtree(m_DebugTextPanel);
         m_DebugTextPanel = nullptr;
+        DeleteUiSubtree(m_ConsolePanel);
+        m_ConsolePanel = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
@@ -636,6 +647,8 @@ protected:
         // the viewport RT happen each frame, so just log the change.
         Leir::XConsole::Println("Content scale changed to {:.2f} (logical {}x{})",
             GetContentScale(), GetWidth(), GetHeight());
+        if (m_UIRenderer)
+            m_UIRenderer->SetContentScale(GetContentScale());
     }
 
 private:
@@ -697,6 +710,7 @@ private:
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;
     DebugTextPanel* m_DebugTextPanel = nullptr;
+    ConsolePanel* m_ConsolePanel = nullptr;
     TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
     uint32_t m_ViewportW = 800;

@@ -28,6 +28,12 @@ std::vector<LogMessage>& GetMessagesRef()
     return msgs;
 }
 
+uint64_t& GetVersionRef()
+{
+    static uint64_t v = 0;
+    return v;
+}
+
 constexpr size_t kMaxMessages = 1000;
 
 const char* LevelName(LogLevel level)
@@ -197,7 +203,8 @@ void XConsole::Log(LogLevel level, std::string&& text)
     if (static_cast<int>(level) < static_cast<int>(GetLevelRef()))
         return;
 
-    const std::string line = "[" + Timestamp() + "] [" + LevelName(level) + "] " + text + "\n";
+    const std::string ts = Timestamp();
+    const std::string line = "[" + ts + "] [" + LevelName(level) + "] " + text + "\n";
     if (level == LogLevel::Error) {
         std::fputs(line.c_str(), stderr);
         std::fflush(stderr);
@@ -206,10 +213,16 @@ void XConsole::Log(LogLevel level, std::string&& text)
         std::fflush(stdout);
     }
 
-    auto& msgs = GetMessagesRef();
-    if (msgs.size() >= kMaxMessages)
-        msgs.erase(msgs.begin());
-    msgs.push_back({level, std::move(text)});
+    // Only Info/Warning/Error are retained for the editor Console panel.
+    // Trace/Debug are debug-only diagnostics; storing them would evict the
+    // useful messages from the 1000-entry ring buffer (and churn GetVersion).
+    if (level >= LogLevel::Info) {
+        auto& msgs = GetMessagesRef();
+        if (msgs.size() >= kMaxMessages)
+            msgs.erase(msgs.begin());
+        msgs.push_back({level, std::move(text), ts});
+        ++GetVersionRef();
+    }
 }
 
 void XConsole::SetLevel(LogLevel level)
@@ -230,10 +243,17 @@ std::vector<LogMessage> XConsole::GetMessages()
     return GetMessagesRef();
 }
 
+uint64_t XConsole::GetVersion()
+{
+    std::lock_guard<std::mutex> lock(GetMutex());
+    return GetVersionRef();
+}
+
 void XConsole::Clear()
 {
     std::lock_guard<std::mutex> lock(GetMutex());
     GetMessagesRef().clear();
+    ++GetVersionRef();
 }
 
 } // namespace Leir

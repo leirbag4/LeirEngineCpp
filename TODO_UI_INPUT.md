@@ -215,6 +215,6 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 | F3.1 — UITextArea class | ⏳ (falta scroll offset vertical) |
 | F3.2 — Layout multiline | ✅ |
 | F3.3 — UITextArea rendering | ⏳ (falta scroll offset vertical) |
-| F3.4 — Scrollbars | ⏳ (vertical scroll dependiente de ScrollView integration) |
+| F3.4 — Scrollbars | ✅ engine `UIScrollbar` + `ScrollView` (vertical; ver `TODO_UI_SCROLLBARS.md`). UITextArea sin scroll aún |
 | F4.1 — DebugTextPanel | ✅ |
 | F4.2 — Integrar en editor | ✅ |

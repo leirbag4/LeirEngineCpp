@@ -19,14 +19,16 @@ enum class LogLevel : uint8_t {
 struct LogMessage {
     LogLevel level;
     std::string text;
+    std::string time; // "HH:MM:SS.mmm" local wall clock
 };
 
 // Thread-safe console logger. Own implementation, no external logging dependency.
 //
 // Levels: Trace < Debug < Info < Warning < Error. Messages below the current SetLevel()
 // are discarded entirely (Trace/Debug are "silent by default"). Emitted messages go to
-// stdout (Info/Warning/Debug/Trace) and stderr (Error), and are kept in an internal
-// ring buffer (GetMessages) for the future editor Console panel.
+// stdout (Info/Warning/Debug/Trace) and stderr (Error). Only Info/Warning/Error are
+// retained in the internal ring buffer (GetMessages) that feeds the editor Console
+// panel — Trace/Debug are debug-only diagnostics and would evict useful messages.
 //
 // Formatting supports `{}` and specs used across the codebase: `{:.Nf}`, `{:Nd}`, `{:0Nd}`.
 class LEIR_API XConsole {
@@ -91,6 +93,9 @@ public:
 
     // Snapshot of the internal ring buffer (for the editor Console panel).
     static std::vector<LogMessage> GetMessages();
+    // Monotonic counter bumped on every emitted message and on Clear(). Lets a
+    // UI panel detect new messages without snapshotting the buffer each frame.
+    static uint64_t GetVersion();
     static void Clear();
 
 private:

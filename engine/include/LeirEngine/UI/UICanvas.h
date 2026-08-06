@@ -24,6 +24,7 @@ public:
 
     // Input dispatch
     void ProcessPointerEvent(const PointerEvent& e);
+    void ProcessScrollEvent(const ScrollEvent& e);
     void SetFocus(UIElement* element);
     UIElement* GetFocus() const { return m_FocusElement; }
     void ClearFocus() { SetFocus(nullptr); }

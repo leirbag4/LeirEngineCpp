@@ -65,14 +65,14 @@
 - [ ] Gestión de memoria de sonidos
 
 ## Fase 5 — UI System (Propio)
-- [x] `Canvas` (screen space overlay, sorting) — `UICanvas` (event hooks, hit-test, hover, focus, pointer capture)
+- [x] `Canvas` (screen space overlay, sorting) — `UICanvas` (event hooks, hit-test, hover, focus, pointer capture, wheel→`OnScroll` dispatch)
 - [x] `UIWidget` base — `UIElement` (rect/anchor/offset, Free/Row/Column layout, min size, SizePolicy)
 - [x] `UILabel` (texto con fuente, vertical centering)
 - [x] `UIButton` (click, hover, pressed states)
 - [x] `UIImage` (textura)
 - [x] `UIPanel` (contenedor)
 - [x] `UIScrollView`
-- [ ] `UIScrollbar` (scrollbars en ScrollView / UITextArea)
+- [x] `UIScrollbar` (scrollbars en ScrollView — ver `TODO_UI_SCROLLBARS.md`; UITextArea scroll offset pendiente en `TODO_UI_INPUT.md` F3.1/F3.3)
 - [x] `UITextInput` (caret, click-to-position, drag selection, double-click word, Ctrl+A, Ctrl+arrow)
 - [x] `UITextArea` (multiline: líneas lógicas, selección multi-línea, navegación Up/Down)
 - [x] `UIFloatInput` (input numérico que filtra `[0-9+-.]`, commit en Enter/Blur)
@@ -81,7 +81,7 @@
 - [x] Layout system (Free/Row/Column con anchors, offsets, propagación de posición al padre)
 - [ ] Style system (colores, borders, fonts, margins)
 - [x] Text rendering (stb_truetype + FreeType) — `Font`
-- [x] `UIRenderer` (batcher de quads, 3 capas: UI regular → viewports → debug overlay)
+- [x] `UIRenderer` (batcher de quads, 3 capas: UI regular → viewports → debug overlay; **clipping por scissor** por nodo con `SetClip` — ver `TODO_UI_SCROLLBARS.md`)
 - [x] `UIViewportPanel` (RenderTexture dentro de la UI)
 - [x] `UIDebugOverlay` (FPS, mouse, teclas, hover, eventos)
 - [x] RenderTexture (offscreen color+depth, muestreo en UI)
@@ -91,7 +91,8 @@
 - [ ] `HierarchyPanel` (árbol de objetos en Scene) — hoy es solo un panel estático con título
 - [x] `InspectorPanel` — `InspectorTransformPanel` (transform en vivo; falta listado de componentes)
 - [x] `SceneViewPanel` (viewport 3D con `UIViewportPanel` + RenderTexture + EditorCamera)
-- [ ] `ConsolePanel` (output de `XConsole` en tiempo real, dockeable, filtros Info/Warn/Error — ver `TODO_LOG_SYSTEM.md`)
+- [x] `ConsolePanel` (output de `XConsole` en tiempo real, dockeable, filtros Info/Warn/Error, Clear, auto-follow — ver `TODO_UI_CONSOLE.md`)
+- [x] Bug UIEvent flood arreglado (consola se scrolleaba sola + glitches + FPS 60→20): UIEvent→Trace + overflow no destructivo en `Flush()` — ver `TODO_UI_EVENT_FLOOD.md`
 - [ ] `ProjectPanel` (explorador de archivos)
 - [ ] Gizmos 3D (translate, rotate, scale handles)
 - [ ] Selección de objetos con raycast

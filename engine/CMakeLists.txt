@@ -44,6 +44,7 @@ add_library(LeirEngine SHARED
     src/UI/UIViewportPanel.cpp
     src/UI/UITextArea.cpp
     src/UI/ScrollView.cpp
+    src/UI/UIScrollbar.cpp
     src/UI/Dock/DockNode.cpp
     src/UI/Dock/DockSplitNode.cpp
     src/UI/Dock/DockPane.cpp

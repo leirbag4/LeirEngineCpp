@@ -67,6 +67,11 @@ public:
     void SetOverlayLayer(bool on) { m_IsOverlay = on; }
     bool IsOverlayLayer() const { return m_IsOverlay; }
 
+    // When enabled, the element's computed rect becomes a clip region: descendants
+    // are scissored to it (and culled entirely when fully outside).
+    void SetClip(bool clip) { m_Clip = clip; }
+    bool IsClipEnabled() const { return m_Clip; }
+
     virtual Vector2 GetMinSize() const;
     virtual Vector2 GetContentSize() const;
     virtual void ComputeLayout(const Vector2& availableSize);
@@ -83,6 +88,10 @@ public:
     virtual bool OnKeyDown(int key) { return false; }
     virtual void OnFocus() {}
     virtual void OnBlur() {}
+
+    // Mouse wheel. delta is in scroll lines (positive = scroll up/away).
+    // Return true to consume the scroll (stop propagation to ancestors).
+    virtual bool OnScroll(float delta) { return false; }
 
     // Events for pointer tracking (called by canvas)
     void SetHovered(bool h) { m_Hovered = h; }
@@ -101,6 +110,7 @@ protected:
     bool m_Active = true;
     bool m_Hovered = false;
     bool m_IsOverlay = false;
+    bool m_Clip = false;
     std::string m_Name;
 
 private:

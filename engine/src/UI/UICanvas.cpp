@@ -34,6 +34,10 @@ void UICanvas::ConnectToInputSystem()
         if (e.action == EventAction::Press || e.action == EventAction::Repeat)
             SendKeyDown(static_cast<int>(e.key));
     });
+
+    eq.SetScrollHook([this](const ScrollEvent& e) {
+        ProcessScrollEvent(e);
+    });
 }
 
 void UICanvas::DisconnectFromInputSystem()
@@ -92,7 +96,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         XConsole::Trace("[Canvas] Captured -> {} (action={})",
             m_CaptureElement->GetName().c_str(), (int)e.action);
         if (trace)
-            XConsole::Println("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) btn={} -> captured '{}'",
+            XConsole::Trace("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) btn={} -> captured '{}'",
                 (int)e.source, (int)e.action, pos.x, pos.y, (int)e.button,
                 m_CaptureElement->GetName().c_str());
         if (e.action == EventAction::Move)
@@ -100,7 +104,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         else if (e.action == EventAction::Release) {
             m_CaptureElement->OnPointerUp(pos);
             if (trace)
-                XConsole::Println("[UIEvent] Release -> captured '{}' ended",
+                XConsole::Trace("[UIEvent] Release -> captured '{}' ended",
                     m_CaptureElement->GetName().c_str());
             XConsole::Trace("[Canvas] ReleaseCapture");
             m_CaptureElement = nullptr;
@@ -126,7 +130,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             m_HoveredElement->OnPointerEnter(pos);
         }
         if (trace)
-            XConsole::Println("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) hover -> '{}'",
+            XConsole::Trace("[UIEvent] source={} action={} pos=({:.1f},{:.1f}) hover -> '{}'",
                 (int)e.source, (int)e.action, pos.x, pos.y,
                 m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
     }
@@ -157,7 +161,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
                 SetFocus(hit);
 
             if (trace)
-                XConsole::Println("[UIEvent] Press pos=({:.1f},{:.1f}) hit='{}' tried=[{}] handled='{}' focus='{}' capture='{}'",
+                XConsole::Trace("[UIEvent] Press pos=({:.1f},{:.1f}) hit='{}' tried=[{}] handled='{}' focus='{}' capture='{}'",
                     pos.x, pos.y, hit->GetName().c_str(), tried.c_str(),
                     target ? target->GetName().c_str() : "null",
                     m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
@@ -165,7 +169,7 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         } else {
             XConsole::Trace("[Canvas] Press on empty area, clearing focus");
             if (trace)
-                XConsole::Println("[UIEvent] Press pos=({:.1f},{:.1f}) hit=null (empty area), focus cleared",
+                XConsole::Trace("[UIEvent] Press pos=({:.1f},{:.1f}) hit=null (empty area), focus cleared",
                     pos.x, pos.y);
             ClearFocus();
         }
@@ -180,13 +184,26 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
             XConsole::Trace("[Canvas] Release target: {}",
                 target ? target->GetName().c_str() : "null");
             if (trace)
-                XConsole::Println("[UIEvent] Release pos=({:.1f},{:.1f}) hit='{}' handled='{}'",
+                XConsole::Trace("[UIEvent] Release pos=({:.1f},{:.1f}) hit='{}' handled='{}'",
                     pos.x, pos.y, hit->GetName().c_str(),
                     target ? target->GetName().c_str() : "null");
         } else if (trace) {
-            XConsole::Println("[UIEvent] Release pos=({:.1f},{:.1f}) hit=null", pos.x, pos.y);
+            XConsole::Trace("[UIEvent] Release pos=({:.1f},{:.1f}) hit=null", pos.x, pos.y);
         }
     }
+}
+
+void UICanvas::ProcessScrollEvent(const ScrollEvent& e)
+{
+    XConsole::Trace("[Canvas] Scroll: ({:.1f},{:.1f}) hover={}",
+        e.offset.x, e.offset.y,
+        m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
+
+    if (!m_HoveredElement) return;
+    // Propagate up the parent chain until an element consumes the scroll.
+    UIElement* target = m_HoveredElement;
+    while (target && !target->OnScroll(e.offset.y))
+        target = target->GetParent();
 }
 
 void UICanvas::SetFocus(UIElement* element)
@@ -196,7 +213,7 @@ void UICanvas::SetFocus(UIElement* element)
         m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
         element ? element->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        XConsole::Println("[UIEvent] Focus change: '{}' -> '{}'",
+        XConsole::Trace("[UIEvent] Focus change: '{}' -> '{}'",
             m_FocusElement ? m_FocusElement->GetName().c_str() : "null",
             element ? element->GetName().c_str() : "null");
     if (m_FocusElement)
@@ -212,7 +229,7 @@ void UICanvas::SendTextInput(uint32_t codepoint)
         codepoint, (char)codepoint,
         m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        XConsole::Println("[UIEvent] Text '{}' -> focus '{}'",
+        XConsole::Trace("[UIEvent] Text '{}' -> focus '{}'",
             (char)codepoint,
             m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
@@ -224,7 +241,7 @@ void UICanvas::SendKeyDown(int key)
     XConsole::Trace("[Canvas] SendKeyDown: key={} focus={}",
         key, m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (LeirSettings::Get().debug.ui_event_log)
-        XConsole::Println("[UIEvent] Key {} -> focus '{}'",
+        XConsole::Trace("[UIEvent] Key {} -> focus '{}'",
             key, m_FocusElement ? m_FocusElement->GetName().c_str() : "null");
     if (m_FocusElement)
         m_FocusElement->OnKeyDown(key);

@@ -99,11 +99,13 @@ cmake --build build/linux-debug
 Own logging system (`Core/Log.h` + `Core/Log.cpp`), no external dependency (replaced spdlog).
 
 - `enum class LogLevel { Trace, Debug, Info, Warning, Error }` — levels are a verbosity *filter*: messages below the current level are discarded at the source (Trace/Debug are "silent by default").
-- API: `XConsole::Println` (Info), `PrintWarning`, `PrintError` (Error → **stderr**), `Trace`, `Debug`, `SetLevel`, `GetLevel`, `GetMessages()`, `Clear()`. All are `Leir::XConsole::`.
+- API: `XConsole::Println` (Info), `PrintWarning`, `PrintError` (Error → **stderr**), `Trace`, `Debug`, `SetLevel`, `GetLevel`, `GetMessages()`, `GetVersion()`, `Clear()`. All are `Leir::XConsole::`.
 - Formatting: `{}` + specs `{:.Nf}`, `{:Nd}`, `{:0Nd}` via a runtime variadic formatter (`std::any` + `std::ostringstream`). Format strings may be non-literal.
-- Output: `[HH:MM:SS.mmm] [level] message` → stdout (info/warn/debug/trace) and stderr (error). Every emitted message is also kept in a 1000-entry ring buffer (`GetMessages`) that will feed the future editor `ConsolePanel`.
+- Output: `[HH:MM:SS.mmm] [level] message` → stdout (info/warn/debug/trace) and stderr (error). **Only Info/Warning/Error are retained** in the 1000-entry ring buffer (`GetMessages`) that feeds the editor `ConsolePanel` — Trace/Debug are debug-only and would evict useful messages. `LogMessage` = `{ level, text, time }` (`time` = `HH:MM:SS.mmm`).
+- **RULE (learned from `TODO_UI_EVENT_FLOOD.md`)**: any UI/renderer-internal or debug log must be `Trace`/`Debug`, NEVER `Println`/`PrintWarning`/`PrintError` inside per-frame paths — Info/Warning/Error enter the ring buffer → bump `GetVersion()` → `ConsolePanel::Refresh()` rebuilds all lines every frame → FPS churn, and per-frame `Warning` from e.g. `Flush()` overflow creates a feedback loop. Only real system messages (device created, shader compiled, load errors) should be Info+.
+- `GetVersion()` returns a monotonic counter bumped on every retained message and on `Clear()` — lets the ConsolePanel detect new messages without snapshotting the buffer each frame.
 - Thread-safe (std::mutex; Jolt runs multithreaded). State lives in function-local statics in `Log.cpp`.
-- `ConsolePanel` (dockeable, filter buttons Info/Warn/Error, Unity-style) is **pending** — see `TODO_LOG_SYSTEM.md`.
+- `ConsolePanel` (dockeable, filter buttons Info/Warn/Error, Clear, timestamps, wheel + scrollbar, auto-follow) — **implemented**, see `TODO_UI_CONSOLE.md`.
 
 ## HiDPI (DPI awareness)
 
@@ -363,6 +365,31 @@ void UIRenderer::Flush(VkCommandBuffer cmd) {
     //         3. debug quads (top)
 }
 ```
+
+## UI Clipping, Scrollbars & Wheel
+
+See `TODO_UI_SCROLLBARS.md` for the full concept and implementation notes.
+
+- **Clipping**: `UIElement::SetClip(bool)` makes the element's computed rect a clip
+  region for its descendants. `UIRenderer::Render` uses a **recursive** walk
+  (`RenderElement(elem, clip, isDebug)`) that intersects the active clip with each
+  clip-enabled rect; fully-outside subtrees are culled on the CPU. `Flush` applies
+  `vkCmdSetScissor` per draw (each quad is its own `vkCmdDraw`), tracking
+  `lastScissor` across all 3 layers. Clip rects are logical; scissor is physical →
+  `UIRenderer::SetContentScale(float)` (editor sets it in `OnInit` +
+  `OnContentScaleChanged`). The UI pipeline already used dynamic viewport/scissor.
+- **Wheel**: `UIElement::OnScroll(float delta)` virtual (return true to consume).
+  `UICanvas` registers the existing `EventQueue` `ScrollHook` and dispatches the
+  `ScrollEvent` to the hovered element, propagating up the parent chain.
+- **`UIScrollbar`** (`UI/UIScrollbar.h/.cpp`): track (own background) + thumb (child
+  `UIPanel`), normalized value [0,1], `SetRange(viewport, content)`, drag with
+  `CapturePointer` (click track = jump, click thumb = grab). Orientation H/V.
+  No UIRenderer branch needed (composed of primitives).
+- **`ScrollView`**: sets `SetClip(true)`, positions content at **absolute** coords
+  (`cr + scrollOffset`), clamps to `[0, maxScroll]` (`maxScrollY = contentSize.y -
+  viewport.h`, content size via `GetContentSize()`), scrolls on wheel (`delta ×
+  lineHeight`) and drag (captured), and owns a built-in **vertical `UIScrollbar`**
+  (visible only on overflow, synced both ways in `OnLayoutComputed`).
 
 ## RenderTexture System
 
@@ -713,6 +740,8 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 
 ## Previous Changes Summary
 
+- **UIEvent flood → console rebuild loop + UIRenderer overflow glitches fixed** (see `TODO_UI_EVENT_FLOOD.md`): user bug — moving the mouse made the console auto-scroll, red/green glitches across the screen, FPS dropped 60→20 permanently, slow close. Root cause (confirmed by log with `ui_event_log: true`): every mouse move emitted `[UIEvent] hover -> 'X'` at **Info** level → entered the ring buffer → bumped `GetVersion()` → `ConsolePanel::Refresh()` rebuilt all lines **every frame** (destroy/recreate of up to 300 labels → FPS churn) + auto-follow scrolled down. The rebuild kept the line count growing → `UIRenderer` `Flush()` overflow (m_MaxVertices was 8192) did clear-all + `return`, but the overlay pass is `LOAD_OP_LOAD` + UNDEFINED layout (`BeginSwapchainOverlay`) → swapchain showed uninitialized memory = the glitches. Each overflow warning (level **Warning** = retained) bumped `GetVersion()` again → feedback loop (permanent low FPS + slow close). Fixes: (1) `UICanvas.cpp` — all 10 `[UIEvent]` banners changed from `Println` (Info) to `XConsole::Trace` (Debug); the `[Canvas]` banners were already Trace. UI/debug logs must be Trace/Debug by rule (only Info/Warn/Error are retained for the console). (2) `UIRenderer.cpp Flush()` — overflow now **truncates non-destructively** (drops regular quads from the end, then debug-overlay quads last, always keeping the viewport) instead of clear+return; warning is `XConsole::Debug` (not retained → no loop). (3) `m_MaxVertices` raised 8192 → 65536. Verified with mouse-sweep script (`SetCursorPos`, ~2.2s sweep over the window with `ui_event_log: true`): `[Console] rebuilt` went from ~1/pointer-event to **1 total**; `[info] [UIEvent]` 0 (63 trace); `overflow` 0; stderr/VUID empty. Editing rule learned: **renderer-internal / UI logs must be Trace/Debug, never Info/Warn/Error** (Info+ is the console channel and any Info/Warning emitted inside per-frame paths creates feedback loops).
+- **UI Clipping + Scrollbars + Console panel** (see `TODO_UI_SCROLLBARS.md` + `TODO_UI_CONSOLE.md`): `UIElement::SetClip(bool)`; `UIRenderer` recursive `RenderElement` walk with clip-stack intersection + CPU cull, per-draw `vkCmdSetScissor` (parallel `m_QuadClips`/`m_DebugQuadClips`, `ViewportDraw.clip`), `SetContentScale(float)` (logical clip → physical scissor). `UIElement::OnScroll(float)` virtual; `UICanvas::ProcessScrollEvent` dispatches the `ScrollEvent` to the hovered element (propagates up parents). New `UIScrollbar` (engine, track+thumb composition, normalized value, drag with pointer capture). `ScrollView` rework: `SetClip(true)`, absolute content positioning (fixed relative-offset bug), clamps to `[0,maxScroll]`, wheel + drag scrolling, built-in vertical `UIScrollbar` synced in `OnLayoutComputed`. `LogMessage` gains `time` (`HH:MM:SS.mmm`); `XConsole::GetVersion()` monotonic counter; ring buffer now **retains only Info/Warning/Error** (Trace/Debug are debug-only and were evicting useful messages). Editor: new `ConsolePanel` (docked, filter buttons Info/Warn/Error + Clear, colored lines with timestamp, wheel/scrollbar/auto-follow, lazy rebuild via `GetVersion()`), registered as `"ConsolePanel"`/`"Console"` (closeable), added to `kDebugIds` in `BuildDefaultLayout`, `DeleteUiSubtree` in `OnShutdown`; `UIRenderer::SetContentScale` in `OnInit`/`OnContentScaleChanged`.
 - `XConsole` logging system (`Core/Log.h` + `Core/Log.cpp`): own logger replacing spdlog. `LogLevel` enum (Trace/Debug/Info/Warning/Error, verbosity filter), API `Println`/`PrintWarning`/`PrintError`/`Trace`/`Debug`/`SetLevel`/`GetLevel`/`GetMessages`/`Clear`, runtime `{}` formatter (`std::any` + `ostringstream`; specs `{:.Nf}`/`{:Nd}`/`{:0Nd}`), 1000-entry thread-safe ring buffer, stdout (info/warn/debug/trace) + stderr (error). All state in function-local statics (no static-init-order issues).
 - spdlog removed: deleted FetchContent from `dependencies/CMakeLists.txt`, `spdlog::spdlog` from `engine/CMakeLists.txt` (added `Log.cpp`), migrated 94 call-sites in 20 files (`info`→`Println`, `warn`→`PrintWarning`, `error`/`critical`→`PrintError`, `trace`→`Trace`; `set_level`→`SetLevel`), editor/example qualified as `Leir::XConsole::`. Re-added `<exception>`/`<stdexcept>` where spdlog provided them transitively (Settings, Shader, Texture2D, DockManager). New doc `TODO_LOG_SYSTEM.md` (concepts, API, migration, future `ConsolePanel`).
 - `Settings.h`: added `debug.show_overlay` field
