@@ -134,13 +134,24 @@ void UIDebugOverlay::Update(float deltaTime)
 {
     if (!m_Active || !m_Panel) return;
 
-    // FPS
+    // Render stats (from the previous frame's Flush)
+    UIRenderStats stats = m_StatsProvider ? m_StatsProvider() : UIRenderStats{};
+
+    // FPS + per-frame stat averages share one 0.5s smoothing window.
     m_FpsAccum += deltaTime;
     m_FrameCount++;
+    m_DrawCallsAccum += stats.drawCalls;
+    m_QuadsAccum += stats.quads;
     if (m_FpsAccum >= 0.5f) {
         m_CurrentFps = m_FrameCount / m_FpsAccum;
+        if (m_FrameCount > 0) {
+            m_AvgDrawCalls = (uint32_t)(m_DrawCallsAccum / m_FrameCount);
+            m_AvgQuads = (uint32_t)(m_QuadsAccum / m_FrameCount);
+        }
         m_FpsAccum = 0.0f;
         m_FrameCount = 0;
+        m_DrawCallsAccum = 0;
+        m_QuadsAccum = 0;
     }
     m_FpsLabel->SetText("FPS: " + std::to_string((int)m_CurrentFps));
 
@@ -150,13 +161,11 @@ void UIDebugOverlay::Update(float deltaTime)
     snprintf(frameBuf, sizeof(frameBuf), "%.2f", frameMs);
     m_FrameTimeLabel->SetText(std::string("Frame: ") + frameBuf + " ms");
 
-    // Render stats (from the previous frame's Flush)
     if (m_StatsProvider) {
-        UIRenderStats stats = m_StatsProvider();
         m_DrawCallsLabel->SetText(
             "DrawCalls: " + std::to_string(stats.drawCalls) +
-            "  (" + std::to_string(stats.quads) + " quads, " +
-            std::to_string(stats.vertices) + " verts)");
+            " (avg " + std::to_string(m_AvgDrawCalls) + ")" +
+            "  (" + std::to_string(stats.quads) + " quads)");
     } else {
         m_DrawCallsLabel->SetText("DrawCalls: --  (-- quads)");
     }

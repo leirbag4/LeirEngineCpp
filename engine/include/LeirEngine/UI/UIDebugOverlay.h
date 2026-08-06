@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <cstdint>
 
 namespace Leir {
 
@@ -48,6 +49,14 @@ private:
     float m_FpsAccum = 0.0f;
     int m_FrameCount = 0;
     float m_CurrentFps = 0.0f;
+
+    // Per-frame render stat averages (share the FPS smoothing window): the
+    // panel shows the current value plus the average over the last window,
+    // Unity-stats-style. Nothing here is cumulative.
+    std::uint64_t m_DrawCallsAccum = 0;
+    std::uint64_t m_QuadsAccum = 0;
+    uint32_t m_AvgDrawCalls = 0;
+    uint32_t m_AvgQuads = 0;
 
     // Event tracking (stores the hovered element's NAME, not a raw pointer:
     // dock operations can delete the previously-hovered element between

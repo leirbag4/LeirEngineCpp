@@ -207,6 +207,11 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
         return;
     }
 
+    // Per-frame stats: reset before this frame's draw loop. drawCalls is
+    // accumulated by flushBatch below; without this reset it kept growing
+    // across frames (showed 16000+ in the stats overlay instead of ~dozens).
+    m_LastStats = {};
+
     // Batching with a TRIANGLE_STRIP pipeline needs 2 degenerate vertices
     // between consecutive quads so strips never bridge across elements. A
     // single vkCmdDraw of N quads in strip topology connects the last vertex of
