@@ -73,6 +73,7 @@
 - [x] `UIPanel` (contenedor)
 - [x] `UIScrollView`
 - [x] `UIScrollbar` (scrollbars en ScrollView — ver `TODO_UI_SCROLLBARS.md`; UITextArea scroll offset pendiente en `TODO_UI_INPUT.md` F3.1/F3.3)
+- [x] Bug ScrollView arreglado (track del scrollbar no cubría el alto + drag/thumb/rueda invertidos): `SyncScrollbar` con coordenadas absolutas + contenido en `cr - scrollOffset` + drag touch-style — ver `TODO_UI_SCROLLBARS.md`
 - [x] `UITextInput` (caret, click-to-position, drag selection, double-click word, Ctrl+A, Ctrl+arrow)
 - [x] `UITextArea` (multiline: líneas lógicas, selección multi-línea, navegación Up/Down)
 - [x] `UIFloatInput` (input numérico que filtra `[0-9+-.]`, commit en Enter/Blur)

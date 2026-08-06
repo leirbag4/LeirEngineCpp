@@ -68,7 +68,8 @@ primitivas en vez de hackear un widget con auto-clip en el editor.
 `engine/include/LeirEngine/UI/ScrollView.h` + `src/UI/ScrollView.cpp`:
 - `SetClip(true)` en el ctor → el contenido queda scissoreado al rect del view.
 - Contenido posicionado en **coords absolutas** (arregla el bug de posición
-  relativa: offset = `cr.x/y + scrollOffset`).
+  relativa: offset = `cr.x/y - scrollOffset`; el signo correcto es "positivo =
+  contenido movido arriba", ver Bug fixes abajo).
 - `SetScrollOffset` con **clamps** a `[0, maxScroll]`
   (`maxScrollY = contentSize.y - viewport.y`; contentSize = `GetContentSize()`
   natural del contenido, viewport = rect del view).
@@ -101,6 +102,36 @@ primitivas en vez de hackear un widget con auto-clip en el editor.
 - Corrida del editor con la consola como tab activa: sin crash, stderr vacío,
   sin VUID de validación.
 - `[Console] rebuilt N lines` confirma que el panel construye líneas.
+
+## Bug fixes 2026-08-06 (usuario: consola en columna izquierda)
+
+Tres síntomas compartían causa raíz en `engine/src/UI/ScrollView.cpp`:
+
+1. **Track del scrollbar con alto incorrecto y que se achicaba al redimensionar.**
+   `SyncScrollbar()` posicionaba el scrollbar con `anchor={1,0,1,1}` + offsets
+   *relativos* (`-(w+2), 2, -2, -2`). Eso **sobrescribía** la posición absoluta
+   que el padre ya había propagado (`ComputeFreeLayout` suma `m_ComputedRect.x/y`
+   a cada hijo), dejando el rect del scrollbar en coordenadas relativas al origen.
+   Como el ScrollView tiene `SetClip(true)`, el track quedaba recortado contra el
+   rect del ScrollView → el trozo visible no cubría el alto del contenedor y se
+   achicaba al encoger la consola. Fix: `AnchorSet::TopLeft` + offsets absolutos
+   (`{cr.x + cr.z - w - 2, cr.y + 2, cr.x + cr.z - 2, cr.y + cr.w - 2}`), igual
+   que el contenido. Ahora el track cubre todo el alto y acompaña el resize.
+2. **Drag invertido (tipo touch).** El contenido se posicionaba en
+   `cr.y + m_ScrollOffset.y`, pero el header documenta "positive = content moved
+   up". Signo invertido: arrastrar abajo empujaba el contenido abajo (espacio
+   vacío arriba + lock arriba), y la primera línea no podía salir por arriba.
+   Fix: `cr - m_ScrollOffset` en los 2 bloques de `OnLayoutComputed` y drag
+   `off.y = m_ScrollStart.y - delta.y` (el contenido sigue al dedo). Ahora:
+   arrastrar abajo lockea arriba sin espacio vacío; arrastrar arriba clipea la
+   primera línea y lockea al final con espacio vacío abajo.
+3. **Thumb invertido.** `SetOnScroll` → `off.y = v * GetMaxScrollY()`. Con el
+   signo viejo, thumb abajo (v↑) → offset↑ → contenido abajo. Se arregló solo
+   con el punto 2 (thumb abajo → contenido arriba). Sin cambios en
+   `UIScrollbar.cpp`.
+
+La rueda (`off.y -= delta * lineHeight`) quedó correcta con el signo arreglado
+del contenido. Verificado por el usuario en el editor.
 
 ## Roadmap
 

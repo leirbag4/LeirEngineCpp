@@ -529,11 +529,18 @@ protected:
             }
         }
 
-        // Update UI layout on resize
-        if (m_Canvas) {
+        // Rebuild console lines BEFORE the layout pass so freshly created labels
+        // get their computed rects in the same frame. If rebuilt after
+        // UpdateLayout, the new content stays at {0,0,0,0} and gets culled by
+        // the ScrollView clip for one frame (visible as a flash/flicker).
+        if (m_Canvas)
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
+        if (m_ConsolePanel)
+            m_ConsolePanel->Refresh();
+
+        // Update UI layout on resize
+        if (m_Canvas)
             m_Canvas->UpdateLayout();
-        }
 
         // Keep the viewport render target in sync with the actual layout size
         UpdateViewportRenderTarget();
@@ -554,8 +561,6 @@ protected:
             m_TextAreaDebugPanel->Refresh();
         if (m_InspectorTransformPanel)
             m_InspectorTransformPanel->Refresh();
-        if (m_ConsolePanel)
-            m_ConsolePanel->Refresh();
     }
 
     void OnRender() override
