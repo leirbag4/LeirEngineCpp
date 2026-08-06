@@ -85,7 +85,8 @@
 - [x] Text rendering (stb_truetype + FreeType) — `Font`
 - [x] `UIRenderer` (batcher de quads, 3 capas: UI regular → viewports → debug overlay; **clipping por scissor** por nodo con `SetClip` — ver `TODO_UI_SCROLLBARS.md`)
 - [x] `UIViewportPanel` (RenderTexture dentro de la UI)
-- [x] `UIDebugOverlay` (FPS, mouse, teclas, hover, eventos)
+- [x] `UIDebugOverlay` (FPS, frame time, DrawCalls actual+avg, memoria del proceso, mouse, teclas, hover, eventos)
+- [x] Optimización UI (core): cache del tamaño natural de `UILabel` (layout O(1) por label) + batch de draw calls en `UIRenderer` (agrupa por textura+scissor, con vértices degenerados para el `TRIANGLE_STRIP`). Verificado: 60 FPS con la consola llena, ~127 drawcalls avg. Ver `TODO_UI_OPTIMIZATIONS.md`
 - [x] RenderTexture (offscreen color+depth, muestreo en UI)
 
 ## Fase 6 — Editor (LeirEngineEditor)

@@ -222,7 +222,8 @@ píxeles finales = unidades_lógicas × dpr × renderScale
 ### Pendientes a futuro (fuera de esta iteración)
 - `renderScale`: pixel-perfect 2D (RT base + nearest + integer scaling), screen percentage 3D.
 - Abstracción de resolución para export móvil (Android dp / density buckets).
-- Docking completo con pestañas/flotantes (multi-window).
+- Docking multi-window (ventanas flotantes del SO) — el docking por pestañas/anidamiento ya está
+  implementado (ver `TODO_DOCKING.md`, Fase 1-3 completas).
 
 ---
 

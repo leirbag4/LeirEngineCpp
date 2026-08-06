@@ -1,6 +1,8 @@
 # TODO_CONSOLE_PERF.md — Rendimiento con mucho texto (consola/UI)
 
-Fecha: 2026-08-06 · Estado: ⚠️ diagnóstico hecho, **pendiente de medir y optimizar**
+Fecha: 2026-08-06 · Estado: ✅ **Resuelto**. Hallazgos 1 y 2 optimizados (Fixes A + B en
+`TODO_UI_OPTIMIZATIONS.md`), verificado por el usuario: 60 FPS estables con la consola llena
+y ~127 drawcalls avg (1332 quads). Fix C evaluado → no hace falta por ahora.
 
 ## Síntoma (reportado por el usuario)
 
@@ -84,14 +86,20 @@ Con el nuevo `DebugPanel` (X10/X50/X100) vamos a medir:
 
 ## Fixes candidatos (a decidir tras medir)
 
-### A) Cachear el tamaño natural del label (arregla Hallazgo 1)
+> **Resolución (2026-08-06)**: tras medir con el `DebugPanel`, el usuario confirmó el
+> síntoma ("muchas líneas → FPS caen de manera brutal"). Se implementaron **A** y **B**
+> (detalle y checklists en `TODO_UI_OPTIMIZATIONS.md`). El batching en B requirió
+> vértices degenerados por el `TRIANGLE_STRIP` (glitch de triángulos diagonales, corregido).
+> El usuario verificó visual correcto + FPS alto. **C** se evaluó y se descartó por ahora.
+
+### A) Cachear el tamaño natural del label (arregla Hallazgo 1) — ✅ hecho
 `UILabel` ya cachea `m_GlyphQuads`; falta cachear `GetMinSize()`/`MeasureText`.
 - Invalidar el cache cuando cambia `m_Text` (ya hay `MarkDirty()` en `SetText`),
   el `Font`, el `m_MaxWidth`, o el wrap.
 - `GetMinSize()` devolvería `m_CachedSize` sin medir nada por frame.
 - Esto convierte el layout de O(total chars) → O(1) por label.
 
-### B) Batch de draw calls (arregla Hallazgo 2)
+### B) Batch de draw calls (arregla Hallazgo 2) — ✅ hecho
 - Hoy cada quad = 1 `vkCmdDraw` con scissor + bind propio.
 - Batch por textura (todas las fuentes usan 1 atlas) + mismo scissor → agrupar
   quads contiguos en un solo `vkCmdDraw` (el vertex buffer ya los tiene
@@ -99,7 +107,7 @@ Con el nuevo `DebugPanel` (X10/X50/X100) vamos a medir:
 - Idealmente: 1 draw por textura por capa (regular / viewport / debug), con
   `vkCmdSetScissor` solo cuando cambia el clip.
 
-### C) Culling de layout por líneas visibles (más invasivo)
+### C) Culling de layout por líneas visibles (más invasivo) — ⏳ evaluado, no hace falta
 - Skip del `ComputeColumnLayout` de labels fuera del viewport (solo necesario si
   A no alcanza). Más frágil porque los labels fuera igual aportan al
   `GetContentSize` del scroll (scrollbar).

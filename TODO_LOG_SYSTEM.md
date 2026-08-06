@@ -15,8 +15,8 @@
 | Quitar spdlog de CMake (dependencies + engine) | ✅ |
 | Migrar call-sites `spdlog::` → `XConsole::` | ✅ |
 | Verificar build + corrida | ✅ |
-| `ConsolePanel` dockeable (filtros Info/Warn/Error) | ⏳ pendiente |
-| Niveles extra en consola UI (Trace/Debug toggle) | ⏳ opcional |
+| `ConsolePanel` dockeable (filtros Info/Warn/Error) | ✅ implementado (ver `TODO_UI_CONSOLE.md`) |
+| Niveles extra en consola UI (Trace/Debug toggle) | ⏳ opcional (requiere `SetRetainLevel` en `XConsole`) |
 
 ---
 
@@ -242,18 +242,23 @@ examples/PhysicsDemo/main.cpp
 
 ---
 
-## Consola del editor (pendiente — `ConsolePanel`)
+## Consola del editor (implementado — `ConsolePanel`)
 
-Diseño objetivo (estilo Unity):
+Diseño objetivo (estilo Unity) — **todo lo listado ya está implementado** (ver
+`TODO_UI_CONSOLE.md` + `TODO_UI_EVENT_FLOOD.md`):
 
-- Panel dockeable (registrado como panel del `DockManager` como los demás).
-- En `Refresh()` (por frame) lee `XConsole::GetMessages()` y renderiza con `UILabel`/`UITextArea`
-  de solo lectura.
-- 3 botones de filtro: **Info / Warning / Error** (toggle por tipo, cada uno con su color:
+- ✅ Panel dockeable (registrado como panel del `DockManager` como los demás).
+- ✅ En `Refresh()` (por frame) lee `XConsole::GetMessages()` y renderiza con `UILabel` de solo lectura
+  (detección de mensajes nuevos vía `GetVersion()`, rebuild perezoso por frame — no snapshot cada frame).
+- ✅ 3 botones de filtro: **Info / Warning / Error** (toggle por tipo, cada uno con su color:
   Info blanco, Warning amarillo, Error rojo).
-- Colores por nivel en el texto.
-- `Clear` botón → `XConsole::Clear()`.
-- Opcional: toggle extra "Show Trace/Debug" para cuando se sube el nivel.
+- ✅ Colores por nivel en el texto.
+- ✅ `Clear` botón → `XConsole::Clear()`.
+- ✅ Scrollbar + auto-follow + timestamps (wheel/scroll, se re-sincroniza en rebuild).
+- ⏳ Opcional: toggle extra "Show Trace/Debug" para cuando se sube el nivel (requiere
+  `SetRetainLevel` en `XConsole`; hoy Trace/Debug se descartan del ring buffer).
+- ⏳ Roadmap restante de la consola (ver `TODO_UI_CONSOLE.md`): pooling de labels, wrap de líneas
+  largas, pausa/freeze, búsqueda/filtro por texto, doble-click copiar, `CommandLine`.
 
 ---
 

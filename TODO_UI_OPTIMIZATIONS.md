@@ -1,6 +1,6 @@
 # TODO_UI_OPTIMIZATIONS.md — Optimizaciones UI (core)
 
-Fecha: 2026-08-06 · Estado: 🔧 en progreso (A y B terminados, C pendiente)
+Fecha: 2026-08-06 · Estado: ✅ A y B terminados y verificados por el usuario; C evaluado → no hace falta por ahora
 
 ## Contexto
 
@@ -69,7 +69,12 @@ Los quads ya están contiguos en el vertex buffer. `Flush` ahora agrupa por
 - [x] Contador de draw calls reales expuesto para las stats (`m_LastStats`)
 - [x] Véaseguros: build OK, editor corre sin VUID
 - [x] Fix de strip bridges con vértices degenerados (glitch reportado por el usuario)
-- [ ] (pendiente de verificación del usuario) Visual correcto + FPS alto con la consola llena
+- [x] Verificado por el usuario: visual correcto (sin glitches) + FPS alto (60) con la consola llena
+- [x] Stats de DrawCalls corregidas: `m_LastStats` se resetea por frame (antes acumulaba → 16000+); el
+      overlay muestra actual + promedio por frames (ventana 0.5s), estilo Unity. Resultado: ~127 drawcalls
+      avg con ~1332 quads → el batching funciona (~10 quads/batch; la consola = 1-2 batches). Decisión
+      tomada con el usuario: no optimizar más (127 drawcalls es trivial para Vulkan).
+- [x] Memoria: 150MB working set del proceso completo = normal (engine + Vulkan + Jolt + buffers).
 
 ## Fix C — Culling de layout por líneas visibles (futuro)
 
@@ -85,7 +90,9 @@ labels fuera aportan al `GetContentSize` del scroll (scrollbar). Viable solo si
 A+B no alcanzan o para ScrollView con virtualización.
 
 ### Checklist
-- [ ] (futuro) Evaluar si hace falta tras A+B
+- [x] Evaluado tras A+B (2026-08-06): **NO hace falta por ahora** — el usuario reporta
+      60 FPS estables con la consola llena (300+ líneas). Reabrir solo si una UI real
+      llega a miles de items en un solo ScrollView.
 - [ ] (futuro) Virtualización del ScrollView si es necesario
 
 ## Archivos clave

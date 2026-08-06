@@ -154,6 +154,7 @@ Trace/Debug.
 - Pooling de labels en `ConsolePanel` (reusar nodos en vez de destroy/recreate
   — mitigaría el churn si vuelve a haber rebuilds frecuentes por mensajes reales).
 - Wrap de líneas largas en la consola (hoy truncado a `maxWidth`).
-- El usuario reporta que **"aún no funciona todo bien"** — hay bugs pendientes
-  que indicará en el próximo paso (no relacionados con el flood, que quedó
-  verificado).
+
+> Los bugs reportados después de este flood (scrollbars/scroll invertidos, flash al
+> redimensionar splitters, caída de FPS con mucho texto) fueron corregidos — ver
+> `TODO_UI_SCROLLBARS.md`, `TODO_UI_CONSOLE.md`, `TODO_UI_OPTIMIZATIONS.md`.
