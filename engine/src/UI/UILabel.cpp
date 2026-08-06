@@ -17,8 +17,11 @@ void UILabel::SetText(const std::string& text)
 Vector2 UILabel::GetMinSize() const
 {
     if (!m_Font) return {0.0f, (float)m_FontSize};
-    auto size = const_cast<UILabel*>(this)->m_Font->MeasureText(m_Text, m_WordWrap ? m_MaxWidth : 0.0f);
-    return size;
+    if (!m_SizeValid) {
+        m_CachedSize = m_Font->MeasureText(m_Text, m_WordWrap ? m_MaxWidth : 0.0f);
+        m_SizeValid = true;
+    }
+    return m_CachedSize;
 }
 
 void UILabel::OnLayoutComputed()

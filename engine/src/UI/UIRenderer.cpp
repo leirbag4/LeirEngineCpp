@@ -166,58 +166,115 @@ void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const 
         m_DebugQuadClips.push_back({0.0f, 0.0f, m_ScreenSize.x, m_ScreenSize.y});
 }
 
+VkDescriptorSet UIRenderer::GetOrCreateDesc(Texture2D* texture)
+{
+    Texture2D* tex = texture ? texture : m_FallbackTex;
+    auto it = m_DescCache.find(tex);
+    if (it != m_DescCache.end()) return it->second;
+
+    VkDescriptorSet newSet;
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = m_DescPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &m_DescSetLayout;
+    if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
+        XConsole::PrintError("UIRenderer: failed to allocate desc set");
+        return VK_NULL_HANDLE;
+    }
+    VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = newSet;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &imgInfo;
+    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    m_DescCache[tex] = newSet;
+    return newSet;
+}
+
 void UIRenderer::Flush(VkCommandBuffer cmd)
 {
     size_t regCount = m_QuadTextures.size();
     size_t vpCount = m_ViewportDraws.size();
     size_t dbgCount = m_DebugQuadTextures.size();
 
-    size_t totalVerts = m_Vertices.size() + vpCount * 4 + m_DebugVertices.size();
-    if (totalVerts == 0) return;
+    size_t totalQuads = regCount + vpCount + dbgCount;
+    if (totalQuads == 0) {
+        m_LastStats = {};
+        return;
+    }
 
-    // Never exceed the vertex buffer: drop regular quads from the END (and the
-    // debug overlay last) until everything fits. The viewport is always kept.
-    // Truncating is non-destructive — the old behavior (clear everything and
-    // return) left the overlay pass with LOAD_OP_LOAD + UNDEFINED layout,
-    // so the swapchain showed garbage (red/green glitches across the screen).
-    if ((int)totalVerts > m_MaxVertices) {
-        XConsole::Debug("UIRenderer: overflow, truncating {} -> {} verts",
-            (int)totalVerts, m_MaxVertices);
-        size_t fixed = vpCount * 4;
-        while (regCount > 0 && m_Vertices.size() + fixed + m_DebugVertices.size() > (size_t)m_MaxVertices) {
+    // Batching with a TRIANGLE_STRIP pipeline needs 2 degenerate vertices
+    // between consecutive quads so strips never bridge across elements. A
+    // single vkCmdDraw of N quads in strip topology connects the last vertex of
+    // quad i with the first of quad i+1 — visible as stray diagonal triangles
+    // everywhere (and a triangle that follows the caret while typing). The
+    // interleaved buffer therefore uses 6 slots per quad (4 + 2 degenerate).
+    const size_t slotPerQuad = 6;
+    size_t maxQuads = (size_t)m_MaxVertices / slotPerQuad;
+    if (totalQuads > maxQuads) {
+        XConsole::Debug("UIRenderer: overflow, truncating {} -> {} quads",
+            (int)totalQuads, (int)maxQuads);
+        // Drop regular quads from the END (and the debug overlay last) until
+        // everything fits. The viewport is always kept. Truncating is
+        // non-destructive — the old clear-everything-and-return left the
+        // overlay pass with LOAD_OP_LOAD + UNDEFINED layout, so the swapchain
+        // showed garbage (red/green glitches across the screen).
+        size_t fixed = vpCount;
+        while (regCount > 0 && regCount + fixed + dbgCount > maxQuads) {
             m_Vertices.resize(m_Vertices.size() - 4);
             m_QuadTextures.pop_back();
             m_QuadClips.pop_back();
             --regCount;
         }
-        while (dbgCount > 0 && m_Vertices.size() + fixed + m_DebugVertices.size() > (size_t)m_MaxVertices) {
+        while (dbgCount > 0 && regCount + fixed + dbgCount > maxQuads) {
             m_DebugVertices.resize(m_DebugVertices.size() - 4);
             m_DebugQuadTextures.pop_back();
             m_DebugQuadClips.pop_back();
             --dbgCount;
         }
+        totalQuads = regCount + fixed + dbgCount;
     }
+
+    // Collect quads in draw order: regular → viewport → debug.
+    struct FlushQuad {
+        const UIVertex* src; // 4 source vertices
+        Vector4 clip;
+        VkDescriptorSet desc;
+    };
+    std::vector<FlushQuad> quads;
+    quads.reserve(totalQuads);
+    for (size_t qi = 0; qi < regCount; ++qi)
+        quads.push_back({ &m_Vertices[qi * 4], m_QuadClips[qi], GetOrCreateDesc(m_QuadTextures[qi]) });
+    for (size_t i = 0; i < vpCount; ++i)
+        quads.push_back({ m_ViewportDraws[i].verts, m_ViewportDraws[i].clip,
+                          m_ViewportDraws[i].texture->GetDescriptorSet() });
+    for (size_t qi = 0; qi < dbgCount; ++qi)
+        quads.push_back({ &m_DebugVertices[qi * 4], m_DebugQuadClips[qi], GetOrCreateDesc(m_DebugQuadTextures[qi]) });
 
     int frame = (int)m_Device->GetCurrentFrameIndex();
 
-    VkDeviceSize regBytes = m_Vertices.size() * sizeof(UIVertex);
-    VkDeviceSize vpBytes = vpCount * 4 * sizeof(UIVertex);
-    VkDeviceSize dbgBytes = m_DebugVertices.size() * sizeof(UIVertex);
-    VkDeviceSize totalBytes = regBytes + vpBytes + dbgBytes;
+    size_t totalBytes = totalQuads * slotPerQuad * sizeof(UIVertex);
 
     void* data;
     vkMapMemory(m_Device->GetDevice(), m_VertexMemories[frame], 0, totalBytes, 0, &data);
 
-    // Layout: [regular UI] [viewport] [debug overlay]
-    if (!m_Vertices.empty())
-        memcpy(data, m_Vertices.data(), (size_t)regBytes);
-
-    for (size_t i = 0; i < vpCount; ++i)
-        memcpy((char*)data + regBytes + i * 4 * sizeof(UIVertex),
-               m_ViewportDraws[i].verts, 4 * sizeof(UIVertex));
-
-    if (!m_DebugVertices.empty())
-        memcpy((char*)data + regBytes + vpBytes, m_DebugVertices.data(), (size_t)dbgBytes);
+    // Interleave degenerate vertices between quads to break the strip. Quad i
+    // lives at vertex 6*i .. 6*i+3; slots 6*i+4/6*i+5 are the degenerate pair.
+    UIVertex* dst = (UIVertex*)data;
+    for (size_t qi = 0; qi < totalQuads; ++qi) {
+        const UIVertex* src = quads[qi].src;
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+        dst[3] = src[3];
+        dst[4] = src[3];                                     // repeat last vertex
+        dst[5] = (qi + 1 < totalQuads) ? quads[qi + 1].src[0] : src[3]; // next quad's first (or repeat)
+        dst += slotPerQuad;
+    }
 
     vkUnmapMemory(m_Device->GetDevice(), m_VertexMemories[frame]);
 
@@ -232,86 +289,72 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
     vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Vector2), &screenSize);
 
+    // Batched draw: consecutive quads that share the same texture (descriptor
+    // set) AND scissor are merged into a single vkCmdDraw. Text-heavy UI
+    // (e.g. a console with hundreds of glyphs) previously emitted one draw per
+    // quad (~1.500 draw calls/frame); after batching it becomes one draw per
+    // (texture, scissor) run, typically a handful.
+    VkDescriptorSet lastDesc = VK_NULL_HANDLE;
     VkRect2D lastScissor{};
     bool lastScissorValid = false;
 
-    // 1. Regular UI (bottom layer)
-    for (size_t qi = 0; qi < regCount; ++qi) {
-        ApplyScissor(cmd, m_QuadClips[qi], lastScissor, lastScissorValid);
-        Texture2D* tex = m_QuadTextures[qi];
-        auto it = m_DescCache.find(tex);
-        if (it == m_DescCache.end()) {
-            VkDescriptorSet newSet;
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = m_DescPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &m_DescSetLayout;
-            if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-                XConsole::PrintError("UIRenderer: failed to allocate desc set");
-                continue;
-            }
-            VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = newSet;
-            write.dstBinding = 0;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            write.pImageInfo = &imgInfo;
-            vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-            m_DescCache[tex] = newSet;
-            it = m_DescCache.find(tex);
-        }
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_PipelineLayout, 0, 1, &it->second, 0, nullptr);
-        vkCmdDraw(cmd, 4, 1, (uint32_t)(qi * 4), 0);
-    }
+    VkDescriptorSet batchDesc = VK_NULL_HANDLE;
+    VkRect2D batchScissor{};
+    uint32_t batchStart = 0;   // first vertex index of the current batch
+    uint32_t batchCount = 0;   // quads in the current batch
+    uint32_t drawnQuads = 0;
 
-    // 2. Viewports (middle layer)
-    uint32_t vpBase = (uint32_t)(regCount * 4);
-    for (size_t i = 0; i < vpCount; ++i) {
-        ApplyScissor(cmd, m_ViewportDraws[i].clip, lastScissor, lastScissorValid);
-        VkDescriptorSet ds = m_ViewportDraws[i].texture->GetDescriptorSet();
-        if (ds == VK_NULL_HANDLE) continue;
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_PipelineLayout, 0, 1, &ds, 0, nullptr);
-        vkCmdDraw(cmd, 4, 1, vpBase + (uint32_t)(i * 4), 0);
-    }
+    auto sameScissor = [](const VkRect2D& a, const VkRect2D& b) {
+        return a.offset.x == b.offset.x && a.offset.y == b.offset.y &&
+               a.extent.width == b.extent.width && a.extent.height == b.extent.height;
+    };
 
-    // 3. Debug overlay (top layer)
-    uint32_t dbgBase = vpBase + (uint32_t)(vpCount * 4);
-    for (size_t qi = 0; qi < dbgCount; ++qi) {
-        ApplyScissor(cmd, m_DebugQuadClips[qi], lastScissor, lastScissorValid);
-        Texture2D* tex = m_DebugQuadTextures[qi];
-        auto it = m_DescCache.find(tex);
-        if (it == m_DescCache.end()) {
-            VkDescriptorSet newSet;
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = m_DescPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &m_DescSetLayout;
-            if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-                XConsole::PrintError("UIRenderer: failed to allocate debug desc set");
-                continue;
-            }
-            VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = newSet;
-            write.dstBinding = 0;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            write.pImageInfo = &imgInfo;
-            vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
-            m_DescCache[tex] = newSet;
-            it = m_DescCache.find(tex);
+    auto flushBatch = [&]() {
+        if (batchCount == 0) return;
+        // (count*6 - 2) vertices: count quads minus the trailing degenerate pair.
+        vkCmdDraw(cmd, batchCount * (uint32_t)slotPerQuad - 2, 1, batchStart, 0);
+        ++m_LastStats.drawCalls;
+        batchCount = 0;
+    };
+
+    auto pushQuad = [&](VkDescriptorSet desc, const Vector4& logicalClip, uint32_t quadIdx) {
+        if (desc == VK_NULL_HANDLE) { flushBatch(); return; }
+        VkRect2D scissor{};
+        {
+            const float pw = m_ScreenSize.x * m_ContentScale;
+            const float ph = m_ScreenSize.y * m_ContentScale;
+            scissor.offset.x = std::max(0, (int32_t)(logicalClip.x * m_ContentScale));
+            scissor.offset.y = std::max(0, (int32_t)(logicalClip.y * m_ContentScale));
+            scissor.extent.width = (uint32_t)std::max(0.0f, std::min(logicalClip.z * m_ContentScale, pw - scissor.offset.x));
+            scissor.extent.height = (uint32_t)std::max(0.0f, std::min(logicalClip.w * m_ContentScale, ph - scissor.offset.y));
         }
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_PipelineLayout, 0, 1, &it->second, 0, nullptr);
-        vkCmdDraw(cmd, 4, 1, dbgBase + (uint32_t)(qi * 4), 0);
-    }
+        if (batchCount > 0 && desc == batchDesc && sameScissor(scissor, batchScissor)) {
+            ++batchCount;
+            ++drawnQuads;
+            return;
+        }
+        flushBatch();
+        ApplyScissor(cmd, logicalClip, lastScissor, lastScissorValid);
+        if (desc != lastDesc) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                m_PipelineLayout, 0, 1, &desc, 0, nullptr);
+            lastDesc = desc;
+        }
+        batchDesc = desc;
+        batchScissor = scissor;
+        batchStart = quadIdx * (uint32_t)slotPerQuad;
+        batchCount = 1;
+        ++drawnQuads;
+    };
+
+    for (size_t qi = 0; qi < totalQuads; ++qi)
+        pushQuad(quads[qi].desc, quads[qi].clip, (uint32_t)qi);
+
+    flushBatch();
+
+    m_LastStats.quads = drawnQuads;
+    m_LastStats.vertices = drawnQuads * (uint32_t)slotPerQuad;
+    m_LastStats.batches = m_LastStats.drawCalls;
 }
 
 void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)

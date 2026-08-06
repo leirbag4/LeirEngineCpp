@@ -26,6 +26,14 @@ struct LEIR_API ViewportDraw {
     Vector4 clip; // logical clip rect; {0,0,w,h} = full canvas (no clip)
 };
 
+// Per-frame render statistics, read by UIDebugOverlay.
+struct LEIR_API UIRenderStats {
+    uint32_t quads = 0;        // quads submitted last frame
+    uint32_t vertices = 0;     // vertices submitted last frame
+    uint32_t drawCalls = 0;    // actual vkCmdDraw calls (after batching)
+    uint32_t batches = 0;      // number of merged batches (same texture + scissor)
+};
+
 class LEIR_API UIRenderer {
 public:
     UIRenderer(VulkanDevice* device);
@@ -38,10 +46,14 @@ public:
     void SetContentScale(float scale) { m_ContentScale = scale; }
     float GetContentScale() const { return m_ContentScale; }
 
+    // Stats from the last Flush (0 if never rendered).
+    const UIRenderStats& GetLastStats() const { return m_LastStats; }
+
 private:
     void RenderElement(UIElement* elem, const Vector4* clip, bool isDebug);
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
+    VkDescriptorSet GetOrCreateDesc(Texture2D* texture);
     void Flush(VkCommandBuffer cmd);
     void ApplyScissor(VkCommandBuffer cmd, const Vector4& logicalClip, VkRect2D& last, bool& valid);
 
@@ -71,6 +83,7 @@ private:
     const Vector4* m_CurrentClip = nullptr;
     Vector2 m_ScreenSize = {1280.0f, 720.0f}; // logical canvas size (px→NDC)
     float m_ContentScale = 1.0f;
+    UIRenderStats m_LastStats;
 };
 
 } // namespace Leir

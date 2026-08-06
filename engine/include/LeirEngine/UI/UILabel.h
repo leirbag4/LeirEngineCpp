@@ -47,7 +47,10 @@ protected:
     void OnLayoutComputed() override;
 
 private:
-    void MarkDirty() { m_Dirty = true; }
+    // m_Dirty drives the glyph rebuild; m_SizeValid drives the cached
+    // natural size so layout (GetMinSize, called every frame) stays O(1)
+    // instead of re-measuring all glyphs on every UpdateLayout pass.
+    void MarkDirty() { m_Dirty = true; m_SizeValid = false; }
     void Rebuild();
 
     std::string m_Text;
@@ -58,6 +61,8 @@ private:
     float m_MaxWidth = 0.0f;
     std::vector<TextGlyphQuad> m_GlyphQuads;
     bool m_Dirty = true;
+    mutable Vector2 m_CachedSize = {0.0f, 0.0f};
+    mutable bool m_SizeValid = false;
 };
 
 } // namespace Leir

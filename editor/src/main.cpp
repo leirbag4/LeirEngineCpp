@@ -490,6 +490,9 @@ protected:
         m_Canvas->UpdateLayout();
 
         m_DebugOverlay = std::make_unique<Leir::UIDebugOverlay>(m_Font.get(), m_Canvas.get());
+        m_DebugOverlay->SetRenderStatsProvider([this]() {
+            return m_UIRenderer ? m_UIRenderer->GetLastStats() : Leir::UIRenderStats{};
+        });
 
         Leir::XConsole::Println("Scene hierarchy created with dock system");
     }

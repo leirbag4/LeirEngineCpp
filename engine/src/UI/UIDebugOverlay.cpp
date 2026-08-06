@@ -9,8 +9,75 @@
 #include "LeirEngine/Core/Settings.h"
 #include <string>
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#else
+#include <cstdio>
+#include <cstring>
+#endif
 
 namespace Leir {
+
+namespace {
+
+// Process memory in bytes (working set + peak). Fallbacks return 0 when the
+// platform can't provide the info.
+void GetProcessMemory(std::uint64_t& workingSet, std::uint64_t& peakWorkingSet)
+{
+    workingSet = 0;
+    peakWorkingSet = 0;
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+        workingSet = pmc.WorkingSetSize;
+        peakWorkingSet = pmc.PeakWorkingSetSize;
+    }
+#elif defined(__APPLE__)
+    struct task_basic_info info;
+    mach_msg_type_number_t count = TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &count) == KERN_SUCCESS) {
+        workingSet = info.resident_size;
+        peakWorkingSet = info.virtual_size;
+    }
+#else
+    FILE* f = std::fopen("/proc/self/status", "r");
+    if (!f) return;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        std::uint64_t kb = 0;
+        if (std::strncmp(line, "VmRSS:", 6) == 0 && std::sscanf(line + 6, "%llu", &kb) == 1)
+            workingSet = kb * 1024ull;
+        else if (std::strncmp(line, "VmHWM:", 6) == 0 && std::sscanf(line + 6, "%llu", &kb) == 1)
+            peakWorkingSet = kb * 1024ull;
+    }
+    std::fclose(f);
+#endif
+}
+
+std::string FormatBytes(std::uint64_t bytes)
+{
+    if (bytes >= 1024ull * 1024ull * 1024ull)
+        return std::to_string(bytes / (1024ull * 1024ull * 1024ull)) + "." +
+               std::to_string((bytes % (1024ull * 1024ull * 1024ull)) / (1024ull * 1024ull) / 10) + " GB";
+    if (bytes >= 1024ull * 1024ull)
+        return std::to_string(bytes / (1024ull * 1024ull)) + "." +
+               std::to_string((bytes % (1024ull * 1024ull)) / (1024ull * 1024ull / 10)) + " MB";
+    if (bytes >= 1024ull)
+        return std::to_string(bytes / 1024ull) + " KB";
+    return std::to_string(bytes) + " B";
+}
+
+} // namespace
 
 UIDebugOverlay::UIDebugOverlay(Font* font, UICanvas* canvas)
     : m_Canvas(canvas)
@@ -31,7 +98,7 @@ void UIDebugOverlay::CreatePanel(Font* font)
     m_Panel = new UIPanel();
     m_Panel->SetName("DebugOverlay");
     m_Panel->GetRect().anchor = {0.0f, 0.0f, 0.0f, 0.0f};
-    m_Panel->GetRect().offset = {274.0f, 10.0f, 544.0f, 210.0f};
+    m_Panel->GetRect().offset = {274.0f, 10.0f, 590.0f, 340.0f};
     m_Panel->SetColor({0.08f, 0.08f, 0.1f, 0.85f});
     m_Panel->SetOverlayLayer(true);   // always on top of the dock/viewports
     m_Panel->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
@@ -51,6 +118,9 @@ void UIDebugOverlay::CreatePanel(Font* font)
     };
 
     m_FpsLabel = makeLabel("DebugFps", "FPS: --");
+    m_FrameTimeLabel = makeLabel("DebugFrameTime", "Frame: -- ms");
+    m_DrawCallsLabel = makeLabel("DebugDrawCalls", "DrawCalls: --  (-- quads)");
+    m_MemoryLabel = makeLabel("DebugMemory", "Mem: -- MB  (peak -- MB)");
     m_MouseLabel = makeLabel("DebugMouse", "Mouse: --, --");
     m_ButtonsLabel = makeLabel("DebugButtons", "Btns: [L] [R] [M]");
     m_KeysLabel = makeLabel("DebugKeys", "Keys: --");
@@ -73,6 +143,30 @@ void UIDebugOverlay::Update(float deltaTime)
         m_FrameCount = 0;
     }
     m_FpsLabel->SetText("FPS: " + std::to_string((int)m_CurrentFps));
+
+    // Frame time
+    float frameMs = m_CurrentFps > 0.0f ? 1000.0f / m_CurrentFps : 0.0f;
+    char frameBuf[32];
+    snprintf(frameBuf, sizeof(frameBuf), "%.2f", frameMs);
+    m_FrameTimeLabel->SetText(std::string("Frame: ") + frameBuf + " ms");
+
+    // Render stats (from the previous frame's Flush)
+    if (m_StatsProvider) {
+        UIRenderStats stats = m_StatsProvider();
+        m_DrawCallsLabel->SetText(
+            "DrawCalls: " + std::to_string(stats.drawCalls) +
+            "  (" + std::to_string(stats.quads) + " quads, " +
+            std::to_string(stats.vertices) + " verts)");
+    } else {
+        m_DrawCallsLabel->SetText("DrawCalls: --  (-- quads)");
+    }
+
+    // Process memory
+    std::uint64_t workingSet = 0, peakWorkingSet = 0;
+    GetProcessMemory(workingSet, peakWorkingSet);
+    m_MemoryLabel->SetText(
+        "Mem: " + FormatBytes(workingSet) +
+        "  (peak " + FormatBytes(peakWorkingSet) + ")");
 
     // Mouse position
     auto mousePos = Mouse::GetPos();
