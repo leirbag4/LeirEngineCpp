@@ -168,10 +168,12 @@ void ScrollView::SyncScrollbar()
         m_VScrollbar->SetActive(vOverflow);
 
         if (vOverflow) {
+            // Flush track: starts exactly at the viewport's right edge so the
+            // clip (W - scrollbarWidth) never overlaps with the bar.
             m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_VScrollbar->GetRect().offset = {
-                cr.x + cr.z - m_ScrollbarWidth - 2.0f, cr.y + 2.0f,
-                cr.x + cr.z - 2.0f, hOverflow ? (cr.y + cr.w - m_ScrollbarWidth - 2.0f) : (cr.y + cr.w - 2.0f)
+                cr.x + cr.z - m_ScrollbarWidth, cr.y,
+                cr.x + cr.z, hOverflow ? (cr.y + cr.w - m_ScrollbarWidth) : (cr.y + cr.w)
             };
             m_VScrollbar->ComputeLayout({cr.z, cr.w});
 
@@ -188,9 +190,9 @@ void ScrollView::SyncScrollbar()
         if (hOverflow) {
             m_HScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_HScrollbar->GetRect().offset = {
-                cr.x + 2.0f, cr.y + cr.w - m_ScrollbarWidth - 2.0f,
-                vOverflow ? (cr.x + cr.z - m_ScrollbarWidth - 2.0f) : (cr.x + cr.z - 2.0f),
-                cr.y + cr.w - 2.0f
+                cr.x, cr.y + cr.w - m_ScrollbarWidth,
+                vOverflow ? (cr.x + cr.z - m_ScrollbarWidth) : (cr.x + cr.z),
+                cr.y + cr.w
             };
             m_HScrollbar->ComputeLayout({cr.z, cr.w});
 
