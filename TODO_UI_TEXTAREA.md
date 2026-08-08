@@ -98,13 +98,31 @@ Ver `TODO_UI_SCROLLBARS.md` / resumen de cambios:
 ### F2.5 — Integración / verificación
 
 - [x] `TextAreaDebugPanel` (`editor/src/UI/TextAreaDebugPanel.cpp`): se añadió un segundo
-      área **read-only** (`SetEditable(false)`) con 40 líneas largas para verificar wheel /
-      drag / thumb / scrollbars sin que caret o edición interfieran.
-- [ ] Verificación manual pendiente del usuario (wheel, thumb, drag, selección intacta,
-      read-only).
+      área **read-only** (`SetEditable(false)`) con 40 líneas largas para verificar el wheel /
+      scroll / thumb / scrollbar sin que caret o edición interfieran.
+- [x] Verificación manual del usuario: wheel, thumb, drag, scrollbars, selección intacta,
+      read-only — **todo funciona**.
 - [ ] Caso borde: líneas vacías, `\n` finales, scroll X con una línea muy larga.
 - [ ] Actualizar `TODO_UI_INPUT.md`: marcar F3.1 (scroll offset), F3.3 (render offset) y
       F3.4 (scrollbars UITextArea) como resueltos.
+
+## Fase 3 — Fix de rendimiento (60 → 10 fps con el panel visible) — ✅
+
+**Problema:** con el área read-only de 40 líneas largas visible, la FPS caía de 60 a 10.
+**Causa raíz:** `GetContentSize()` era **O(N²)** — por cada línea llamaba a
+`GetLineEnd(line)` (re-escaneo desde el inicio) y a `GetCursorXAt(GetLineEnd(line))`
+(otro re-escaneo desde el inicio). Con 40×120 chars eso era ~40 re-escaneos por llamada,
+y se ejecutaba ~3-4 veces por frame (`SetScrollOffset` + `SyncScrollbars` dentro de
+`OnLayoutComputed`) → ~90M operaciones de char por frame.
+
+**Fix:** `GetContentSize()` reescrito como **single-pass O(N)** sobre `m_Text` — recorre
+cada codepoint una sola vez (misma lógica UTF-8/espacio/avance que `GetCursorXAt`),
+acumulando el ancho de la línea actual y el máximo sobre todas las líneas, contando el
+número de líneas con los `\n` de paso. Se eliminó el per-line `GetLineEnd` + `GetCursorXAt`.
+
+**Archivo:** `engine/src/UI/UITextArea.cpp` (GetContentSize)
+**Estado:** ✅ Builds verdes (LeirEngine + LeirEngineEditor). Verificado por el usuario:
+FPS estable en 60 con el panel Text Area visible.
 
 ## Propiedad Editable (UITextInput / UITextArea)
 
@@ -128,4 +146,5 @@ Nuevo en el mismo paso (pedido del usuario antes de empezar Fase 2):
 | F2.2 — Rendering con offset | ✅ |
 | F2.3 — Auto-follow del caret | ✅ |
 | F2.4 — Scrollbars UITextArea | ✅ |
-| F2.5 — Integración / verificación | ⏳ (parcial) |
+| F2.5 — Integración / verificación | ✅ |
+| Fase 3 — Fix de rendimiento (O(N²) → O(N)) | ✅ |
