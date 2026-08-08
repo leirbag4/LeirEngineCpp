@@ -217,7 +217,6 @@ protected:
     void OnInit() override
     {
         Leir::XConsole::Println("Editor initialized");
-        Leir::XConsole::Println("HORIZONTAL SCROLL TEST long line to force horizontal overflow of the console viewport so the horizontal scrollbar appears and we can verify the disappearing-text bug when scrolling all the way to the right AND past the widest line", "alpha", "beta", "gamma", "delta", "epsilon");
 
         Leir::VulkanDeviceConfig config;
         config.appName = "LeirEngine Editor";

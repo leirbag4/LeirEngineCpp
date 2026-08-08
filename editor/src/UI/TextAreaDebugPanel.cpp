@@ -21,6 +21,26 @@ TextAreaDebugPanel::TextAreaDebugPanel()
     m_TextArea->SetSizePolicy(Leir::SizePolicy::Fill);
     AddChild(m_TextArea);
 
+    // Read-only: scrollable (wheel/drag/scrollbars) but no caret or editing.
+    auto* roLabel = new Leir::UILabel();
+    roLabel->SetText("read-only (SetEditable(false)):");
+    roLabel->SetFontSize(11);
+    roLabel->SetColor({0.6f, 0.6f, 0.6f, 1.0f});
+    roLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
+    AddChild(roLabel);
+
+    m_ReadOnlyArea = new Leir::UITextArea();
+    m_ReadOnlyArea->SetName("DebugTextAreaPanelReadOnly");
+    m_ReadOnlyArea->SetSizePolicy(Leir::SizePolicy::Fill);
+    m_ReadOnlyArea->SetEditable(false);
+    AddChild(m_ReadOnlyArea);
+
+    std::string roText;
+    for (int i = 0; i < 40; ++i) {
+        roText += "read-only line " + std::to_string(i) + " : 0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz\n";
+    }
+    m_ReadOnlyArea->SetText(roText);
+
     m_StatusLabel = new Leir::UILabel();
     m_StatusLabel->SetText("area: cursor=0 line=0 col=0 sel=-1");
     m_StatusLabel->SetFontSize(10);
@@ -34,6 +54,7 @@ TextAreaDebugPanel::~TextAreaDebugPanel() = default;
 void TextAreaDebugPanel::SetFont(Leir::Font* font)
 {
     if (m_TextArea) m_TextArea->SetFont(font);
+    if (m_ReadOnlyArea) m_ReadOnlyArea->SetFont(font);
     if (m_TitleLabel) m_TitleLabel->SetFont(font);
     if (m_StatusLabel) m_StatusLabel->SetFont(font);
 }

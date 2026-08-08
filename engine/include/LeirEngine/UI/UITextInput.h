@@ -28,6 +28,12 @@ public:
     void SetAutoSelect(bool v) { m_AutoSelect = v; }
     bool GetAutoSelect() const { return m_AutoSelect; }
 
+    // When false the control is read-only: the text renders and the user can
+    // still scroll, but the caret cannot be placed and editing/selection via
+    // mouse or keyboard is disabled (like a read-only textbox).
+    void SetEditable(bool editable);
+    bool IsEditable() const { return m_Editable; }
+
     void SetTextColor(const Vector4& color) { m_TextColor = color; }
     const Vector4& GetTextColor() const { return m_TextColor; }
 
@@ -39,7 +45,7 @@ public:
     bool HasSelection() const { return m_SelectionStart >= 0 && m_SelectionStart != m_CursorPos; }
     int GetSelBegin() const { return m_SelectionStart < m_CursorPos ? m_SelectionStart : m_CursorPos; }
     int GetSelEnd() const { return m_SelectionStart > m_CursorPos ? m_SelectionStart : m_CursorPos; }
-    bool IsCaretVisible() const { return m_Focused && (m_CaretCounter / 30) % 2 == 0; }
+    bool IsCaretVisible() const { return m_Editable && m_Focused && (m_CaretCounter / 30) % 2 == 0; }
     void ResetCaretBlink() { m_CaretCounter = 0; }
     void TickCaret() { m_CaretCounter = (m_CaretCounter + 1) % 60; m_FrameCounter++; }
 
@@ -78,6 +84,7 @@ protected:
     bool m_Hovered = false;
     bool m_Dragging = false;
     bool m_AutoSelect = false;
+    bool m_Editable = true;
     int m_CaretCounter = 0;
     int m_FrameCounter = 0;
     int m_LastClickFrame = -30;

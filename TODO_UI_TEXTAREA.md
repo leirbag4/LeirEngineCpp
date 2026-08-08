@@ -52,63 +52,80 @@ Ver `TODO_UI_SCROLLBARS.md` / resumen de cambios:
 
 ### F2.1 — Estado + clip
 
-- [ ] `m_ScrollOffset` (Vector2, al menos Y; X opcional si hay líneas largas).
-- [ ] `SetClip(true)` en el ctor del UITextArea para que el texto que desborda quede
+- [x] `m_ScrollOffset` (Vector2) — clamped via `SetScrollOffset`, max computed each layout.
+- [x] `SetClip(true)` en el ctor del UITextArea para que el texto que desborda quede
       recortado al rect del widget.
-- [ ] `GetMaxScrollY()` / `GetMaxScrollX()`:
+- [x] `GetMaxScrollY()` / `GetMaxScrollX()`:
   - Alto contenido = `lineCount * lineH` (+ padding).
   - Ancho contenido = max over líneas de `GetCursorXAt(GetLineEnd(line))` (o
     `Font::MeasureText` de cada línea).
-  - Viewport = rect del widget − espesor scrollbars habilitadas.
+  - Viewport = rect del widget − espesor scrollbars habilitadas (`GetViewportSize()`).
 
 ### F2.2 — Rendering con offset
 
-**Archivo:** `engine/src/UI/UIRenderer.cpp` (bloque UITextInput, ~547-592)
+**Archivo:** `engine/src/UI/UIRenderer.cpp` (bloque UITextInput)
 
-- [ ] `textX0 -= scrollOffset.x` y `baselineY -= scrollOffset.y` (para baseline del texto,
+- [x] `textX0 -= scrollOffset.x` y `baselineY -= scrollOffset.y` (para baseline del texto,
       caret `caretY` y quads de selección `sx/ex`).
-- [ ] La selección multiline ya dibuja un rect por línea; hay que restar el offset a cada uno.
-- [ ] El caret debe seguir usando `GetCursorX`/`GetCursorLine` con el mismo offset aplicado.
-- [ ] El clip del UITextArea se encarga de no dibujar fuera del rect (scissor).
+- [x] La selección multiline ya dibuja un rect por línea; se resta el offset a cada uno.
+- [x] El caret usa `GetCursorX`/`GetCursorLine` con el mismo offset aplicado.
+- [x] El clip del UITextArea se encarga de no dibujar fuera del rect (scissor).
+- [x] El textarea ya **no** aplica line-wrap (`LayoutText` con maxWidth=0); las líneas
+      largas se desbordan y salen por el scrollbar horizontal. El texto del `UITextArea`
+      por lo tanto ya no hace wrapping a la altura (cambio correcto para scroll real).
 
 ### F2.3 — Auto-follow del caret
 
 **Archivo:** `engine/src/UI/UITextArea.cpp`
 
-- [ ] Tras cada mutación del cursor (flechas, click, Home/End, Enter, tipeo, selección):
-      si el caret sale del viewport → ajustar `m_ScrollOffset` para traerlo adentro
-      (línea arriba/abajo, y columna izquierda/derecha si hay scroll X).
-- [ ] Con scroll vertical clásico: cuando el caret baja más allá del fondo visible,
-      desplazar para que la línea activa quede visible (mínimo una línea de margen).
+- [x] Tras cada mutación del cursor (flechas, click, Home/End, Enter, tipeo, selección):
+      `EnsureCaretVisible()` ajusta `m_ScrollOffset` para traer la línea/columna activa al
+      viewport (con un margen de línea).
+- [x] Scroll vertical clásico: cuando el caret baja más allá del fondo visible, desplaza para
+      que la línea activa quede visible.
 
 ### F2.4 — Scrollbars en el UITextArea
 
 **Archivo:** `engine/include/LeirEngine/UI/UITextArea.h`, `engine/src/UI/UITextArea.cpp`
 
-- [ ] Hijos `UIScrollbar(true)` (vertical) + `UIScrollbar(false)` (horizontal), posicionados
+- [x] Hijos `UIScrollbar(true)` (vertical) + `UIScrollbar(false)` (horizontal), posicionados
       en `OnLayoutComputed` (offsets absolutos como ScrollView).
-- [ ] Sincronización bidireccional: scrollbar → offset (callback `SetOnScroll`), offset →
+- [x] Sincronización bidireccional: scrollbar → offset (callback `SetOnScroll`), offset →
       scrollbar (`SetRange` + `SetValue`) en cada layout.
-- [ ] Booleans `SetVerticalScrollbarEnabled(bool)` / `SetHorizontalScrollbarEnabled(bool)`
-      (reutilizar API de ScrollView).
-- [ ] `OnScroll` override: wheel vertical; Shift+wheel horizontal.
+- [x] Booleans `SetVerticalScrollbarEnabled(bool)` / `SetHorizontalScrollbarEnabled(bool)`.
+- [x] `OnScroll` override: wheel vertical; Shift+wheel horizontal.
 
 ### F2.5 — Integración / verificación
 
-- [ ] `DebugTextPanel` (`editor/src/UI/DebugTextPanel.cpp`): el UITextArea ya está ahí —
-      escribir/pegar muchas líneas y verificar que el caret sigue al texto, las scrollbars
-      aparecen con overflow, wheel/drag/thumb funcionan, y selección/edición no se rompen.
+- [x] `TextAreaDebugPanel` (`editor/src/UI/TextAreaDebugPanel.cpp`): se añadió un segundo
+      área **read-only** (`SetEditable(false)`) con 40 líneas largas para verificar wheel /
+      drag / thumb / scrollbars sin que caret o edición interfieran.
+- [ ] Verificación manual pendiente del usuario (wheel, thumb, drag, selección intacta,
+      read-only).
 - [ ] Caso borde: líneas vacías, `\n` finales, scroll X con una línea muy larga.
 - [ ] Actualizar `TODO_UI_INPUT.md`: marcar F3.1 (scroll offset), F3.3 (render offset) y
       F3.4 (scrollbars UITextArea) como resueltos.
+
+## Propiedad Editable (UITextInput / UITextArea)
+
+Nuevo en el mismo paso (pedido del usuario antes de empezar Fase 2):
+
+- `bool IsEditable() const` / `void SetEditable(bool)` en `UITextInput` (base, heredado por
+  `UITextArea`).
+- `false` = read-only textbox: se conserva el scroll (wheel/scrollbars/drag), pero:
+  - `OnPointerDown` devuelve `false` → no se coloca caret ni focus.
+  - `OnKeyDown` / `OnTextInput` / `InsertChar` guardan `m_Editable` → no edición de nada
+    (ni teclado ni mouse ni selección/drag).
+  - `OnFocus` sólo marca `m_Focused` si `m_Editable`; `IsCaretVisible()` requiere editable.
+  - `SetEditable(false)` además limpia focus/captura del canvas y la selección/drag.
 
 ## Estado general
 
 | Tarea | Estado |
 |-------|--------|
 | Fase 1 — Scrollbar horizontal en ScrollView/consola | ✅ |
-| F2.1 — Estado + clip | ⏳ |
-| F2.2 — Rendering con offset | ⏳ |
-| F2.3 — Auto-follow del caret | ⏳ |
-| F2.4 — Scrollbars UITextArea | ⏳ |
-| F2.5 — Integración / verificación | ⏳ |
+| F2.1 — Estado + clip | ✅ |
+| F2.2 — Rendering con offset | ✅ |
+| F2.3 — Auto-follow del caret | ✅ |
+| F2.4 — Scrollbars UITextArea | ✅ |
+| F2.5 — Integración / verificación | ⏳ (parcial) |

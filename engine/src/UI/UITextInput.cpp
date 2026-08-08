@@ -11,6 +11,31 @@ namespace Leir {
 UITextInput::UITextInput() = default;
 UITextInput::~UITextInput() = default;
 
+void UITextInput::SetEditable(bool editable)
+{
+    m_Editable = editable;
+    if (!editable) {
+        // Drop focus/drag/selection/capture so a read-only control never keeps
+        // editing state. Focus is also cleared on the canvas so keyboard input
+        // no longer routes here.
+        m_Focused = false;
+        m_Dragging = false;
+        m_SelectionStart = -1;
+        UIElement* e = this;
+        while (e) {
+            auto* c = dynamic_cast<UICanvas*>(e);
+            if (c) {
+                if (c->GetCaptureElement() == this)
+                    c->ReleasePointer();
+                if (c->GetFocus() == this)
+                    c->ClearFocus();
+                break;
+            }
+            e = e->GetParent();
+        }
+    }
+}
+
 void UITextInput::SetText(const std::string& text)
 {
     m_Text = text;
@@ -36,6 +61,8 @@ void UITextInput::OnPointerExit()
 
 bool UITextInput::OnPointerDown(const Vector2& pos)
 {
+    if (!m_Editable) return false;
+
     XConsole::Trace("[TextInput '{}'] OnPointerDown frame={}", GetName().c_str(), m_FrameCounter);
     ResetCaretBlink();
 
@@ -118,7 +145,7 @@ void UITextInput::OnPointerMove(const Vector2& pos)
 
 bool UITextInput::OnKeyDown(int key)
 {
-    if (!m_Focused) return false;
+    if (!m_Focused || !m_Editable) return false;
 
     ResetCaretBlink();
 
@@ -193,7 +220,7 @@ bool UITextInput::OnKeyDown(int key)
 
 bool UITextInput::OnTextInput(uint32_t codepoint)
 {
-    if (!m_Focused) return false;
+    if (!m_Focused || !m_Editable) return false;
     ResetCaretBlink();
     if (HasSelection())
         DeleteSelection();
@@ -216,7 +243,7 @@ void UITextInput::DeleteSelection()
 
 void UITextInput::OnFocus()
 {
-    m_Focused = true;
+    m_Focused = m_Editable;
 }
 
 void UITextInput::OnBlur()

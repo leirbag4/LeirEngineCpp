@@ -565,8 +565,9 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
             auto* textArea = dynamic_cast<UITextArea*>(elem);
             float baselineY, caretY;
             if (textArea) {
-                baselineY = cr.y + 4.0f + ascender;
-                caretY = cr.y + 4.0f + textArea->GetCursorLine() * lineH;
+                baselineY = cr.y + 4.0f + ascender - textArea->GetScrollOffset().y;
+                caretY = cr.y + 4.0f + textArea->GetCursorLine() * lineH - textArea->GetScrollOffset().y;
+                textX0 -= textArea->GetScrollOffset().x;
             } else {
                 baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
                 caretY = cr.y + (cr.w - lineH) * 0.5f;
@@ -584,7 +585,7 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
                             int re = std::min(selE, lEnd);
                             float sx = textX0 + input->GetCursorXAt(rs);
                             float ex = textX0 + input->GetCursorXAt(re);
-                            float ly = cr.y + 4.0f + line * lineH;
+                            float ly = cr.y + 4.0f + line * lineH - textArea->GetScrollOffset().y;
                             Batch(nullptr, {sx, ly, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
                         }
                     }
@@ -595,7 +596,11 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
                 }
             }
 
-            auto rawQuads = input->GetFont()->LayoutText(displayText, cr.z - 8.0f);
+            // Textarea lays out lines without wrapping so wide lines overflow
+            // into horizontal scroll space (Font::LayoutText only wraps when
+            // maxWidth > 0). Single-line inputs keep wrapping at the box edge.
+            float layoutWidth = textArea ? 0.0f : (cr.z - 8.0f);
+            auto rawQuads = input->GetFont()->LayoutText(displayText, layoutWidth);
             for (size_t i = 0; i < rawQuads.size(); i += 2) {
                 const auto& r = rawQuads[i];
                 const auto& uv = rawQuads[i + 1];
