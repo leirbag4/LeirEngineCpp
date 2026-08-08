@@ -1,4 +1,4 @@
-#include "LeirEngine/Core/CoreApplication.h"
+﻿#include "LeirEngine/Core/CoreApplication.h"
 #include "LeirEngine/Input/InputManager.h"
 #include "LeirEngine/Input/EventQueue.h"
 #include "LeirEngine/Scene/SceneManager.h"
@@ -8,6 +8,7 @@
 
 #include "LeirEngine/Core/Log.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 
@@ -130,9 +131,17 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
 
 CoreApplication::~CoreApplication()
 {
+    auto t0 = std::chrono::steady_clock::now();
     InputManager::GetInstance().Shutdown();
+    auto t1 = std::chrono::steady_clock::now();
     glfwDestroyWindow(m_Window);
+    auto t2 = std::chrono::steady_clock::now();
     glfwTerminate();
+    auto t3 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] CoreApplication dtor: InputManager {:.1f} ms, glfwDestroyWindow {:.1f} ms, glfwTerminate {:.1f} ms",
+        std::chrono::duration<double, std::milli>(t1 - t0).count(),
+        std::chrono::duration<double, std::milli>(t2 - t1).count(),
+        std::chrono::duration<double, std::milli>(t3 - t2).count());
 }
 
 void CoreApplication::Run()
@@ -161,7 +170,13 @@ void CoreApplication::Run()
         OnRender();
     }
 
+    auto tShutdown0 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] main loop exited (running={} shouldClose={})",
+        m_Running ? 1 : 0, glfwWindowShouldClose(m_Window) ? 1 : 0);
     OnShutdown();
+    auto tShutdown1 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] OnShutdown() completed in {:.1f} ms",
+        std::chrono::duration<double, std::milli>(tShutdown1 - tShutdown0).count());
 }
 
 void CoreApplication::Quit()

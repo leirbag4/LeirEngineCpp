@@ -686,6 +686,35 @@ if (m_CaptureElement && e.action != EventAction::Press) {
 - `SendTextInput(uint32_t codepoint)` — forwards char to `m_FocusElement->OnTextInput()`
 - `SendKeyDown(int key)` — forwards key to `m_FocusElement->OnKeyDown()`
 
+## UI Subtree Teardown & Ownership (double-free rule)
+
+**Rule (learned from the 5s-close bug, 2026-08-08)**: composite UI widgets that build
+their own internal children (`ScrollView` → viewport + 2 `UIScrollbar`;
+`UITextArea` → 2 `UIScrollbar`; `UIScrollbar` → thumb) delete those children in
+their **own destructors** (`RemoveChild` + `delete`). The editor frees dock
+content subtrees with a recursive `DeleteUiSubtree(std::move next)`. A naive
+walker that deletes *every* child first and then the widget causes a **double
+free** (crash `0xC0000005` in `LeirEngine.dll` → WER sits ~5 s) — and deleting a
+child out from under its parent leaves a stale `m_Children` entry that the
+parent dtor dereferences.
+
+- `UIElement::OwnsChild(const UIElement*)` virtual, default `false`. Composite
+  widgets override it for their internal children:
+  - `ScrollView`: `child == m_Viewport || m_VScrollbar || m_HScrollbar`
+  - `UITextArea`: `child == m_VScrollbar || m_HScrollbar`
+  - `UIScrollbar`: `child == m_Thumb`
+- Both teardown helpers honor it: the editor's `DeleteUiSubtree` (main.cpp) and
+  the `ConsolePanel` line-column walk. When `parent->OwnsChild(c)` is true the
+  walker **skips** `c` (the widget dtor owns it) but still frees `c`'s
+  *non-owned* descendants (`DeleteNonOwnedSubtree` / the inner recursion) so
+  e.g. a `ScrollView`'s editor-owned content column still gets deleted. When
+  false it does `RemoveChild(c)` **before** deleting so the parent dtor never
+  sees a dangling pointer.
+- The `ConsolePanel` internal copy of `DeleteUiSubtree` follows the same rule
+  (used every rebuild).
+- `DockTabBar`/`DockSplitNode` dtors already use the remove-then-delete pattern
+  and were fine.
+
 ## UITextInput — Text Input System
 
 ### Keyboard navigation & deletion

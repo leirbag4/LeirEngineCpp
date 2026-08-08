@@ -11,6 +11,10 @@ public:
     UITextArea();
     ~UITextArea() override;
 
+    bool OwnsChild(const UIElement* child) const override {
+        return child == m_VScrollbar || child == m_HScrollbar;
+    }
+
     Vector2 GetMinSize() const override;
     bool OnKeyDown(int key) override;
     bool OnPointerDown(const Vector2& pos) override;

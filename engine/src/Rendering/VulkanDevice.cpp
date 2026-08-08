@@ -1,4 +1,4 @@
-#include "LeirEngine/Rendering/VulkanDevice.h"
+﻿#include "LeirEngine/Rendering/VulkanDevice.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -7,6 +7,7 @@
 #include <set>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
 
 namespace Leir {
@@ -47,7 +48,14 @@ VulkanDevice::VulkanDevice(GLFWwindow* window, const VulkanDeviceConfig& config)
 
 VulkanDevice::~VulkanDevice()
 {
+    auto ms = [](std::chrono::steady_clock::time_point a,
+                 std::chrono::steady_clock::time_point b) -> double {
+        return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    auto t0 = std::chrono::steady_clock::now();
     vkDeviceWaitIdle(m_Device);
+    auto t1 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] VulkanDevice vkDeviceWaitIdle: {:.1f} ms", ms(t0, t1));
     CleanupSwapchain();
     // Render passes persist across swapchain recreations (format rarely changes)
     if (m_OverlayRenderPass) {
@@ -64,14 +72,20 @@ VulkanDevice::~VulkanDevice()
         vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
     }
     vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
+    auto t2 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] VulkanDevice resource destruction: {:.1f} ms", ms(t1, t2));
     vkDestroyDevice(m_Device, nullptr);
     if (m_Config.enableValidationLayers) {
         auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
             m_Instance, "vkDestroyDebugUtilsMessengerEXT");
         if (func) func(m_Instance, m_DebugMessenger, nullptr);
     }
+    auto t3 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] VulkanDevice vkDestroyDevice+instance: {:.1f} ms", ms(t2, t3));
     vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
     vkDestroyInstance(m_Instance, nullptr);
+    XConsole::Debug("[Timing] VulkanDevice dtor total: {:.1f} ms", ms(t0,
+        std::chrono::steady_clock::now()));
 }
 
 // ---- Instance ----
@@ -702,7 +716,7 @@ void VulkanDevice::BeginOverlay()
     VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrame];
     vkCmdEndRenderPass(cmd);
 
-    // Transition swapchain image from PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL
+    // Transition swapchain image from PRESENT_SRC_KHR â†’ COLOR_ATTACHMENT_OPTIMAL
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -729,7 +743,7 @@ void VulkanDevice::BeginOverlay()
     rpInfo.renderArea.extent = m_SwapchainExtent;
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Flip viewport Y: screen coords (top-left origin) → NDC (bottom-left)
+    // Flip viewport Y: screen coords (top-left origin) â†’ NDC (bottom-left)
     VkViewport viewport{};
     viewport.x = 0;
     viewport.y = (float)m_SwapchainExtent.height;
@@ -840,18 +854,36 @@ void VulkanDevice::RecreateSwapchain()
 {
     int w = 0, h = 0;
     glfwGetFramebufferSize(m_Window, &w, &h);
+    if (w == 0 || h == 0)
+        XConsole::Debug("[Timing] RecreateSwapchain: framebuffer is 0x0 (w={} h={}), entering wait loop", w, h);
+    int waits = 0;
     while (w == 0 || h == 0) {
         glfwGetFramebufferSize(m_Window, &w, &h);
+        if (w == 0 || h == 0) {
+            ++waits;
+            if (waits == 1 || (waits % 30) == 0)
+                XConsole::Debug("[Timing] RecreateSwapchain waiting for nonzero fb... (waits={}, w={}, h={})", waits, w, h);
+        }
         glfwWaitEvents();
     }
+    if (waits > 0)
+        XConsole::Debug("[Timing] RecreateSwapchain left wait loop after {} waits (fb {}x{})", waits, w, h);
 
+    auto t0 = std::chrono::steady_clock::now();
     vkDeviceWaitIdle(m_Device);
+    auto t1 = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double, std::milli>(t1 - t0).count() > 5.0)
+        XConsole::Debug("[Timing] RecreateSwapchain vkDeviceWaitIdle: {:.1f} ms",
+            std::chrono::duration<double, std::milli>(t1 - t0).count());
     CleanupSwapchain();
 
     CreateSwapchain();
     CreateImageViews();
     CreateDepthResources();
     CreateFramebuffers();
+    auto t2 = std::chrono::steady_clock::now();
+    XConsole::Debug("[Timing] RecreateSwapchain done ({:.1f} ms)", 
+        std::chrono::duration<double, std::milli>(t2 - t0).count());
 }
 
 void VulkanDevice::CleanupSwapchain()

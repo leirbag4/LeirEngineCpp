@@ -21,8 +21,12 @@ void DeleteUiSubtree(Leir::UIElement* e)
     if (!e)
         return;
     auto children = e->GetChildren();
-    for (auto* c : children)
+    for (auto* c : children) {
+        if (e->OwnsChild(c))
+            continue; // owned by the widget's destructor (CompositeSave)
+        e->RemoveChild(c);
         DeleteUiSubtree(c);
+    }
     delete e;
 }
 

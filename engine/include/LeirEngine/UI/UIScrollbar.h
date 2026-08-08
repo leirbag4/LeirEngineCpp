@@ -12,6 +12,8 @@ public:
     explicit UIScrollbar(bool vertical = true);
     ~UIScrollbar() override;
 
+    bool OwnsChild(const UIElement* child) const override { return child == m_Thumb; }
+
     void SetVertical(bool vertical) { m_Vertical = vertical; }
     bool IsVertical() const { return m_Vertical; }
 

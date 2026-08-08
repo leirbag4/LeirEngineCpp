@@ -1,4 +1,4 @@
-#include <LeirEngine/Core/CoreApplication.h>
+﻿#include <LeirEngine/Core/CoreApplication.h>
 #include <LeirEngine/Core/Settings.h>
 #include <LeirEngine/Core/CoreObject.h>
 #include <vector>
@@ -50,6 +50,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <typeinfo>
 #include <cstdio>
@@ -67,15 +68,46 @@ namespace {
     const float kBottomBarHeight = 30.0f;
 }
 
+// Forward decl (mutually recursive helpers).
+void DeleteUiSubtree(Leir::UIElement* element);
+
+// Recursively freed contents of a composite widget that owns its direct
+// children (ScrollView/UITextArea): their OWN descendants (e.g. the content
+// under a ScrollView's viewport) are still editor-owned and must be freed here,
+// while the owned children themselves are left for the widget's destructor.
+void DeleteNonOwnedSubtree(Leir::UIElement* node)
+{
+    if (!node)
+        return;
+    auto grandchildren = node->GetChildren();
+    for (auto* g : grandchildren) {
+        if (node->OwnsChild(g))
+            DeleteNonOwnedSubtree(g);
+        else {
+            node->RemoveChild(g);
+            DeleteUiSubtree(g);
+        }
+    }
+}
+
 // UIElement's dtor only nulls child parent pointers; it does not free children.
 // The editor owns the dock content subtrees, so they are freed here recursively.
+// Children a widget deletes in its own destructor (ScrollView's viewport/
+// scrollbars, UIScrollbar's thumb, ...) are skipped â€” deleting them again would
+// be a double free (crash 0xC0000005 in LeirEngine.dll â†’ 5s shutdown).
 void DeleteUiSubtree(Leir::UIElement* element)
 {
     if (!element)
         return;
     auto children = element->GetChildren();
-    for (auto* c : children)
-        DeleteUiSubtree(c);
+    for (auto* c : children) {
+        if (element->OwnsChild(c))
+            DeleteNonOwnedSubtree(c);
+        else {
+            element->RemoveChild(c);
+            DeleteUiSubtree(c);
+        }
+    }
     delete element;
 }
 
@@ -526,15 +558,15 @@ protected:
 
         bool cameraControlled = rightDown || middleDown;
 
-        // Bidirectional sync: EditorCamera ↔ scene camera
+        // Bidirectional sync: EditorCamera â†” scene camera
         auto* cameraObj = scene->FindObjectByName("Camera");
         if (cameraObj) {
             if (cameraControlled) {
-                // EditorCamera → escena (durante control)
+                // EditorCamera â†’ escena (durante control)
                 cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
                 cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
             } else {
-                // escena → EditorCamera (panel edits)
+                // escena â†’ EditorCamera (panel edits)
                 auto& t = cameraObj->GetTransform();
                 auto pos = t.GetLocalPosition();
                 auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
@@ -606,6 +638,11 @@ protected:
 
     void OnShutdown() override
     {
+        auto tStart = std::chrono::steady_clock::now();
+        auto elapsedMs = [&]() -> double {
+            return std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - tStart).count();
+        };
         Leir::XConsole::Println("Editor shutting down");
         auto& settings = Leir::LeirSettings::Get();
         // Persist the dock tree (tabs, splits, ratios, closed panels)
@@ -618,6 +655,7 @@ protected:
                 settings.window.maximized = IsMaximized();
         }
         settings.Save();
+        Leir::XConsole::Debug("[Timing] settings saved: {:.1f} ms", elapsedMs());
         // Destroy the dock tree (content panels stay owned by the editor).
         // Remove it from the canvas first so the canvas dtor never sees it freed.
         if (m_DockManager) {
@@ -625,6 +663,7 @@ protected:
             delete m_DockManager;
             m_DockManager = nullptr;
         }
+        Leir::XConsole::Debug("[Timing] dock manager destroyed: {:.1f} ms", elapsedMs());
         // The dock tree only reparents the content panels out on delete; the
         // editor owns them (UIElement dtor doesn't free children), so free the
         // whole subtrees here. The InspectorTransformPanel is a child of the
@@ -650,11 +689,14 @@ protected:
         DeleteUiSubtree(m_DebugPanel);
         m_DebugPanel = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
+        Leir::XConsole::Debug("[Timing] UI subtrees freed: {:.1f} ms", elapsedMs());
         // Destroy viewport RT before VulkanDevice
         m_ViewportRT.reset();
+        Leir::XConsole::Debug("[Timing] viewport RT destroyed: {:.1f} ms", elapsedMs());
         auto& sm = Leir::SceneManager::GetInstance();
         sm.DestroyScene("Main Scene");
         sm.SetActiveScene(nullptr);
+        Leir::XConsole::Debug("[Timing] Editor OnShutdown total: {:.1f} ms", elapsedMs());
     }
 
     void OnWindowResized(int width, int height) override
@@ -781,9 +823,19 @@ int main()
 
     Leir::LeirSettings::Get().Load();
 
+    std::chrono::steady_clock::time_point tRunEnd;
+    auto tMainStart = std::chrono::steady_clock::now();
     try {
+        auto tCtor0 = std::chrono::steady_clock::now();
         EditorApp app;
+        auto tCtor1 = std::chrono::steady_clock::now();
+        Leir::XConsole::Debug("[Timing] EditorApp construction: {:.1f} ms",
+            std::chrono::duration<double, std::milli>(tCtor1 - tCtor0).count());
         app.Run();
+        tRunEnd = std::chrono::steady_clock::now();
+        Leir::XConsole::Debug("[Timing] EditorApp::Run returned (OnShutdown done): {:.1f} ms in ctor+run",
+            std::chrono::duration<double, std::milli>(tRunEnd - tMainStart).count());
+        // `app` destructor (members + CoreApplication base) runs at scope end, measured below.
     } catch (const std::exception& e) {
         Leir::XConsole::PrintError("Uncaught exception in main: {}", e.what());
         return 1;
@@ -791,6 +843,9 @@ int main()
         Leir::XConsole::PrintError("Uncaught unknown exception in main");
         return 1;
     }
+    auto tDestroyEnd = std::chrono::steady_clock::now();
+    Leir::XConsole::Debug("[Timing] Member destructors + CoreApplication teardown (VulkanDevice, GLFW): {:.1f} ms",
+        std::chrono::duration<double, std::milli>(tDestroyEnd - tRunEnd).count());
 
     return 0;
 }

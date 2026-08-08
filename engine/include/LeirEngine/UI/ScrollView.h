@@ -14,6 +14,15 @@ public:
     ScrollView();
     ~ScrollView() override;
 
+    // The ScrollView owns its viewport node and both scrollbars (its dtor
+    // deletes them). The content under the viewport is NOT owned by the
+    // ScrollView (the caller provides it via SetContent), so the DeleteUiSubtree
+    // helpers must recurse into the viewport to reach editor-owned children but
+    // must not delete the viewport/scrollbars themselves.
+    bool OwnsChild(const UIElement* child) const override {
+        return child == m_Viewport || child == m_VScrollbar || child == m_HScrollbar;
+    }
+
     void SetContent(UIElement* content);
     UIElement* GetContent() const { return m_Content; }
 

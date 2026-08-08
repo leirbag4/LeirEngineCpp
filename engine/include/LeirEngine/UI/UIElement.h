@@ -55,6 +55,14 @@ public:
     void RemoveChild(UIElement* child);
     const std::vector<UIElement*>& GetChildren() const { return m_Children; }
 
+    // Subtree-delete helpers (e.g. the editor's DeleteUiSubtree) use this to
+    // decide whether they may delete `child` themselves or must leave it for
+    // this element's destructor, which takes ownership of it. Composite
+    // widgets (ScrollView, UITextArea, UIScrollbar) own some of their internal
+    // children and delete them in their destructor; deleting such a child again
+    // in a helper would be a double free. Default (plain containers): false.
+    virtual bool OwnsChild(const UIElement* child) const { (void)child; return false; }
+
     const Vector4& GetComputedRect() const { return m_ComputedRect; }
 
     void SetColor(const Vector4& color) { m_Color = color; }
