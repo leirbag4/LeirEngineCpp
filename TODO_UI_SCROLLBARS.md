@@ -265,5 +265,43 @@ Se hizo la Opción 1 (nodo interno `m_Viewport`, Modelo A puro):
   del clip → no se tapan las últimas letras ni queda la línea finita.
 
 Verificado: build DLL+editor OK; editor corre sin stderr/VUID; la barra horizontal
-sigue capturando su drag (hit-test topmost OK). Pendiente: confirmación visual del
-usuario de que ya no se tapan letras ni hay línea finita al scrollear a `maxX`.
+sigue capturando su drag (hit-test topmost OK).
+
+### Fix del borde inferior del track (2026-08-07, scissor truncado)
+
+El usuario reportó que con `hidpi=false` la scrollbar vertical medía track 10px /
+thumb 6px, pero la horizontal media **track 9px / thumb 5px** (2px de track arriba
+del thumb, 1px abajo). Con `ui_outlines: true` se veía que **la línea inferior del
+track no se dibujaba** → pista: algo estaba "comiéndose" el píxel de abajo.
+
+**Causa raíz**: no era la geometría (en `UIScrollbar` el track era `10.0` y el thumb
+`6.0` en ambas orientaciones, y el snapping a entero ya estaba en floats). Era el
+**scissor** de `UIRenderer.cpp`:
+
+```cpp
+// antes (trunca hacia abajo)
+s.offset.y = (int32_t)(logicalClip.y * scale);
+s.extent.height = (uint32_t)(logicalClip.w * scale);
+```
+
+El `ScrollView` tiene `SetClip(true)` → el clip del scrollbar = su propio rect
+(fraccional, p.ej. `bottom = 1615.806`). El truncado a entero deja afuera del
+scissor la fila final (la que cae en la parte fraccionaria del borde) → el quad del
+track horizontal pierde su última fila (y su outline). La barra vertical no sufría
+porque su borde derecho caía en un entero tras el `round`.
+
+**Fix**: helper `ScissorFromLogicalClip` en `UIRenderer.cpp` que usa **floor del
+offset y ceil del borde opuesto** (redondeo expansivo/conservador) en `pushQuad` y
+`ApplyScissor`. El scissor abarca todo píxel que el quad toque; el overshoot es
+estampado por el propio quad (el scissor solo restringe). Se mantiene el batching
+(igual comparación de `VkRect2D`). Resultado: track 10px / thumb 6px con 2px arriba
+y 2px abajo en ambas orientaciones, y el borde inferior del track se dibuja.
+
+**Otras decisiones de la ronda (no revertidas)**:
+- `std::round` en los offsets del thumb y del track (`UIScrollbar::OnLayoutComputed`
+  y `ScrollView::SyncScrollbar`): no eran la causa, pero mantienen la geometría en
+  píxel entero. Se conservan.
+- Se removió el log temporal `ScrollbarDebugLog` de `UIScrollbar.cpp` (incluyó
+  `<cstdio>`/`<filesystem>`).
+
+Verificado por el usuario: "ahora si se ve perfecto!".
