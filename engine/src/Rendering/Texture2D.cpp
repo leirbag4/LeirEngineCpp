@@ -4,6 +4,7 @@
 #include <stb_image.h>
 
 #include "LeirEngine/Core/Log.h"
+#include <cstring>
 #include <stdexcept>
 
 namespace Leir {

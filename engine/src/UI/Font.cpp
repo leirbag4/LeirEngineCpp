@@ -6,6 +6,7 @@
 #include <stb_truetype.h>
 
 #include <cstdio>
+#include <cstring>
 #include "LeirEngine/Core/Log.h"
 
 namespace Leir {
