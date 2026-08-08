@@ -15,6 +15,5 @@ public:
 private:
     Leir::UILabel* m_TitleLabel = nullptr;
     Leir::UITextArea* m_TextArea = nullptr;
-    Leir::UITextArea* m_ReadOnlyArea = nullptr;
     Leir::UILabel* m_StatusLabel = nullptr;
 };
