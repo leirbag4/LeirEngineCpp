@@ -2,6 +2,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UITextInput.h"
 #include "LeirEngine/UI/UIScrollbar.h"
+#include <vector>
 
 namespace Leir {
 
@@ -21,6 +22,15 @@ public:
     int GetCursorCol() const;
     int GetLineStart(int line) const;
     int GetLineEnd(int line) const;  // index of \n or end
+
+    void SetText(const std::string& text);
+    void SetFont(Font* font);
+
+    // Word wrap: when enabled, long lines visually wrap inside the widget
+    // (rows != logical lines separated by '\n'), and caret/selection/scroll
+    // all operate on the visual rows. Optional per instance.
+    void SetWordWrap(bool enabled);
+    bool IsWordWrapEnabled() const { return m_WordWrap; }
 
     void SetCustomMinSize(const Vector2& size) { m_CustomMinSize = size; m_HasCustomMinSize = true; }
 
@@ -47,13 +57,27 @@ public:
     UIScrollbar* GetVerticalScrollbar() const { return m_VScrollbar; }
     UIScrollbar* GetHorizontalScrollbar() const { return m_HScrollbar; }
 
+    float GetCursorXAt(int charIndex) const override;
+
 protected:
     void InsertChar(uint32_t codepoint) override;
     void OnLayoutComputed() override;
+    void OnTextMutated() override;
 
 private:
+    // One visual row of the text: byte range in m_Text plus its measured width.
+    struct VisualRow {
+        int startByte = 0;
+        int endByte = 0;
+        float width = 0.0f;
+    };
+
     void SyncScrollbars();
     void EnsureCaretVisible();
+    void EnsureVisualRows() const;
+    int VisualRowOfChar(int byteIdx) const;
+    float WrapLimit() const;
+    void InvalidateWrapModel();
 
     float m_TargetX = -1.0f;
     Vector2 m_CustomMinSize = {200.0f, 100.0f};
@@ -65,6 +89,13 @@ private:
     float m_ScrollbarWidth = 10.0f;
     bool m_VScrollbarEnabled = true;
     bool m_HScrollbarEnabled = true;
+
+    // Visual wrap model (lazily rebuilt, see EnsureVisualRows).
+    bool m_WordWrap = false;
+    mutable std::vector<VisualRow> m_VisualRows;
+    mutable unsigned m_ModelGen = 0;
+    mutable unsigned m_BuiltGen = 0;
+    mutable float m_BuiltWrapWidth = -1.0f;
 };
 
 } // namespace Leir

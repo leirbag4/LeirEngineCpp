@@ -561,17 +561,12 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
             float lineH = input->GetFont()->GetLineHeight();
             float ascender = input->GetFont()->GetAscender();
             float textX0 = cr.x + 4.0f;
+            float baselineY = 0.0f;
+            float caretY = 0.0f;
 
             auto* textArea = dynamic_cast<UITextArea*>(elem);
-            float baselineY, caretY;
-            if (textArea) {
-                baselineY = cr.y + 4.0f + ascender - textArea->GetScrollOffset().y;
-                caretY = cr.y + 4.0f + textArea->GetCursorLine() * lineH - textArea->GetScrollOffset().y;
+            if (textArea)
                 textX0 -= textArea->GetScrollOffset().x;
-            } else {
-                baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
-                caretY = cr.y + (cr.w - lineH) * 0.5f;
-            }
 
             if (input->IsFocused() && input->HasSelection()) {
                 int selB = input->GetSelBegin();
@@ -586,33 +581,78 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
                             float sx = textX0 + input->GetCursorXAt(rs);
                             float ex = textX0 + input->GetCursorXAt(re);
                             float ly = cr.y + 4.0f + line * lineH - textArea->GetScrollOffset().y;
-                            Batch(nullptr, {sx, ly, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                            Vector4 selColor = {0.3f, 0.5f, 1.0f, 0.4f};
+                            Batch(nullptr, {sx, ly, ex - sx, lineH}, {0,0,1,1}, selColor);
                         }
                     }
                 } else {
+                    float sy = cr.y + (cr.w - lineH) * 0.5f;
                     float sx = textX0 + input->GetCursorXAt(selB);
                     float ex = textX0 + input->GetCursorXAt(selE);
-                    Batch(nullptr, {sx, caretY, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
+                    Batch(nullptr, {sx, sy, ex - sx, lineH}, {0,0,1,1}, {0.3f, 0.5f, 1.0f, 0.4f});
                 }
             }
 
-            // Textarea lays out lines without wrapping so wide lines overflow
-            // into horizontal scroll space (Font::LayoutText only wraps when
-            // maxWidth > 0). Single-line inputs keep wrapping at the box edge.
-            float layoutWidth = textArea ? 0.0f : (cr.z - 8.0f);
-            auto rawQuads = input->GetFont()->LayoutText(displayText, layoutWidth);
-            for (size_t i = 0; i < rawQuads.size(); i += 2) {
-                const auto& r = rawQuads[i];
-                const auto& uv = rawQuads[i + 1];
-                Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
-                if (showQuadDebug)
-                    Batch(nullptr, textRect, {0, 0, 1, 1}, quadColors[(i / 2) % 4]);
-                Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+            if (textArea && textArea->IsWordWrapEnabled()) {
+                // Wrapped text: draw one visual row at a time. Each row's text
+                // is laid out with LayoutText(sub, 0) (no re-wrapping) and
+                // shifted to its visual row offset.
+                const float scrollY = textArea->GetScrollOffset().y;
+                const std::string& full = input->GetText();
+                if (!full.empty()) {
+                    for (int line = 0; line < textArea->GetLineCount(); ++line) {
+                        int ls = textArea->GetLineStart(line);
+                        int le = textArea->GetLineEnd(line);
+                        baselineY = cr.y + 4.0f + ascender - scrollY + line * lineH;
+                        if (le <= ls) continue;
+                        auto rowQuads = input->GetFont()->LayoutText(full.substr(ls, le - ls), 0.0f);
+                        for (size_t i = 0; i < rowQuads.size(); i += 2) {
+                            const auto& r = rowQuads[i];
+                            const auto& uv = rowQuads[i + 1];
+                            Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
+                            Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+                        }
+                    }
+                } else if (!input->GetPlaceholder().empty()) {
+                    baselineY = cr.y + 4.0f + ascender - scrollY;
+                    auto rowQuads = input->GetFont()->LayoutText(input->GetPlaceholder(), 0.0f);
+                    for (size_t i = 0; i < rowQuads.size(); i += 2) {
+                        const auto& r = rowQuads[i];
+                        const auto& uv = rowQuads[i + 1];
+                        Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
+                        Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+                    }
+                }
+            } else {
+                // Single-line inputs keep wrapping at the box edge; textarea with
+                // wrap off lays out without wrapping so wide lines overflow into
+                // horizontal scroll space (Font::LayoutText only wraps when
+                // maxWidth > 0).
+                if (textArea) {
+                    baselineY = cr.y + 4.0f + ascender - textArea->GetScrollOffset().y;
+                } else {
+                    baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
+                }
+                float layoutWidth = textArea ? 0.0f : (cr.z - 8.0f);
+                auto rawQuads = input->GetFont()->LayoutText(displayText, layoutWidth);
+                for (size_t i = 0; i < rawQuads.size(); i += 2) {
+                    const auto& r = rawQuads[i];
+                    const auto& uv = rawQuads[i + 1];
+                    Vector4 textRect = {textX0 + r.x, baselineY + r.y, r.z, r.w};
+                    if (showQuadDebug)
+                        Batch(nullptr, textRect, {0, 0, 1, 1}, quadColors[(i / 2) % 4]);
+                    Batch(input->GetFont()->GetAtlasTexture(), textRect, uv, textColor);
+                }
             }
 
             if (input->IsCaretVisible()) {
                 float cursorX = input->GetCursorX();
                 float caretX = textX0 + cursorX;
+                if (textArea) {
+                    caretY = cr.y + 4.0f + textArea->GetCursorLine() * lineH - textArea->GetScrollOffset().y;
+                } else {
+                    caretY = cr.y + (cr.w - lineH) * 0.5f;
+                }
                 Batch(nullptr, {caretX, caretY, 1.0f, lineH}, {0,0,1,1}, {1.0f, 1.0f, 1.0f, 1.0f});
             }
         }

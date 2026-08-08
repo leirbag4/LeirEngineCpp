@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include "LeirEngine/Core/Log.h"
 
 namespace Leir {
@@ -53,75 +54,200 @@ Vector2 UITextArea::GetMinSize() const
 
 int UITextArea::GetLineCount() const
 {
-    if (m_Text.empty()) return 1;
-    int count = 1;
-    for (char c : m_Text)
-        if (c == '\n') count++;
-    return count;
+    EnsureVisualRows();
+    return (int)m_VisualRows.size();
 }
 
 int UITextArea::GetCursorLine() const
 {
-    int line = 0;
-    for (int i = 0; i < m_CursorPos && i < (int)m_Text.size(); ++i)
-        if (m_Text[i] == '\n') line++;
-    return line;
+    EnsureVisualRows();
+    return VisualRowOfChar(m_CursorPos);
 }
 
 int UITextArea::GetCursorCol() const
 {
-    int lineStart = 0;
-    for (int i = m_CursorPos - 1; i >= 0; --i)
-        if (m_Text[i] == '\n') { lineStart = i + 1; break; }
-    return m_CursorPos - lineStart;
+    EnsureVisualRows();
+    const int row = VisualRowOfChar(m_CursorPos);
+    return m_CursorPos - m_VisualRows[row].startByte;
 }
 
 int UITextArea::GetLineStart(int line) const
 {
-    int current = 0;
-    for (int i = 0; i < (int)m_Text.size(); ++i) {
-        if (current == line) return i;
-        if (m_Text[i] == '\n') current++;
-    }
-    return (int)m_Text.size();
+    EnsureVisualRows();
+    if (line < 0 || line >= (int)m_VisualRows.size())
+        return (int)m_Text.size();
+    return m_VisualRows[line].startByte;
 }
 
 int UITextArea::GetLineEnd(int line) const
 {
-    int current = 0;
-    for (int i = 0; i < (int)m_Text.size(); ++i) {
-        if (current == line) {
-            while (i < (int)m_Text.size() && m_Text[i] != '\n') ++i;
-            return i;
-        }
-        if (m_Text[i] == '\n') current++;
-    }
-    return (int)m_Text.size();
+    EnsureVisualRows();
+    if (line < 0 || line >= (int)m_VisualRows.size())
+        return (int)m_Text.size();
+    return m_VisualRows[line].endByte;
 }
 
-Vector2 UITextArea::GetContentSize() const
+void UITextArea::SetText(const std::string& text)
 {
-    if (!m_Font) return {0.0f, 0.0f};
-    float maxLineW = 0.0f;
-    float lineW = 0.0f;
-    int lines = 1;
-    for (int i = 0; i < (int)m_Text.size();) {
+    UITextInput::SetText(text);
+    InvalidateWrapModel();
+}
+
+void UITextArea::SetFont(Font* font)
+{
+    UITextInput::SetFont(font);
+    InvalidateWrapModel();
+}
+
+void UITextArea::SetWordWrap(bool enabled)
+{
+    if (m_WordWrap == enabled) return;
+    m_WordWrap = enabled;
+    InvalidateWrapModel();
+    // Re-clamp the offset against the new content bounds.
+    SetScrollOffset(m_ScrollOffset);
+}
+
+float UITextArea::WrapLimit() const
+{
+    if (!m_WordWrap) return std::numeric_limits<float>::max();
+    const auto& cr = GetComputedRect();
+    const float vstrip = m_VScrollbarEnabled ? m_ScrollbarWidth : 0.0f;
+    return std::max(0.0f, cr.z - vstrip - 8.0f);
+}
+
+void UITextArea::InvalidateWrapModel()
+{
+    m_ModelGen++;
+}
+
+void UITextArea::OnTextMutated()
+{
+    InvalidateWrapModel();
+}
+
+void UITextArea::EnsureVisualRows() const
+{
+    const float limit = WrapLimit();
+    if (m_BuiltGen == m_ModelGen && m_BuiltWrapWidth == limit)
+        return;
+
+    m_VisualRows.clear();
+    const int n = (int)m_Text.size();
+    if (!m_Font) {
+        m_VisualRows.push_back({0, n, 0.0f});
+        m_BuiltGen = m_ModelGen;
+        m_BuiltWrapWidth = limit;
+        return;
+    }
+
+    const float spaceW = m_Font->GetSpaceWidth();
+    int rowStart = 0;
+    float x = 0.0f;
+    int lastSpace = -1;
+    float xAtSpace = 0.0f;
+
+    int i = 0;
+    while (i < n) {
+        uint32_t cp = (unsigned char)m_Text[i];
+        int step = 1;
+        if (cp < 0x80) { step = 1; }
+        else if ((cp & 0xE0) == 0xC0 && i + 1 < n) { cp = ((cp & 0x1F) << 6) | (m_Text[i+1] & 0x3F); step = 2; }
+        else if ((cp & 0xF0) == 0xE0 && i + 2 < n) { cp = ((cp & 0x0F) << 12) | ((m_Text[i+1] & 0x3F) << 6) | (m_Text[i+2] & 0x3F); step = 3; }
+        else { ++i; continue; }
+
+        if (cp == '\n') {
+            m_VisualRows.push_back({rowStart, i, x});
+            i += step;
+            rowStart = i;
+            x = 0.0f;
+            lastSpace = -1;
+            continue;
+        }
+
+        const float w = (cp == ' ') ? spaceW : m_Font->GetGlyphInfo(cp).advance;
+        const float nextX = x + w;
+        const bool wouldOverflow = m_WordWrap && rowStart < i && nextX > limit;
+
+        if (wouldOverflow) {
+            if (lastSpace > rowStart) {
+                // Word wrap: the row ends right before the last space; the new
+                // row starts after that space (does not split the word).
+                m_VisualRows.push_back({rowStart, lastSpace, xAtSpace});
+                rowStart = lastSpace + 1;   // ' ' is 1 byte
+                x = nextX - xAtSpace - spaceW;
+                lastSpace = -1;
+                i += step;
+                continue;
+            }
+            // Hard break: single unbreakable word/run wider than the limit.
+            m_VisualRows.push_back({rowStart, i, x});
+            rowStart = i;
+            x = 0.0f;
+            continue; // reprocess the same codepoint on the new row
+        }
+
+        if (cp == ' ') {
+            lastSpace = i;
+            xAtSpace = x; // width before adding the space
+        }
+        x = nextX;
+        i += step;
+    }
+    m_VisualRows.push_back({rowStart, n, x});
+
+    m_BuiltGen = m_ModelGen;
+    m_BuiltWrapWidth = limit;
+}
+
+int UITextArea::VisualRowOfChar(int byteIdx) const
+{
+    EnsureVisualRows();
+    for (size_t r = 0; r < m_VisualRows.size(); ++r) {
+        const auto& row = m_VisualRows[r];
+        if (byteIdx >= row.startByte && byteIdx <= row.endByte)
+            return (int)r;
+    }
+    return (int)m_VisualRows.size() - 1;
+}
+
+float UITextArea::GetCursorXAt(int charIndex) const
+{
+    if (!m_Font) return 0.0f;
+    EnsureVisualRows();
+    const int row = VisualRowOfChar(charIndex);
+    const int start = m_VisualRows[row].startByte;
+    int end = charIndex;
+    if (end > m_VisualRows[row].endByte) end = m_VisualRows[row].endByte;
+
+    float x = 0.0f;
+    for (int i = start; i < end && i < (int)m_Text.size();) {
         uint32_t cp = (unsigned char)m_Text[i];
         if (cp < 0x80) { ++i; }
         else if ((cp & 0xE0) == 0xC0 && i + 1 < (int)m_Text.size()) { cp = ((cp & 0x1F) << 6) | (m_Text[i+1] & 0x3F); i += 2; }
         else if ((cp & 0xF0) == 0xE0 && i + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[i+1] & 0x3F) << 6) | (m_Text[i+2] & 0x3F); i += 3; }
         else { ++i; continue; }
-        if (cp == '\n') {
-            maxLineW = std::max(maxLineW, lineW);
-            lineW = 0.0f;
-            ++lines;
-            continue;
-        }
-        if (cp == ' ') lineW += m_Font->GetSpaceWidth();
-        else lineW += m_Font->GetGlyphInfo(cp).advance;
+        if (cp == '\n') { x = 0.0f; continue; }
+        x += (cp == ' ') ? m_Font->GetSpaceWidth() : m_Font->GetGlyphInfo(cp).advance;
     }
-    maxLineW = std::max(maxLineW, lineW);
-    return {maxLineW + 8.0f, (float)lines * m_Font->GetLineHeight() + 8.0f};
+    return x;
+}
+
+Vector2 UITextArea::GetContentSize() const
+{
+    if (!m_Font) return {0.0f, 0.0f};
+    EnsureVisualRows();
+
+    float maxRowW = 0.0f;
+    for (const auto& row : m_VisualRows)
+        maxRowW = std::max(maxRowW, row.width);
+
+    if (m_WordWrap) {
+        // Content fits exactly inside the viewport (no horizontal scroll).
+        return {GetViewportSize().x, (float)m_VisualRows.size() * m_Font->GetLineHeight() + 8.0f};
+    }
+
+    return {maxRowW + 8.0f, (float)m_VisualRows.size() * m_Font->GetLineHeight() + 8.0f};
 }
 
 Vector2 UITextArea::GetViewportSize() const
@@ -276,7 +402,7 @@ bool UITextArea::OnKeyDown(int key)
                     else if ((cp & 0xE0) == 0xC0 && idx + 1 < (int)m_Text.size()) { cp = ((cp & 0x1F) << 6) | (m_Text[idx+1] & 0x3F); i += 2; }
                     else if ((cp & 0xF0) == 0xE0 && idx + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[idx+1] & 0x3F) << 6) | (m_Text[idx+2] & 0x3F); i += 3; }
                     else { ++i; continue; }
-                    float nextX = x + m_Font->GetGlyphInfo(cp).advance;
+                    float nextX = x + ((cp == ' ') ? m_Font->GetSpaceWidth() : m_Font->GetGlyphInfo(cp).advance);
                     if (nextX > m_TargetX) {
                         targetCol = (m_TargetX - x < nextX - m_TargetX) ? (i - (cp < 0x80 ? 1 : (cp < 0xE0 ? 2 : 3))) : i;
                         break;
@@ -313,7 +439,7 @@ bool UITextArea::OnKeyDown(int key)
                     else if ((cp & 0xE0) == 0xC0 && idx + 1 < (int)m_Text.size()) { cp = ((cp & 0x1F) << 6) | (m_Text[idx+1] & 0x3F); i += 2; }
                     else if ((cp & 0xF0) == 0xE0 && idx + 2 < (int)m_Text.size()) { cp = ((cp & 0x0F) << 12) | ((m_Text[idx+1] & 0x3F) << 6) | (m_Text[idx+2] & 0x3F); i += 3; }
                     else { ++i; continue; }
-                    float nextX = x + m_Font->GetGlyphInfo(cp).advance;
+                    float nextX = x + ((cp == ' ') ? m_Font->GetSpaceWidth() : m_Font->GetGlyphInfo(cp).advance);
                     if (nextX > m_TargetX) {
                         targetCol = (m_TargetX - x < nextX - m_TargetX) ? (i - (cp < 0x80 ? 1 : (cp < 0xE0 ? 2 : 3))) : i;
                         break;
@@ -326,6 +452,27 @@ bool UITextArea::OnKeyDown(int key)
             else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
             m_CursorPos = nextLineStart + std::min(targetCol, nextLineLen);
         }
+        EnsureCaretVisible();
+        return true;
+    }
+
+    if (key == static_cast<int>(Key::Home)) {
+        EnsureVisualRows();
+        const int row = VisualRowOfChar(m_CursorPos);
+        if (!shift) ClearSelection();
+        else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+        m_CursorPos = m_VisualRows[row].startByte;
+        m_TargetX = -1.0f;
+        EnsureCaretVisible();
+        return true;
+    }
+    if (key == static_cast<int>(Key::End)) {
+        EnsureVisualRows();
+        const int row = VisualRowOfChar(m_CursorPos);
+        if (!shift) ClearSelection();
+        else if (m_SelectionStart < 0) m_SelectionStart = m_CursorPos;
+        m_CursorPos = m_VisualRows[row].endByte;
+        m_TargetX = -1.0f;
         EnsureCaretVisible();
         return true;
     }

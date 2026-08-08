@@ -37,6 +37,7 @@
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
+#include "UI/TextAreaWrapPanel.h"
 #include "UI/ConsolePanel.h"
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
@@ -439,6 +440,10 @@ protected:
         m_TextAreaDebugPanel->SetName("DebugTextAreaPanel");
         m_TextAreaDebugPanel->SetFont(m_FontSmall.get());
 
+        m_TextAreaWrapPanel = new TextAreaWrapPanel();
+        m_TextAreaWrapPanel->SetName("DebugTextAreaWrapPanel");
+        m_TextAreaWrapPanel->SetFont(m_FontSmall.get());
+
         m_DebugTextPanel = new DebugTextPanel();
         m_DebugTextPanel->SetName("DebugTextPanel");
         m_DebugTextPanel->SetFont(m_FontSmall.get());
@@ -459,6 +464,7 @@ protected:
         m_DockManager->RegisterPanel("CameraTestPanel", "Camera", m_CameraTestPanel, true);
         m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
         m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
+        m_DockManager->RegisterPanel("TextAreaWrapPanel", "Text Area Wrap", m_TextAreaWrapPanel, true);
         m_DockManager->RegisterPanel("ConsolePanel", "Console", m_ConsolePanel, true);
         m_DockManager->RegisterPanel("DebugPanel", "Debug Panel", m_DebugPanel, true);
 
@@ -568,6 +574,8 @@ protected:
             m_DebugTextPanel->Refresh();
         if (m_TextAreaDebugPanel)
             m_TextAreaDebugPanel->Refresh();
+        if (m_TextAreaWrapPanel)
+            m_TextAreaWrapPanel->Refresh();
         if (m_InspectorTransformPanel)
             m_InspectorTransformPanel->Refresh();
     }
@@ -633,6 +641,8 @@ protected:
         m_CameraTestPanel = nullptr;
         DeleteUiSubtree(m_TextAreaDebugPanel);
         m_TextAreaDebugPanel = nullptr;
+        DeleteUiSubtree(m_TextAreaWrapPanel);
+        m_TextAreaWrapPanel = nullptr;
         DeleteUiSubtree(m_DebugTextPanel);
         m_DebugTextPanel = nullptr;
         DeleteUiSubtree(m_ConsolePanel);
@@ -744,6 +754,7 @@ private:
     DebugTextPanel* m_DebugTextPanel = nullptr;
     ConsolePanel* m_ConsolePanel = nullptr;
     TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
+    TextAreaWrapPanel* m_TextAreaWrapPanel = nullptr;
     DebugPanel* m_DebugPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
     uint32_t m_ViewportW = 800;

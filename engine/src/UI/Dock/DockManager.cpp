@@ -198,6 +198,7 @@ void DockManager::BuildDefaultLayout()
 
     static const char* kDebugIds[] = {
         "TestPanel", "CameraTestPanel", "DebugTextPanel", "TextAreaDebugPanel",
+        "TextAreaWrapPanel",
         "ConsolePanel", "DebugPanel",
     };
     for (const char* id : kDebugIds)

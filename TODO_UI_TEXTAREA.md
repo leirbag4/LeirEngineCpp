@@ -125,6 +125,100 @@ número de líneas con los `\n` de paso. Se eliminó el per-line `GetLineEnd` + 
 **Estado:** ✅ Builds verdes (LeirEngine + LeirEngineEditor). Verificado por el usuario:
 FPS estable en 60 con el panel Text Area visible.
 
+## Fase 4 — Word Wrap completo (`SetWordWrap`) — código hecho, build ✅ (verificación visual pendiente del usuario)
+
+**Objetivo:** wrap profesional en `UITextArea` con caret, selección, click/drag,
+flechas Up/Down y scroll correctos cuando las líneas visuales no coinciden con las
+lógicas (`\n`). Opcional por instancia vía `SetWordWrap(bool)`.
+
+**Implementado:**
+- Modelo de filas visuales `std::vector<VisualRow> m_VisualRows` (`{startByte, endByte, width}`),
+  reconstruido perezosamente en `EnsureVisualRows()` — compara `m_ModelGen` más
+  `m_BuiltWrapWidth != WrapLimit()` (o sea se reconstruye en resize del widget).
+- `WrapLimit()` = `max(0, cr.z − stripVertical − 8)`; con wrap off devuelve `FLT_MAX`
+  (una fila por línea lógica, comportamiento idéntico al anterior).
+- `SetWordWrap(bool)`, `IsWordWrapEnabled()`, invalida modelo + reclamp scroll.
+- `SetText`/`SetFont` override + `OnTextMutated` → `InvalidateWrapModel()`.
+- `GetLineCount()/GetLineStart()/GetLineEnd()/GetCursorLine()/GetCursorCol()/
+  GetCursorXAt()` operan sobre filas visuales (wrap off = lógicas).
+- Renderer: rama wrap ON dibuja cada fila con `LayoutText(sub, 0)`. Caret y selección
+  por fila visual (offset Y por `line * lineH − scrollY`).
+- Navegación: flechas Up/Down sobre filas (preservan `m_TargetX`, scan de columna con
+  space-width correcto), `Home`/`End` al start/end de la fila visual.
+- `GetContentSize()`: wrap ON → `{viewport.x, filas*lineH + 8}` (sin hscroll),
+  wrap OFF → máximo de filas lógicas (single-pass, sin O(N²)).
+- Panel `TextAreaWrapPanel` (pestaña "Text Area Wrap") con toggle `SetWordWrap`
+  y status (wrap, líneas lógicas vs visuales, cursor).
+- Registrado en `main.cpp` + agregado a `kDebugIds` (DockManager).
+- **Builds green**: LeirEngine.dll + LeirEngineEditor.exe.
+
+> **Pendiente:** verificación visual del usuario (toggling wrap, click/drag, flechas,
+> scroll) antes de considerarlo cerrado.
+
+### F4.1 — Modelo de líneas visuales (núcleo)
+
+Nuevo modelo en `UITextArea`: una caché de filas visuales
+`{{startByte, endByte} -> width}` reconstruida perezosamente (O(n) single-pass),
+invalidada por generación (`m_ModelGen`) + ancho de wrap cambiado.
+
+- [x] `std::vector<VisualRow> m_Rows` construido por pasada única sobre `m_Text`:
+  - El run `\n` cierra la fila actual (una fila vacía también).
+  - Wrap activo: antes de que `x+advance > wrapLimit` se corta. Con separador
+    (space) previo en la fila → se corta **en la palabra** (la fila termina en el
+    space excluido y la nueva fila empieza después de él); sin space → hard break.
+  - Wrap apagado: una fila por línea lógica (igual que hoy) → comportamiento
+    idéntico al actual.
+- [x] `SetWordWrap(bool)` / `IsWordWrapEnabled()` → `m_ModelGen++` + reclamp scroll.
+- [x] `EnsureVisualRows()` perezoso (compara `m_ModelGen` + `m_BuiltWrapWidth`);
+      también se invalida con `SetText` y cualquier mutación (`OnTextMutated` override).
+- [x] `wrapLimit = max(0, cr.z - stripV - 8)` (equivalente a `max(0, GetViewportSize().x - 8)`).
+
+### F4.2 — Funciones de navegación por fila visual
+
+- [x] `int VisualRowOfChar(int byteIdx)` — fila de un índice (índice == fin de fila →
+      fila anterior).
+- [x] `GetLineCount()/GetLineStart()/GetLineEnd()` pasan a devolver **filas
+      visuales** (con wrap off = lógicos, comportamiento idéntico). Usado por
+      renderer y flechas.
+- [x] `GetCursorLine()` = fila visual del caret; `GetCursorCol()` = byte − start fila.
+- [x] `GetCursorXAt(int)` override: X relativa a la **fila** actual del índice
+      (reseteo `\n` + filas envueltas). `GetCursorX()` deriva de eso.
+
+### F4.3 — Renderer (UIRenderer.cpp)
+
+- [x] Evaluar `textArea->IsWordWrapEnabled()`: si está ON, dibujar **por fila** — por
+      cada fila sacar su sub-texto (rango), `LayoutText(sub, 0)`, y desplazar cada glyph
+      a `cr + 4 − scrollX + rowOffsetY` (una pasada por fila). Si OFF, mantener el
+      dibujo actual en un solo `LayoutText(text, 0)`.
+- [x] Caret / selección ya usan `GetCursorLine`/`GetLineStart/End`/`GetCursorXAt`
+      visuales → no requieren cambios extra (verificado al integrar).
+
+### F4.4 — Pointer (click/drag) por fila visual
+
+- [x] `OnPointerDown`/`OnPointerMove`: `row = (localY + scroll.y − padTop)/lineH` clamped
+      a filas visuales; columna = `byteAt(row, localX)` (rama idéntica a la actual pero
+      con start/len de la fila) — `GetLineStart/End(line)` ya devuelven filas visuales.
+
+### F4.5 — Flechas Up/Down + Start/End de fila
+
+- [x] `OnKeyDown` Up/Down sobre filas visuales (preserva `m_TargetX`).
+- [x] `Home` → inicio de la fila visual. `End` → fin de la fila visual (no de toda la
+      línea lógica). (Wrap off: fila = lógica, igual que hoy.)
+
+### F4.6 — Scroll/EnsureCaretVisible/Content
+
+- [x] `EnsureCaretVisible()` usa la fila visual del caret.
+- [x] `GetContentSize()`: con wrap ON, ancho = viewport (sin hscroll) y alto =
+      filas × lineH; con wrap OFF, máximo de líneas lógicas (single-pass actual).
+- [x] Scrollbar horizontal se oculta automáticamente con wrap ON (content.x ≈ vp.x).
+
+### F4.7 — Panel editor "Text Area Wrap"
+
+- [x] `editor/src/UI/TextAreaWrapPanel.h/.cpp` (al estilo del TextAreaDebugPanel):
+      área editable con texto largo + botón toggle `SetWordWrap(on/off)` + status
+      labels. Título de la pestaña **"Text Area Wrap"**.
+- [x] Registrar en main.cpp + agregarlo a `kDebugIds` de `DockManager::BuildDefaultLayout`.
+
 ## Propiedad Editable (UITextInput / UITextArea)
 
 Nuevo en el mismo paso (pedido del usuario antes de empezar Fase 2):
@@ -149,3 +243,4 @@ Nuevo en el mismo paso (pedido del usuario antes de empezar Fase 2):
 | F2.4 — Scrollbars UITextArea | ✅ |
 | F2.5 — Integración / verificación | ✅ |
 | Fase 3 — Fix de rendimiento (O(N²) → O(N)) | ✅ |
+| Fase 4 — Word wrap completo (`SetWordWrap`) | ✅ build (verificación visual pendiente) |
