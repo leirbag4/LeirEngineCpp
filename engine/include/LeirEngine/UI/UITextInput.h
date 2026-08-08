@@ -45,6 +45,7 @@ public:
     bool HasSelection() const { return m_SelectionStart >= 0 && m_SelectionStart != m_CursorPos; }
     int GetSelBegin() const { return m_SelectionStart < m_CursorPos ? m_SelectionStart : m_CursorPos; }
     int GetSelEnd() const { return m_SelectionStart > m_CursorPos ? m_SelectionStart : m_CursorPos; }
+    std::string GetSelectedText() const; // empty if no selection
     bool IsCaretVisible() const { return m_Editable && m_Focused && (m_CaretCounter / 30) % 2 == 0; }
     void ResetCaretBlink() { m_CaretCounter = 0; }
     void TickCaret() { m_CaretCounter = (m_CaretCounter + 1) % 60; m_FrameCounter++; }

@@ -241,6 +241,12 @@ void UITextInput::DeleteSelection()
     OnTextMutated();
 }
 
+std::string UITextInput::GetSelectedText() const
+{
+    if (!HasSelection()) return {};
+    return m_Text.substr(GetSelBegin(), GetSelEnd() - GetSelBegin());
+}
+
 void UITextInput::OnFocus()
 {
     m_Focused = m_Editable;

@@ -98,9 +98,9 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 **Archivos:** `engine/include/LeirEngine/UI/UITextInput.h`, `engine/src/UI/UITextInput.cpp`
 
 - [x] Agregar `int m_SelectionStart = -1` (−1 = sin selección)
-- [x] Agregar helpers: (falta `std::string GetSelectedText() const` — los demás existen)
+- [x] Agregar helpers:
   - `bool HasSelection() const`
-  - `std::string GetSelectedText() const`
+  - `std::string GetSelectedText() const` — devuelve el rango seleccionado (vacío si no hay)
   - `void DeleteSelection()` — borra el rango seleccionado y ajusta m_CursorPos
   - `int GetSelBegin() const` / `int GetSelEnd() const` — min/max de selectionStart y cursorPos
 - [x] `InsertChar`: si hay selección, llamar `DeleteSelection()` antes de insertar
@@ -141,7 +141,7 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 - [x] Override `OnKeyDown` — Enter inserta `\n`, Up/Down navega entre líneas
 - [x] Almacena líneas virtualmente (el texto plano tiene `\n`)
 - [x] `GetCursorLine()` / `GetCursorCol()` — calcula línea/columna del cursor
-- [ ] Scroll offset vertical: cuando el cursor scrolea fuera del área visible, desplazar el contenido
+- [x] Scroll offset vertical: cuando el cursor scrolea fuera del área visible, desplazar el contenido (ver `TODO_UI_TEXTAREA.md` Fase 2 — `m_ScrollOffset` + `SetScrollOffset` + `EnsureCaretVisible`)
 
 ### F3.2 — Layout multiline con Font::LayoutText
 
@@ -156,7 +156,7 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 **Archivo:** `engine/src/UI/UIRenderer.cpp`
 
 - [x] Agregar `dynamic_cast<UITextArea*>` en el render loop
-- [ ] Renderizar el texto con scroll offset vertical
+- [x] Renderizar el texto con scroll offset vertical (ver `TODO_UI_TEXTAREA.md` F2.2 — baseline/caret/selección restan `m_ScrollOffset`)
 - [x] Caret en la línea activa
 - [x] Selección en multiline
 
@@ -164,9 +164,9 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 
 **Archivo:** `engine/include/LeirEngine/UI/UITextArea.h`, `engine/src/UI/UITextArea.cpp`
 
-- [ ] Agregar scrollbar vertical (usar UIImage o UIPanel como track + thumb)
-- [ ] Scrollbar horizontal (opcional, solo cuando hay líneas más anchas que el viewport)
-- [ ] Sincronizar scroll offset con la posición del caret
+- [x] Agregar scrollbar vertical (hijo `UIScrollbar(true)` del UITextArea, ver `TODO_UI_TEXTAREA.md` F2.4)
+- [x] Scrollbar horizontal (hijo `UIScrollbar(false)`, visible solo cuando hay líneas más anchas que el viewport)
+- [x] Sincronizar scroll offset con la posición del caret (`EnsureCaretVisible`)
 
 ---
 
@@ -208,13 +208,13 @@ Objetivo: que el DragInput reciba foco, se pueda tipear y borrar.
 | F1.2 — Click-to-position | ✅ |
 | F1.3 — Caret rendering | ✅ |
 | F1.4 — Caret blinking | ✅ |
-| F2.1 — Selection state | ⏳ (falta `GetSelectedText()`) |
+| F2.1 — Selection state | ✅ |
 | F2.2 — Shift+arrow selection | ✅ |
 | F2.3 — Selection rendering | ✅ |
 | F2.4 — Click-drag selection | ✅ |
-| F3.1 — UITextArea class | ⏳ (falta scroll offset vertical) |
+| F3.1 — UITextArea class | ✅ |
 | F3.2 — Layout multiline | ✅ |
-| F3.3 — UITextArea rendering | ⏳ (falta scroll offset vertical) |
-| F3.4 — Scrollbars | ✅ engine `UIScrollbar` + `ScrollView` (vertical; ver `TODO_UI_SCROLLBARS.md`). UITextArea sin scroll aún |
+| F3.3 — UITextArea rendering | ✅ |
+| F3.4 — Scrollbars | ✅ engine `UIScrollbar` + `ScrollView` (ver `TODO_UI_SCROLLBARS.md`); UITextArea con scroll vertical/horizontal propio (ver `TODO_UI_TEXTAREA.md` F2) |
 | F4.1 — DebugTextPanel | ✅ |
 | F4.2 — Integrar en editor | ✅ |

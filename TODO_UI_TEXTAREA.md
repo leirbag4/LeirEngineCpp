@@ -103,8 +103,9 @@ Ver `TODO_UI_SCROLLBARS.md` / resumen de cambios:
 - [x] Verificación manual del usuario: wheel, thumb, drag, scrollbars, selección intacta,
       read-only — **todo funciona**.
 - [ ] Caso borde: líneas vacías, `\n` finales, scroll X con una línea muy larga.
-- [ ] Actualizar `TODO_UI_INPUT.md`: marcar F3.1 (scroll offset), F3.3 (render offset) y
-      F3.4 (scrollbars UITextArea) como resueltos.
+- [x] Actualizar `TODO_UI_INPUT.md`: marcar F3.1 (scroll offset), F3.3 (render offset) y
+      F3.4 (scrollbars UITextArea) como resueltos. (*hecho 2026-08-08, junto con
+      `GetSelectedText()` que faltaba en F2.1*)
 
 ## Fase 3 — Fix de rendimiento (60 → 10 fps con el panel visible) — ✅
 
