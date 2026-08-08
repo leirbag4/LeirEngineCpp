@@ -2,6 +2,7 @@
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/Input/Keyboard.h"
 #include <algorithm>
+#include <cmath>
 
 namespace Leir {
 
@@ -125,9 +126,13 @@ void ScrollView::OnLayoutComputed()
 
     // The viewport is a Free child of the ScrollView; position it over the usable
     // area (absolute coords) and refresh its computed rect so its clip region is
-    // exactly the content surface (never reaching the scrollbar strips).
+    // exactly the content surface (never reaching the scrollbar strips). Snapped
+    // to integer pixels so the scissor doesn't drop partial edge rows.
     m_Viewport->GetRect().anchor = AnchorSet::TopLeft();
-    m_Viewport->GetRect().offset = {cr.x, cr.y, cr.x + availW, cr.y + availH};
+    m_Viewport->GetRect().offset = {
+        std::round(cr.x), std::round(cr.y),
+        std::round(cr.x + availW), std::round(cr.y + availH)
+    };
     m_Viewport->ComputeLayout({availW, availH});
 
     ApplyContentLayout(layoutW, layoutH);
@@ -160,6 +165,8 @@ void ScrollView::SyncScrollbar()
     const float viewportW = GetViewportSize().x;
     const float viewportH = GetViewportSize().y;
     const Vector2 content = GetContentSize();
+    const float rightEdge = std::round(cr.x + cr.z);
+    const float bottomEdge = std::round(cr.y + cr.w);
 
     const bool vOverflow = m_VScrollbarEnabled && content.y > viewportH && viewportH > 1.0f;
     const bool hOverflow = m_HScrollbarEnabled && content.x > viewportW && viewportW > 1.0f;
@@ -169,11 +176,13 @@ void ScrollView::SyncScrollbar()
 
         if (vOverflow) {
             // Flush track: starts exactly at the viewport's right edge so the
-            // clip (W - scrollbarWidth) never overlaps with the bar.
+            // clip (W - scrollbarWidth) never overlaps with the bar. Edges are
+            // pixel-snapped and the thickness kept exact so partial rows are
+            // never dropped by rasterization.
             m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_VScrollbar->GetRect().offset = {
-                cr.x + cr.z - m_ScrollbarWidth, cr.y,
-                cr.x + cr.z, hOverflow ? (cr.y + cr.w - m_ScrollbarWidth) : (cr.y + cr.w)
+                rightEdge - m_ScrollbarWidth, std::round(cr.y),
+                rightEdge, hOverflow ? (bottomEdge - m_ScrollbarWidth) : bottomEdge
             };
             m_VScrollbar->ComputeLayout({cr.z, cr.w});
 
@@ -190,9 +199,9 @@ void ScrollView::SyncScrollbar()
         if (hOverflow) {
             m_HScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_HScrollbar->GetRect().offset = {
-                cr.x, cr.y + cr.w - m_ScrollbarWidth,
-                vOverflow ? (cr.x + cr.z - m_ScrollbarWidth) : (cr.x + cr.z),
-                cr.y + cr.w
+                std::round(cr.x), bottomEdge - m_ScrollbarWidth,
+                vOverflow ? (rightEdge - m_ScrollbarWidth) : rightEdge,
+                bottomEdge
             };
             m_HScrollbar->ComputeLayout({cr.z, cr.w});
 

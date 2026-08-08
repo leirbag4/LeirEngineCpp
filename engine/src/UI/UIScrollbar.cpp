@@ -1,8 +1,27 @@
 #include "LeirEngine/UI/UIScrollbar.h"
 #include "LeirEngine/UI/UICanvas.h"
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <filesystem>
 
 namespace Leir {
+
+static void ScrollbarDebugLog(const std::string& name, bool vertical, float inset,
+    const Vector4& track, const Vector4& thumb)
+{
+    static FILE* f = nullptr;
+    if (!f) {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "leir_scrollbar_geom.txt";
+        f = std::fopen(p.string().c_str(), "w");
+    }
+    if (!f)
+        return;
+    std::fprintf(f, "%s %s inset=%.3f track={x=%.3f y=%.3f w=%.3f h=%.3f} thumb={x=%.3f y=%.3f w=%.3f h=%.3f}\n",
+        vertical ? "V" : "H", name.c_str(), inset,
+        track.x, track.y, track.z, track.w, thumb.x, thumb.y, thumb.z, thumb.w);
+    std::fflush(f);
+}
 
 UIScrollbar::UIScrollbar(bool vertical)
     : m_Vertical(vertical)
@@ -86,18 +105,24 @@ void UIScrollbar::OnLayoutComputed()
 
     Rect2D& tr = m_Thumb->GetRect();
     tr.anchor = AnchorSet::TopLeft();
+    // Snap to integer pixels so the thumb thickness (grosor - 2*inset) and its
+    // symmetric inset margins are never degraded by fractional edge rows.
     if (m_Vertical) {
-        tr.offset.left = cr.x + inset;
-        tr.offset.top = cr.y + start;
-        tr.offset.right = cr.x + cr.z - inset;
-        tr.offset.bottom = cr.y + start + len;
+        tr.offset.left = std::round(cr.x + inset);
+        tr.offset.top = std::round(cr.y + start);
+        tr.offset.right = std::round(cr.x + cr.z - inset);
+        tr.offset.bottom = std::round(cr.y + start + len);
     } else {
-        tr.offset.left = cr.x + start;
-        tr.offset.top = cr.y + inset;
-        tr.offset.right = cr.x + start + len;
-        tr.offset.bottom = cr.y + cr.w - inset;
+        tr.offset.left = std::round(cr.x + start);
+        tr.offset.top = std::round(cr.y + inset);
+        tr.offset.right = std::round(cr.x + start + len);
+        tr.offset.bottom = std::round(cr.y + cr.w - inset);
     }
     m_Thumb->ComputeLayout({cr.z, cr.w});
+
+    // TEMP debug: log the geometry so we can inspect fractional pixels.
+    const auto& tc = m_Thumb->GetComputedRect();
+    ScrollbarDebugLog(GetName(), m_Vertical, inset, {cr.x, cr.y, cr.z, cr.w}, {tc.x, tc.y, tc.z, tc.w});
 }
 
 bool UIScrollbar::OnPointerDown(const Vector2& pos)

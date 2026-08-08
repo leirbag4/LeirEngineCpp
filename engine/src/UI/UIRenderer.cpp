@@ -18,9 +18,31 @@
 #include "LeirEngine/Core/Settings.h"
 
 #include <algorithm>
+#include <cmath>
 #include "LeirEngine/Core/Log.h"
 
 namespace Leir {
+
+namespace {
+
+// Convert a logical clip rect to a physical VkRect2D. Uses floor for the
+// offset and ceil for the opposite edge so the scissor always covers every
+// pixel that a fractional-edge quad touches — truncation used to drop the
+// last row/column of children (e.g. the bottom edge of the horizontal
+// scrollbar track cut to 9px).
+void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, VkRect2D& s)
+{
+    const float x0 = std::clamp(c.x, 0.0f, pw);
+    const float y0 = std::clamp(c.y, 0.0f, ph);
+    const float x1 = std::clamp(c.x + c.z, 0.0f, pw);
+    const float y1 = std::clamp(c.y + c.w, 0.0f, ph);
+    s.offset.x = (int32_t)std::floor(x0 * scale);
+    s.offset.y = (int32_t)std::floor(y0 * scale);
+    s.extent.width = (uint32_t)std::max(0.0f, std::ceil(x1 * scale) - std::floor(x0 * scale));
+    s.extent.height = (uint32_t)std::max(0.0f, std::ceil(y1 * scale) - std::floor(y0 * scale));
+}
+
+} // namespace
 
 UIRenderer::UIRenderer(VulkanDevice* device)
     : m_Device(device)
@@ -328,10 +350,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
         {
             const float pw = m_ScreenSize.x * m_ContentScale;
             const float ph = m_ScreenSize.y * m_ContentScale;
-            scissor.offset.x = std::max(0, (int32_t)(logicalClip.x * m_ContentScale));
-            scissor.offset.y = std::max(0, (int32_t)(logicalClip.y * m_ContentScale));
-            scissor.extent.width = (uint32_t)std::max(0.0f, std::min(logicalClip.z * m_ContentScale, pw - scissor.offset.x));
-            scissor.extent.height = (uint32_t)std::max(0.0f, std::min(logicalClip.w * m_ContentScale, ph - scissor.offset.y));
+            ScissorFromLogicalClip(logicalClip, m_ContentScale, pw, ph, scissor);
         }
         if (batchCount > 0 && desc == batchDesc && sameScissor(scissor, batchScissor)) {
             ++batchCount;
@@ -610,14 +629,10 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
 
 void UIRenderer::ApplyScissor(VkCommandBuffer cmd, const Vector4& logicalClip, VkRect2D& last, bool& valid)
 {
+    VkRect2D s{};
     const float pw = m_ScreenSize.x * m_ContentScale;
     const float ph = m_ScreenSize.y * m_ContentScale;
-
-    VkRect2D s{};
-    s.offset.x = std::max(0, (int32_t)(logicalClip.x * m_ContentScale));
-    s.offset.y = std::max(0, (int32_t)(logicalClip.y * m_ContentScale));
-    s.extent.width = (uint32_t)std::max(0.0f, std::min(logicalClip.z * m_ContentScale, pw - s.offset.x));
-    s.extent.height = (uint32_t)std::max(0.0f, std::min(logicalClip.w * m_ContentScale, ph - s.offset.y));
+    ScissorFromLogicalClip(logicalClip, m_ContentScale, pw, ph, s);
 
     if (!valid || s.offset.x != last.offset.x || s.offset.y != last.offset.y ||
         s.extent.width != last.extent.width || s.extent.height != last.extent.height) {
