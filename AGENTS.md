@@ -94,6 +94,24 @@ cmake --build build/linux-debug
 - Editor reads settings for window size / fullscreen / position / maximized and the dock layout; saves on splitter drag end, panel close, and shutdown (`OnShutdown`)
 - Window placement persistence: `CoreApplication` tracks the "normal rect" (size/pos only when not maximized and not fullscreen) via GLFW size/pos callbacks, so exiting maximized or fullscreen never corrupts the saved windowed rect. Position is restored via `glfwSetWindowPos` (centered if unset), maximized via `glfwMaximizeWindow`, both ignored in fullscreen
 
+## Crash Diagnostics
+
+Editor crash/failure reporting isolated in `editor/src/CrashDiagnostics.h/.cpp`
+(see `CRASH_DIAGNOSTICS.md`). Single portable entry point
+`CrashDiagnostics::Init()` called once from `editor/src/main.cpp`. Per-platform
+branches:
+
+- **Windows**: `std::set_terminate` (dumps exception type+what) + CRT
+  invalid-parameter handler + debug CRT alloc hook (>512 MB → DbgHelp symbolized
+  stack walk to `crash_diagnostics.log`).
+- **macOS/Linux**: terminate handler only; skeletons ready with TODO comments.
+
+**CI note**: `dbghelp` is linked via CMake in `editor/CMakeLists.txt`
+(`if(WIN32) ... PRIVATE dbghelp`) because the `#pragma comment(lib,...)` in the
+.cpp is MSVC-only — MinGW (GitHub Actions `windows-ci-debug` preset) ignores it
+and otherwise fails to link `SymInitialize`/`SymFromAddr`. Keep the CMake link
+as source of truth. Platform code stays OUT of `main.cpp`.
+
 ## XConsole Logging
 
 Own logging system (`Core/Log.h` + `Core/Log.cpp`), no external dependency (replaced spdlog).

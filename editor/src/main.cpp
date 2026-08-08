@@ -56,13 +56,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <crtdbg.h>
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <dbghelp.h>
-#pragma comment(lib, "dbghelp.lib")
+#include "CrashDiagnostics.h"
 
 namespace {
     const float kBottomBarHeight = 30.0f;
@@ -111,120 +105,11 @@ void DeleteUiSubtree(Leir::UIElement* element)
     delete element;
 }
 
-// ---- Crash diagnostics (temporary) ----
-// Writes the exact CRT/STL failure reason to a file so we can diagnose the
-// "Debug Error! abort() has been called" dialog seen when docking panels.
-namespace {
-
-const char* gDiagLogPath = "C:/Users/gabri/AppData/Local/Temp/opencode/crt_error.log";
-
-void LogDiag(const char* msg)
-{
-    FILE* f = nullptr;
-    if (fopen_s(&f, gDiagLogPath, "a") == 0) {
-        fputs(msg, f);
-        fputc('\n', f);
-        fclose(f);
-    }
-}
-
-void OnTerminate()
-{
-    LogDiag("[terminate] std::terminate called");
-    if (std::current_exception()) {
-        try {
-            std::rethrow_exception(std::current_exception());
-        } catch (const std::exception& e) {
-            char buf[512];
-            snprintf(buf, sizeof(buf), "[terminate] exception type='%s' what='%s'",
-                typeid(e).name(), e.what());
-            LogDiag(buf);
-        } catch (...) {
-            LogDiag("[terminate] exception of unknown type");
-        }
-    } else {
-        LogDiag("[terminate] no active exception");
-    }
-    abort();
-}
-
-void OnInvalidParam(const wchar_t* expression, const wchar_t* function,
-                    const wchar_t* file, unsigned int line, uintptr_t /*reserved*/)
-{
-    char buf[1024];
-    snprintf(buf, sizeof(buf),
-        "[invalid_parameter] expression='%ls' function='%ls' file='%ls' line=%u",
-        expression ? expression : L"(null)",
-        function ? function : L"(null)",
-        file ? file : L"(null)", line);
-    LogDiag(buf);
-    abort();
-}
-
-void LogStackWalk(size_t size)
-{
-    HANDLE proc = GetCurrentProcess();
-    static bool symInit = false;
-    if (!symInit) {
-        symInit = SymInitialize(proc,
-            "C:\\projects\\leir_engine\\build\\windows-debug\\engine\\Debug;"
-            "C:\\projects\\leir_engine\\build\\windows-debug\\editor\\Debug",
-            TRUE) != FALSE;
-    }
-
-    void* stack[64];
-    USHORT frames = CaptureStackBackTrace(0, 64, stack, nullptr);
-
-    char buf[640];
-    snprintf(buf, sizeof(buf), "[bad_alloc] size=%zu frames=%u", size, (unsigned)frames);
-    LogDiag(buf);
-
-    for (USHORT i = 0; i < frames; ++i) {
-        DWORD64 addr = (DWORD64)stack[i];
-        DWORD64 disp = 0;
-        char symName[256] = "?";
-        char modName[64] = "?";
-        IMAGEHLP_MODULE64 mi{};
-        mi.SizeOfStruct = sizeof(mi);
-        if (SymGetModuleInfo64(proc, addr, &mi))
-            snprintf(modName, sizeof(modName), "%s", mi.ModuleName);
-        char symBuf[sizeof(SYMBOL_INFO) + 256] = {};
-        SYMBOL_INFO* si = (SYMBOL_INFO*)symBuf;
-        si->SizeOfStruct = sizeof(SYMBOL_INFO);
-        si->MaxNameLen = 256;
-        if (SymFromAddr(proc, addr, &disp, si))
-            snprintf(symName, sizeof(symName), "%s+0x%llx", si->Name, disp);
-        snprintf(buf, sizeof(buf), "   #%u %s!%s", (unsigned)i, modName, symName);
-        LogDiag(buf);
-    }
-}
-
-} // namespace
-
-// Global operator new overrides were removed: the bad_alloc originates in the
-// engine DLL (separate operator new), so exe-side overrides never see it. The
-// debug CRT alloc hook below is process-wide (shared debug heap) and catches
-// suspicious allocations from every module BEFORE they fail.
-
-int MyAllocHook(int allocType, void* /*userData*/, size_t size, int blockType,
-                long requestNumber, const unsigned char* filename, int lineNumber)
-{
-    static bool inHook = false;
-    if (size > (size_t)512 * 1024 * 1024) {
-        char buf[640];
-        snprintf(buf, sizeof(buf),
-            "[alloc-hook] size=%zu allocType=%d blockType=%d request=%ld file='%s' line=%d",
-            size, allocType, blockType, requestNumber,
-            filename ? (const char*)filename : "(null)", lineNumber);
-        LogDiag(buf);
-        if (!inHook) {
-            inHook = true;
-            LogStackWalk(size);
-            inHook = false;
-        }
-    }
-    return TRUE;
-}
+// ---- Crash diagnostics ----
+// All crash/failure reporting lives in CrashDiagnostics.h/.cpp (Windows:
+// terminate handler + invalid-parameter handler + >512MB alloc hook with a
+// DbgHelp stack walk; macOS/Linux skeletons ready to extend). main() only
+// calls CrashDiagnostics::Init() once at startup.
 
 class EditorApp : public Leir::CoreApplication {
 public:
@@ -817,9 +702,7 @@ int main()
 {
     Leir::XConsole::SetLevel(Leir::LogLevel::Trace);
 
-    std::set_terminate(&OnTerminate);
-    _set_invalid_parameter_handler(&OnInvalidParam);
-    _CrtSetAllocHook(&MyAllocHook);
+    CrashDiagnostics::Init();
 
     Leir::LeirSettings::Get().Load();
 
