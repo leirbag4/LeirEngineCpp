@@ -48,7 +48,8 @@ private:
     UIElement* m_HoveredElement = nullptr;
     UIElement* m_CaptureElement = nullptr;
 
-    void HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out);
+    void HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out,
+                          const Vector4* clip);
     bool m_PointerDown = false;
 };
 

@@ -378,6 +378,14 @@ See `TODO_UI_SCROLLBARS.md` for the full concept and implementation notes.
   `lastScissor` across all 3 layers. Clip rects are logical; scissor is physical →
   `UIRenderer::SetContentScale(float)` (editor sets it in `OnInit` +
   `OnContentScaleChanged`). The UI pipeline already used dynamic viewport/scissor.
+- **Hit-testing mirrors the clip** (fixed 2026-08-08): `UICanvas::HitTestRecursive`
+  now takes the active clip rect and applies the **same intersect/fast-reject logic
+  as `UIRenderer::RenderElement`** (`IsClipEnabled` → intersect with parent clip,
+  empty intersection or fully-outside → subtree skipped; pointer outside `effClip` →
+  skip). Before this, hit-testing only checked computed rects, so scrolled content
+  kept stealing clicks/hover from elements its clipped rect had scrolled **over**
+  (e.g. console lines sliding under the ConsoleHeader's Info/Warn/Error/Clear buttons
+  captured the events, and wide content could cover a scrollbar strip).
 - **Wheel**: `UIElement::OnScroll(float delta)` virtual (return true to consume).
   `UICanvas` registers the existing `EventQueue` `ScrollHook` and dispatches the
   `ScrollEvent` to the hovered element, propagating up the parent chain.

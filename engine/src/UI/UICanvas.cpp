@@ -2,6 +2,7 @@
 #include "LeirEngine/Input/EventQueue.h"
 #include "LeirEngine/Core/Settings.h"
 #include "LeirEngine/Core/Log.h"
+#include <algorithm>
 #include <string>
 
 namespace Leir {
@@ -59,22 +60,57 @@ void UICanvas::UpdateLayout()
 bool UICanvas::HitTest(const Vector2& screenPos, UIElement*& outElement)
 {
     outElement = nullptr;
-    HitTestRecursive(this, screenPos, outElement);
+    HitTestRecursive(this, screenPos, outElement, nullptr);
     return outElement != nullptr;
 }
 
-void UICanvas::HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out)
+void UICanvas::HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out,
+                                const Vector4* clip)
 {
-    if (!element->IsActive())
+    if (!element->IsActive() || out)
         return;
 
     const auto& r = element->GetComputedRect();
-    bool inside = pos.x >= r.x && pos.x <= r.x + r.z &&
-                  pos.y >= r.y && pos.y <= r.y + r.w;
+
+    // Effective clip: intersect this element's rect with the active clip when
+    // clipping is enabled, mirroring UIRenderer::RenderElement so hit-testing
+    // never reaches content that is visually scissored away (e.g. console lines
+    // scrolled over the header, or content under a scrollbar strip).
+    Vector4 localClip;
+    const Vector4* effClip = clip;
+    if (element->IsClipEnabled()) {
+        if (clip) {
+            localClip.x = std::max(clip->x, r.x);
+            localClip.y = std::max(clip->y, r.y);
+            localClip.z = std::min(clip->x + clip->z, r.x + r.z) - localClip.x;
+            localClip.w = std::min(clip->y + clip->w, r.y + r.w) - localClip.y;
+        } else {
+            localClip = r;
+        }
+        if (localClip.z <= 0.0f || localClip.w <= 0.0f)
+            return; // fully clipped away -> subtree is invisible, skip
+        effClip = &localClip;
+    } else if (effClip) {
+        // Fast reject: fully outside the active clip.
+        if (r.x + r.z <= effClip->x || r.x >= effClip->x + effClip->z ||
+            r.y + r.w <= effClip->y || r.y >= effClip->y + effClip->w)
+            return;
+    }
+
+    // The pointer must lie inside the effective clip for any of this subtree
+    // to be a valid target.
+    if (effClip) {
+        if (pos.x < effClip->x || pos.x > effClip->x + effClip->z ||
+            pos.y < effClip->y || pos.y > effClip->y + effClip->w)
+            return;
+    }
+
+    const bool inside = pos.x >= r.x && pos.x <= r.x + r.z &&
+                        pos.y >= r.y && pos.y <= r.y + r.w;
 
     const auto& children = element->GetChildren();
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
-        HitTestRecursive(*it, pos, out);
+        HitTestRecursive(*it, pos, out, effClip);
         if (out) return;
     }
 
