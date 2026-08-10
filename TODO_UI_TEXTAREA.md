@@ -99,7 +99,10 @@ Ver `TODO_UI_SCROLLBARS.md` / resumen de cambios:
 
 - [x] `TextAreaDebugPanel` (`editor/src/UI/TextAreaDebugPanel.cpp`): se añadió un segundo
       área **read-only** (`SetEditable(false)`) con 40 líneas largas para verificar el wheel /
-      scroll / thumb / scrollbar sin que caret o edición interfieran.
+      scroll / thumb / scrollbar sin que caret o edición interfieran. **Nota 2026-08-08:** el
+      área read-only se **eliminó** a petición tras la verificación — el tab "Text Area" quedó
+      con solo el UITextArea editable + la etiqueta de estado. El feature `SetEditable` permanece
+      en el engine.
 - [x] Verificación manual del usuario: wheel, thumb, drag, scrollbars, selección intacta,
       read-only — **todo funciona**.
 - [ ] Caso borde: líneas vacías, `\n` finales, scroll X con una línea muy larga.
