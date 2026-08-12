@@ -6,7 +6,8 @@
 #include <LeirEngine/Objects/Object2D.h>
 #include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/Scene/SceneManager.h>
-#include <LeirEngine/Rendering/VulkanDevice.h>
+#include <LeirEngine/RHI/RenderBackend.h>
+#include <LeirEngine/RHI/VulkanBackend.h>
 #include <LeirEngine/Rendering/RenderPipeline.h>
 #include <LeirEngine/Rendering/RenderTexture.h>
 #include <LeirEngine/Rendering/Shader.h>
@@ -127,8 +128,8 @@ public:
 
     ~EditorApp()
     {
-        if (m_VulkanDevice)
-            vkDeviceWaitIdle(m_VulkanDevice->GetDevice());
+        if (m_Backend)
+            m_Backend->WaitIdle();
     }
 
 protected:
@@ -136,30 +137,31 @@ protected:
     {
         Leir::XConsole::Println("Editor initialized");
 
-        Leir::VulkanDeviceConfig config;
-        config.appName = "LeirEngine Editor";
-        config.windowWidth = GetWidth();
-        config.windowHeight = GetHeight();
-        config.vsync = Leir::LeirSettings::Get().window.vsync;
-        m_VulkanDevice = std::make_unique<Leir::VulkanDevice>(GetWindow(), config);
+        m_Backend.reset(Leir::RHI::BackendFactory::Create(
+            GetWindow(), GetWidth(), GetHeight(),
+            Leir::LeirSettings::Get().window.vsync, "LeirEngine Editor"));
+        if (!m_Backend) {
+            Leir::XConsole::PrintError("Failed to create render backend");
+            return;
+        }
 
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
-            m_VulkanDevice.get(),
+            m_Backend.get(),
             shaderDir + "/Basic.vert.spv",
             shaderDir + "/Basic.frag.spv"
         );
 
         unsigned char whitePixel[4] = { 255, 255, 255, 255 };
         m_WhiteTexture = std::make_shared<Leir::Texture2D>(
-            m_VulkanDevice.get(), 1, 1, whitePixel);
+            m_Backend.get(), 1, 1, whitePixel);
 
-        m_Material = std::make_shared<Leir::Material>(m_VulkanDevice.get(), m_Shader);
+        m_Material = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
         m_Material->SetTexture("texSampler", m_WhiteTexture);
 
         auto [verts, idxs] = Leir::Primitives::CreateCube();
-        m_Mesh = std::make_shared<Leir::Mesh>(m_VulkanDevice.get(), verts, idxs);
-        m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_VulkanDevice.get());
+        m_Mesh = std::make_shared<Leir::Mesh>(m_Backend.get(), verts, idxs);
+        m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_Backend.get());
 
         auto& sceneManager = Leir::SceneManager::GetInstance();
         auto& scene = sceneManager.CreateScene("Main Scene");
@@ -173,7 +175,7 @@ protected:
         // units; the RT is physical (logical x DPI) so the 3D view is sharp.
         float dpr = GetContentScale();
         m_ViewportRT = std::make_unique<Leir::RenderTexture>(
-            m_VulkanDevice.get(),
+            m_Backend.get(),
             (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportW * dpr)),
             (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportH * dpr)));
         m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
@@ -221,7 +223,7 @@ protected:
         sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
 
         Leir::Image sheetImage("assets/sprite_sheet_64_64.png");
-        auto sheetTex = std::make_shared<Leir::Texture2D>(m_VulkanDevice.get(), sheetImage);
+        auto sheetTex = std::make_shared<Leir::Texture2D>(m_Backend.get(), sheetImage);
         auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 32, 32);
 
         auto* sheetSprite = scene.CreateObject2D("SheetSprite");
@@ -237,7 +239,7 @@ protected:
         m_SheetSprites.push_back(sheetSprite);
 
         // ---- UI System ----
-        m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_VulkanDevice.get());
+        m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_Backend.get());
         m_UIRenderer->SetContentScale(GetContentScale());
 
         std::string fontPath;
@@ -256,8 +258,8 @@ protected:
         }
 
         if (!fontPath.empty()) {
-            m_Font = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 16);
-            m_FontSmall = std::make_unique<Leir::Font>(m_VulkanDevice.get(), fontPath, 13);
+            m_Font = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 16);
+            m_FontSmall = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 13);
         }
 
         m_Canvas = std::make_unique<Leir::UICanvas>();
@@ -500,25 +502,25 @@ protected:
     void OnRender() override
     {
         // BeginFrame(true) skips the swapchain 3D render pass
-        if (!m_VulkanDevice || !m_VulkanDevice->BeginFrame(true)) return;
+        if (!m_Backend || !m_Backend->BeginFrame(true)) return;
 
-        VkCommandBuffer cmd = m_VulkanDevice->GetCurrentCommandBuffer();
+        auto cmd = m_Backend->GetCurrentCommandBuffer();
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
 
         // 1. Render 3D scene + sprites to offscreen RenderTexture
         if (m_ViewportRT && scene) {
-            VkClearValue clearColor;
-            clearColor.color = { {0.15f, 0.15f, 0.2f, 1.0f} };
+            Leir::RHI::RHIClearValue clearColor;
+            clearColor.color = {0.15f, 0.15f, 0.2f, 1.0f};
             m_ViewportRT->BeginRender(cmd, clearColor, 1.0f);
             m_RenderPipeline->Render(cmd, scene);
             m_ViewportRT->EndRender(cmd);
         }
 
         // 2. Render UI to swapchain overlay directly
-        m_VulkanDevice->BeginSwapchainOverlay();
+        m_Backend->BeginSwapchainOverlay();
         if (m_UIRenderer && m_Canvas)
             m_UIRenderer->Render(cmd, m_Canvas.get());
-        m_VulkanDevice->EndFrame();
+        m_Backend->EndFrame();
     }
 
     void OnShutdown() override
@@ -575,7 +577,7 @@ protected:
         m_DebugPanel = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         Leir::XConsole::Debug("[Timing] UI subtrees freed: {:.1f} ms", elapsedMs());
-        // Destroy viewport RT before VulkanDevice
+        // Destroy viewport RT before the backend
         m_ViewportRT.reset();
         Leir::XConsole::Debug("[Timing] viewport RT destroyed: {:.1f} ms", elapsedMs());
         auto& sm = Leir::SceneManager::GetInstance();
@@ -588,9 +590,9 @@ protected:
     {
         (void)width;
         (void)height;
-        // Notify VulkanDevice so the swapchain is recreated at next present
-        if (m_VulkanDevice)
-            m_VulkanDevice->NotifyResized();
+        // Notify the backend so the swapchain is recreated at next present
+        if (m_Backend)
+            m_Backend->NotifyResized();
     }
 
     void OnContentScaleChanged() override
@@ -650,7 +652,7 @@ private:
         m_HasPendingResizeLog = true;
     }
 
-    std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
+    std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
     std::shared_ptr<Leir::Shader> m_Shader;
     std::shared_ptr<Leir::Mesh> m_Mesh;
@@ -727,7 +729,7 @@ int main()
         return 1;
     }
     auto tDestroyEnd = std::chrono::steady_clock::now();
-    Leir::XConsole::Debug("[Timing] Member destructors + CoreApplication teardown (VulkanDevice, GLFW): {:.1f} ms",
+    Leir::XConsole::Debug("[Timing] Member destructors + CoreApplication teardown (RenderBackend, GLFW): {:.1f} ms",
         std::chrono::duration<double, std::milli>(tDestroyEnd - tRunEnd).count());
 
     return 0;

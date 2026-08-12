@@ -1,5 +1,5 @@
 #include "LeirEngine/Rendering/Mesh.h"
-#include "LeirEngine/Rendering/VulkanDevice.h"
+#include "LeirEngine/RHI/RenderBackend.h"
 
 #include <cstring>
 #include <cmath>
@@ -9,105 +9,103 @@
 
 namespace Leir {
 
-VkVertexInputBindingDescription Vertex::GetBindingDescription()
+RHI::RHIVertexInputBinding Vertex::GetBindingDescription()
 {
-    VkVertexInputBindingDescription desc{};
+    RHI::RHIVertexInputBinding desc{};
     desc.binding = 0;
     desc.stride = sizeof(Vertex);
-    desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    desc.inputRate = RHI::VertexInputRate::Vertex;
     return desc;
 }
 
-std::vector<VkVertexInputAttributeDescription> Vertex::GetAttributeDescriptions()
+std::vector<RHI::RHIVertexAttribute> Vertex::GetAttributeDescriptions()
 {
-    std::vector<VkVertexInputAttributeDescription> attrs(3);
+    std::vector<RHI::RHIVertexAttribute> attrs(3);
     attrs[0].binding = 0;
     attrs[0].location = 0;
-    attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrs[0].format = RHI::Format::R32G32B32_SFLOAT;
     attrs[0].offset = offsetof(Vertex, position);
 
     attrs[1].binding = 0;
     attrs[1].location = 1;
-    attrs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrs[1].format = RHI::Format::R32G32B32_SFLOAT;
     attrs[1].offset = offsetof(Vertex, normal);
 
     attrs[2].binding = 0;
     attrs[2].location = 2;
-    attrs[2].format = VK_FORMAT_R32G32_SFLOAT;
+    attrs[2].format = RHI::Format::R32G32_SFLOAT;
     attrs[2].offset = offsetof(Vertex, texCoord);
 
     return attrs;
 }
 
-Mesh::Mesh(VulkanDevice* device,
+Mesh::Mesh(RHI::RenderBackend* device,
            const std::vector<Vertex>& vertices,
            const std::vector<uint32_t>& indices)
     : m_Device(device)
     , m_Vertices(vertices)
     , m_Indices(indices)
 {
-    VkDeviceSize vertexSize = vertices.size() * sizeof(Vertex);
-    VkDeviceSize indexSize = indices.size() * sizeof(uint32_t);
+    uint32_t vertexSize = (uint32_t)(vertices.size() * sizeof(Vertex));
+    uint32_t indexSize = (uint32_t)(indices.size() * sizeof(uint32_t));
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
+    RHI::RHIBuffer stagingBuffer;
+    RHI::RHIDeviceMemory stagingMemory;
     stagingBuffer = m_Device->CreateBuffer(vertexSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        RHI::BufferUsage::TransferSrc,
+        RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
         stagingMemory);
 
     void* data;
-    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, vertexSize, 0, &data);
+    m_Device->MapMemory(stagingMemory, 0, vertexSize, &data);
     memcpy(data, vertices.data(), (size_t)vertexSize);
-    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
+    m_Device->UnmapMemory(stagingMemory);
 
     m_VertexBuffer = m_Device->CreateBuffer(vertexSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        RHI::BufferUsage::TransferDst | RHI::BufferUsage::Vertex,
+        RHI::MemoryProperty::DeviceLocal,
         m_VertexMemory);
     m_Device->CopyBuffer(stagingBuffer, m_VertexBuffer, vertexSize);
 
-    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
+    m_Device->DestroyBuffer(stagingBuffer);
+    m_Device->DestroyMemory(stagingMemory);
 
     stagingBuffer = m_Device->CreateBuffer(indexSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        RHI::BufferUsage::TransferSrc,
+        RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
         stagingMemory);
 
-    vkMapMemory(m_Device->GetDevice(), stagingMemory, 0, indexSize, 0, &data);
+    m_Device->MapMemory(stagingMemory, 0, indexSize, &data);
     memcpy(data, indices.data(), (size_t)indexSize);
-    vkUnmapMemory(m_Device->GetDevice(), stagingMemory);
+    m_Device->UnmapMemory(stagingMemory);
 
     m_IndexBuffer = m_Device->CreateBuffer(indexSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        RHI::BufferUsage::TransferDst | RHI::BufferUsage::Index,
+        RHI::MemoryProperty::DeviceLocal,
         m_IndexMemory);
     m_Device->CopyBuffer(stagingBuffer, m_IndexBuffer, indexSize);
 
-    vkDestroyBuffer(m_Device->GetDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), stagingMemory, nullptr);
+    m_Device->DestroyBuffer(stagingBuffer);
+    m_Device->DestroyMemory(stagingMemory);
 }
 
 Mesh::~Mesh()
 {
-    vkDestroyBuffer(m_Device->GetDevice(), m_VertexBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), m_VertexMemory, nullptr);
-    vkDestroyBuffer(m_Device->GetDevice(), m_IndexBuffer, nullptr);
-    vkFreeMemory(m_Device->GetDevice(), m_IndexMemory, nullptr);
+    m_Device->DestroyBuffer(m_VertexBuffer);
+    m_Device->DestroyMemory(m_VertexMemory);
+    m_Device->DestroyBuffer(m_IndexBuffer);
+    m_Device->DestroyMemory(m_IndexMemory);
 }
 
-void Mesh::Bind(VkCommandBuffer cmd) const
+void Mesh::Bind(RHI::RHICommandBuffer cmd) const
 {
-    VkBuffer vertexBuffers[] = { m_VertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(cmd, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    m_Device->CmdBindVertexBuffer(cmd, m_VertexBuffer);
+    m_Device->CmdBindIndexBuffer(cmd, m_IndexBuffer);
 }
 
-void Mesh::Draw(VkCommandBuffer cmd) const
+void Mesh::Draw(RHI::RHICommandBuffer cmd) const
 {
-    vkCmdDrawIndexed(cmd, (uint32_t)m_Indices.size(), 1, 0, 0, 0);
+    m_Device->CmdDrawIndexed(cmd, (uint32_t)m_Indices.size(), 1, 0);
 }
 
 namespace Primitives {

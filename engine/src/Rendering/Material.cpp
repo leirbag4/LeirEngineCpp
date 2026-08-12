@@ -1,5 +1,5 @@
 #include "LeirEngine/Rendering/Material.h"
-#include "LeirEngine/Rendering/VulkanDevice.h"
+#include "LeirEngine/RHI/RenderBackend.h"
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Rendering/Texture2D.h"
 #include "LeirEngine/Rendering/Mesh.h"
@@ -9,7 +9,7 @@
 
 namespace Leir {
 
-Material::Material(VulkanDevice* device, std::shared_ptr<Shader> shader)
+Material::Material(RHI::RenderBackend* device, std::shared_ptr<Shader> shader)
     : m_Device(device)
     , m_Shader(std::move(shader))
 {
@@ -20,17 +20,16 @@ Material::Material(VulkanDevice* device, std::shared_ptr<Shader> shader)
 
 Material::~Material()
 {
-    auto dev = m_Device->GetDevice();
-    if (m_Pipeline != VK_NULL_HANDLE)
-        vkDestroyPipeline(dev, m_Pipeline, nullptr);
-    if (m_PipelineLayout != VK_NULL_HANDLE)
-        vkDestroyPipelineLayout(dev, m_PipelineLayout, nullptr);
-    if (m_DescriptorSetLayout != VK_NULL_HANDLE)
-        vkDestroyDescriptorSetLayout(dev, m_DescriptorSetLayout, nullptr);
-    if (m_UBOSetLayout != VK_NULL_HANDLE)
-        vkDestroyDescriptorSetLayout(dev, m_UBOSetLayout, nullptr);
-    if (m_DescriptorPool != VK_NULL_HANDLE)
-        vkDestroyDescriptorPool(dev, m_DescriptorPool, nullptr);
+    if (m_Pipeline.IsValid())
+        m_Device->DestroyPipeline(m_Pipeline);
+    if (m_PipelineLayout.IsValid())
+        m_Device->DestroyPipelineLayout(m_PipelineLayout);
+    if (m_DescriptorSetLayout.IsValid())
+        m_Device->DestroyDescriptorSetLayout(m_DescriptorSetLayout);
+    if (m_UBOSetLayout.IsValid())
+        m_Device->DestroyDescriptorSetLayout(m_UBOSetLayout);
+    if (m_DescriptorPool.IsValid())
+        m_Device->DestroyDescriptorPool(m_DescriptorPool);
 }
 
 void Material::SetTexture(const std::string& name, std::shared_ptr<Texture2D> texture)
@@ -52,64 +51,55 @@ void Material::SetVec3(const std::string& name, const Vector3& value)
     (void)value;
 }
 
-void Material::Bind(VkCommandBuffer cmd, VkPipelineLayout layout) const
+void Material::Bind(RHI::RHICommandBuffer cmd, RHI::RHIPipelineLayout layout) const
 {
     (void)layout;
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
-    if (m_DescriptorSet != VK_NULL_HANDLE)
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_PipelineLayout, 1, 1, &m_DescriptorSet, 0, nullptr);
+    m_Device->CmdBindPipeline(cmd, m_Pipeline);
+    if (m_DescriptorSet.IsValid())
+        m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 1, { m_DescriptorSet });
 }
 
-void Material::RecreatePipeline(VkRenderPass renderPass)
+void Material::RecreatePipeline(RHI::RHIRenderPass renderPass)
 {
-    auto dev = m_Device->GetDevice();
-    if (m_Pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(dev, m_Pipeline, nullptr);
-        m_Pipeline = VK_NULL_HANDLE;
+    if (m_Pipeline.IsValid()) {
+        m_Device->DestroyPipeline(m_Pipeline);
+        m_Pipeline = RHI::RHIPipeline{};
     }
-    if (m_PipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(dev, m_PipelineLayout, nullptr);
-        m_PipelineLayout = VK_NULL_HANDLE;
+    if (m_PipelineLayout.IsValid()) {
+        m_Device->DestroyPipelineLayout(m_PipelineLayout);
+        m_PipelineLayout = RHI::RHIPipelineLayout{};
     }
     // CreatePipeline() re-allocates m_UBOSetLayout; free the previous one so a
     // repeated RecreatePipeline doesn't leak a descriptor set layout.
-    if (m_UBOSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(dev, m_UBOSetLayout, nullptr);
-        m_UBOSetLayout = VK_NULL_HANDLE;
+    if (m_UBOSetLayout.IsValid()) {
+        m_Device->DestroyDescriptorSetLayout(m_UBOSetLayout);
+        m_UBOSetLayout = RHI::RHIDescriptorSetLayout{};
     }
     CreatePipeline(renderPass);
 }
 
 void Material::CreateDescriptorPool()
 {
-    std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
+    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
+        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
     };
-    m_DescriptorPool = m_Device->CreateDescriptorPool(poolSizes, 1);
+    m_DescriptorPool = m_Device->CreateDescriptorPool(poolBindings, 1);
 }
 
 void Material::CreateDescriptorSetLayout()
 {
-    VkDescriptorSetLayoutBinding samplerBinding{};
+    RHI::RHIDescriptorBinding samplerBinding{};
     samplerBinding.binding = 0;
-    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerBinding.type = RHI::DescriptorType::CombinedImageSampler;
+    samplerBinding.count = 1;
+    samplerBinding.stage = RHI::ShaderStage::Fragment;
 
     m_DescriptorSetLayout = m_Device->CreateDescriptorSetLayout({ samplerBinding });
 }
 
 void Material::CreateDescriptorSet()
 {
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = m_DescriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &m_DescriptorSetLayout;
-
-    if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &m_DescriptorSet) != VK_SUCCESS)
-        XConsole::PrintError("Failed to allocate material descriptor set");
+    m_DescriptorSet = m_Device->AllocateDescriptorSet(m_DescriptorPool, m_DescriptorSetLayout);
 }
 
 void Material::UpdateDescriptorSet()
@@ -117,51 +107,49 @@ void Material::UpdateDescriptorSet()
     if (!m_Texture)
         return;
 
-    VkDescriptorImageInfo imageInfo = m_Texture->GetDescriptorInfo();
-
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    RHI::RHIDescriptorWrite write{};
     write.dstSet = m_DescriptorSet;
     write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &imageInfo;
-
-    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    write.count = 1;
+    write.type = RHI::DescriptorType::CombinedImageSampler;
+    write.imageInfo = m_Texture->GetDescriptorInfo();
+    m_Device->WriteDescriptorSets({ write });
 }
 
-void Material::CreatePipeline(VkRenderPass renderPass)
+void Material::CreatePipeline(RHI::RHIRenderPass renderPass)
 {
-    auto dev = m_Device->GetDevice();
-
-    VkPushConstantRange pushRange{};
-    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    RHI::RHIPushConstantRange pushRange{};
+    pushRange.stage = RHI::ShaderStageMask::VertexFragment;
     pushRange.offset = 0;
-    pushRange.size = sizeof(PushConstants);
+    pushRange.size = (uint32_t)sizeof(PushConstants);
 
     m_UBOSetLayout = m_Device->CreateDescriptorSetLayout({
-        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT }
+        { 0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex }
     });
 
-    VkDescriptorSetLayout setLayouts[] = {
-        m_UBOSetLayout,
-        m_DescriptorSetLayout
-    };
-
     m_PipelineLayout = m_Device->CreatePipelineLayout(
-        { setLayouts, setLayouts + 2 },
+        { m_UBOSetLayout, m_DescriptorSetLayout },
         { pushRange });
 
     auto binding = Vertex::GetBindingDescription();
     auto attrs = Vertex::GetAttributeDescriptions();
 
-    m_Pipeline = m_Device->CreateGraphicsPipeline(
-        m_PipelineLayout, renderPass,
-        m_Shader->GetStageInfos(),
-        binding, attrs);
+    RHI::RHIPipelineDesc desc{};
+    desc.layout = m_PipelineLayout;
+    desc.renderPass = renderPass;
+    desc.stages = m_Shader->GetStageInfos();
+    desc.vertexBinding = binding;
+    desc.vertexAttributes = attrs;
+    desc.topology = RHI::Topology::TriangleList;
+    desc.polygonMode = RHI::PolygonMode::Fill;
+    desc.cullMode = RHI::CullMode::Back;
+    desc.depthTestEnable = true;
+    desc.blend.enable = false;
+
+    m_Pipeline = m_Device->CreateGraphicsPipeline(desc);
 }
 
-VkDescriptorSetLayout Material::GetUBOSetLayout() const
+RHI::RHIDescriptorSetLayout Material::GetUBOSetLayout() const
 {
     return m_UBOSetLayout;
 }

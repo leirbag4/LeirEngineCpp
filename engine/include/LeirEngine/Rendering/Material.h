@@ -3,20 +3,20 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector4.h"
+#include "LeirEngine/RHI/RHI.h"
 
-#include <vulkan/vulkan.h>
 #include <memory>
 #include <string>
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 class Texture2D;
 class Shader;
 
 class LEIR_API Material {
 public:
-    Material(VulkanDevice* device, std::shared_ptr<Shader> shader);
+    Material(RHI::RenderBackend* device, std::shared_ptr<Shader> shader);
     ~Material();
 
     void SetTexture(const std::string& name, std::shared_ptr<Texture2D> texture);
@@ -25,35 +25,35 @@ public:
     void SetFloat(const std::string& name, float value);
     void SetVec3(const std::string& name, const Vector3& value);
 
-    void Bind(VkCommandBuffer cmd, VkPipelineLayout layout) const;
+    void Bind(RHI::RHICommandBuffer cmd, RHI::RHIPipelineLayout layout) const;
 
-    VkPipeline GetPipeline() const { return m_Pipeline; }
-    VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
-    VkDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
+    RHI::RHIPipeline GetPipeline() const { return m_Pipeline; }
+    RHI::RHIPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
+    RHI::RHIDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
     std::shared_ptr<Shader> GetShader() const { return m_Shader; }
-    VkDescriptorSetLayout GetUBOSetLayout() const;
+    RHI::RHIDescriptorSetLayout GetUBOSetLayout() const;
 
     // Recreate pipeline when device is lost
-    void RecreatePipeline(VkRenderPass renderPass);
+    void RecreatePipeline(RHI::RHIRenderPass renderPass);
 
 private:
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();
     void CreateDescriptorSet();
     void UpdateDescriptorSet();
-    void CreatePipeline(VkRenderPass renderPass);
+    void CreatePipeline(RHI::RHIRenderPass renderPass);
 
-    VulkanDevice* m_Device;
+    RHI::RenderBackend* m_Device;
     std::shared_ptr<Shader> m_Shader;
     Vector4 m_Color{1.0f, 1.0f, 1.0f, 1.0f};
 
-    VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout m_UBOSetLayout = VK_NULL_HANDLE;
-    VkDescriptorSet m_DescriptorSet = VK_NULL_HANDLE;
+    RHI::RHIDescriptorPool m_DescriptorPool;
+    RHI::RHIDescriptorSetLayout m_DescriptorSetLayout;
+    RHI::RHIDescriptorSetLayout m_UBOSetLayout;
+    RHI::RHIDescriptorSet m_DescriptorSet;
 
-    VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_Pipeline = VK_NULL_HANDLE;
+    RHI::RHIPipelineLayout m_PipelineLayout;
+    RHI::RHIPipeline m_Pipeline;
 
     std::shared_ptr<Texture2D> m_Texture;
 };

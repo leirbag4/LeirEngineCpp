@@ -1,6 +1,6 @@
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/Texture2D.h"
-#include "LeirEngine/Rendering/VulkanDevice.h"
+#include "LeirEngine/RHI/RenderBackend.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
@@ -11,7 +11,7 @@
 
 namespace Leir {
 
-Font::Font(VulkanDevice* device, const std::string& ttfPath, int fontSize)
+Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize)
     : m_Device(device), m_FontSize(fontSize)
 {
     FILE* f = fopen(ttfPath.c_str(), "rb");
@@ -185,7 +185,7 @@ void Font::BuildAtlas()
     Image atlasImg(atlasW, atlasH, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     memcpy(atlasImg.GetData(), rgbaData.data(), rgbaData.size());
     m_AtlasTexture = std::make_unique<Texture2D>(m_Device, atlasImg,
-        VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        RHI::Filter::Nearest, RHI::SamplerAddressMode::ClampToEdge);
 }
 
 const Font::GlyphInfo& Font::GetGlyphInfo(uint32_t codepoint)

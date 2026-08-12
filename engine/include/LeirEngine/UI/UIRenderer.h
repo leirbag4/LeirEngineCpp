@@ -2,13 +2,13 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
+#include "LeirEngine/RHI/RHI.h"
 #include <unordered_map>
 #include <vector>
-#include <vulkan/vulkan.h>
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 class UICanvas;
 class UIElement;
 class Texture2D;
@@ -30,16 +30,16 @@ struct LEIR_API ViewportDraw {
 struct LEIR_API UIRenderStats {
     uint32_t quads = 0;        // quads submitted last frame
     uint32_t vertices = 0;     // vertices submitted last frame
-    uint32_t drawCalls = 0;    // actual vkCmdDraw calls (after batching)
+    uint32_t drawCalls = 0;    // actual draw calls (after batching)
     uint32_t batches = 0;      // number of merged batches (same texture + scissor)
 };
 
 class LEIR_API UIRenderer {
 public:
-    UIRenderer(VulkanDevice* device);
+    UIRenderer(RHI::RenderBackend* device);
     ~UIRenderer();
 
-    void Render(VkCommandBuffer cmd, UICanvas* canvas);
+    void Render(RHI::RHICommandBuffer cmd, UICanvas* canvas);
 
     // Physical/logical ratio (1.0 when HiDPI disabled). Scissor rects are
     // logical clip rects scaled by this factor.
@@ -53,24 +53,24 @@ private:
     void RenderElement(UIElement* elem, const Vector4* clip, bool isDebug);
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
-    VkDescriptorSet GetOrCreateDesc(Texture2D* texture);
-    void Flush(VkCommandBuffer cmd);
-    void ApplyScissor(VkCommandBuffer cmd, const Vector4& logicalClip, VkRect2D& last, bool& valid);
+    RHI::RHIDescriptorSet GetOrCreateDesc(Texture2D* texture);
+    void Flush(RHI::RHICommandBuffer cmd);
+    void ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid);
 
-    VulkanDevice* m_Device;
+    RHI::RenderBackend* m_Device;
 
-    VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_Pipeline = VK_NULL_HANDLE;
-    VkDescriptorSetLayout m_DescSetLayout = VK_NULL_HANDLE;
-    VkDescriptorPool m_DescPool = VK_NULL_HANDLE;
-    VkBuffer m_VertexBuffers[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
-    VkDeviceMemory m_VertexMemories[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+    RHI::RHIPipelineLayout m_PipelineLayout;
+    RHI::RHIPipeline m_Pipeline;
+    RHI::RHIDescriptorSetLayout m_DescSetLayout;
+    RHI::RHIDescriptorPool m_DescPool;
+    RHI::RHIBuffer m_VertexBuffers[2];
+    RHI::RHIDeviceMemory m_VertexMemories[2];
     int m_MaxVertices = 0;
 
     std::vector<UIVertex> m_Vertices;
     std::vector<Texture2D*> m_QuadTextures;
     std::vector<Vector4> m_QuadClips;
-    std::unordered_map<Texture2D*, VkDescriptorSet> m_DescCache;
+    std::unordered_map<Texture2D*, RHI::RHIDescriptorSet> m_DescCache;
     Texture2D* m_FallbackTex = nullptr;
 
     std::vector<ViewportDraw> m_ViewportDraws;

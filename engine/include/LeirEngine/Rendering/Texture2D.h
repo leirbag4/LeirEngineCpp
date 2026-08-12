@@ -2,53 +2,49 @@
 
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Rendering/Image.h"
+#include "LeirEngine/RHI/RHI.h"
 
-#include <vulkan/vulkan.h>
 #include <string>
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 
 class LEIR_API Texture2D {
 public:
-    Texture2D(VulkanDevice* device, const std::string& path);
-    Texture2D(VulkanDevice* device, uint32_t width, uint32_t height,
+    Texture2D(RHI::RenderBackend* device, const std::string& path);
+    Texture2D(RHI::RenderBackend* device, uint32_t width, uint32_t height,
               const unsigned char* pixels);
-    Texture2D(VulkanDevice* device, Image& image,
-              VkFilter filter = VK_FILTER_LINEAR,
-              VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    Texture2D(RHI::RenderBackend* device, Image& image,
+              RHI::Filter filter = RHI::Filter::Linear,
+              RHI::SamplerAddressMode addressMode = RHI::SamplerAddressMode::Repeat);
     ~Texture2D();
 
     void UpdateFromImage(Image& image);
 
-    VkImageView GetImageView() const { return m_ImageView; }
-    VkSampler GetSampler() const { return m_Sampler; }
+    RHI::RHIImageView GetImageView() const { return m_ImageView; }
+    RHI::RHISampler GetSampler() const { return m_Sampler; }
     uint32_t GetWidth() const { return m_Width; }
     uint32_t GetHeight() const { return m_Height; }
 
-    VkDescriptorImageInfo GetDescriptorInfo() const {
-        VkDescriptorImageInfo info{};
-        info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    RHI::RHIDescriptorImageInfo GetDescriptorInfo() const {
+        RHI::RHIDescriptorImageInfo info;
         info.imageView = m_ImageView;
         info.sampler = m_Sampler;
+        info.valid = true;
         return info;
     }
 
 private:
     void CreateFromData(const unsigned char* pixels, uint32_t width, uint32_t height,
-        VkFilter filter = VK_FILTER_LINEAR,
-        VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
-    void TransitionLayout(VkImage image, VkFormat format,
-        VkImageLayout oldLayout, VkImageLayout newLayout);
-    void CopyBufferToImage(VkBuffer buffer, VkImage image,
-        uint32_t width, uint32_t height);
+        RHI::Filter filter = RHI::Filter::Linear,
+        RHI::SamplerAddressMode addressMode = RHI::SamplerAddressMode::Repeat);
 
-    VulkanDevice* m_Device;
-    VkImage m_Image = VK_NULL_HANDLE;
-    VkDeviceMemory m_Memory = VK_NULL_HANDLE;
-    VkImageView m_ImageView = VK_NULL_HANDLE;
-    VkSampler m_Sampler = VK_NULL_HANDLE;
+    RHI::RenderBackend* m_Device;
+    RHI::RHIImage m_Image;
+    RHI::RHIDeviceMemory m_Memory;
+    RHI::RHIImageView m_ImageView;
+    RHI::RHISampler m_Sampler;
     uint32_t m_Width = 0;
     uint32_t m_Height = 0;
 };

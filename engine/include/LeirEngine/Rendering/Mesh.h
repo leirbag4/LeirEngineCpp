@@ -3,47 +3,48 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/RHI/RHI.h"
 
-#include <vulkan/vulkan.h>
 #include <vector>
 #include <cstdint>
+#include <utility>
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 
 struct LEIR_API Vertex {
     Vector3 position;
     Vector3 normal;
     Vector2 texCoord;
 
-    static VkVertexInputBindingDescription GetBindingDescription();
-    static std::vector<VkVertexInputAttributeDescription> GetAttributeDescriptions();
+    static RHI::RHIVertexInputBinding GetBindingDescription();
+    static std::vector<RHI::RHIVertexAttribute> GetAttributeDescriptions();
 };
 
 class LEIR_API Mesh {
 public:
-    Mesh(VulkanDevice* device,
+    Mesh(RHI::RenderBackend* device,
          const std::vector<Vertex>& vertices,
          const std::vector<uint32_t>& indices);
     ~Mesh();
 
-    void Bind(VkCommandBuffer cmd) const;
-    void Draw(VkCommandBuffer cmd) const;
+    void Bind(RHI::RHICommandBuffer cmd) const;
+    void Draw(RHI::RHICommandBuffer cmd) const;
 
     size_t GetVertexCount() const { return m_Vertices.size(); }
     size_t GetIndexCount() const { return m_Indices.size(); }
 
 private:
-    VulkanDevice* m_Device;
+    RHI::RenderBackend* m_Device;
 
     std::vector<Vertex> m_Vertices;
     std::vector<uint32_t> m_Indices;
 
-    VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_VertexMemory = VK_NULL_HANDLE;
-    VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_IndexMemory = VK_NULL_HANDLE;
+    RHI::RHIBuffer m_VertexBuffer;
+    RHI::RHIDeviceMemory m_VertexMemory;
+    RHI::RHIBuffer m_IndexBuffer;
+    RHI::RHIDeviceMemory m_IndexMemory;
 };
 
 // Built-in primitives

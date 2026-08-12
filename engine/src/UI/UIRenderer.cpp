@@ -1,4 +1,5 @@
 #include "LeirEngine/UI/UIRenderer.h"
+#include "LeirEngine/RHI/RenderBackend.h"
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/UILabel.h"
 #include "LeirEngine/UI/UIButton.h"
@@ -10,7 +11,6 @@
 #include "LeirEngine/UI/UIViewportPanel.h"
 #include "LeirEngine/UI/Dock/DockTabBar.h"
 #include "LeirEngine/UI/Font.h"
-#include "LeirEngine/Rendering/VulkanDevice.h"
 #include "LeirEngine/Rendering/RenderTexture.h"
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Rendering/Texture2D.h"
@@ -25,109 +25,104 @@ namespace Leir {
 
 namespace {
 
-// Convert a logical clip rect to a physical VkRect2D. Uses floor for the
+// Convert a logical clip rect to a physical scissor rect. Uses floor for the
 // offset and ceil for the opposite edge so the scissor always covers every
 // pixel that a fractional-edge quad touches — truncation used to drop the
 // last row/column of children (e.g. the bottom edge of the horizontal
 // scrollbar track cut to 9px).
-void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, VkRect2D& s)
+void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, RHI::RHIRect2D& s)
 {
     const float x0 = std::clamp(c.x, 0.0f, pw);
     const float y0 = std::clamp(c.y, 0.0f, ph);
     const float x1 = std::clamp(c.x + c.z, 0.0f, pw);
     const float y1 = std::clamp(c.y + c.w, 0.0f, ph);
-    s.offset.x = (int32_t)std::floor(x0 * scale);
-    s.offset.y = (int32_t)std::floor(y0 * scale);
-    s.extent.width = (uint32_t)std::max(0.0f, std::ceil(x1 * scale) - std::floor(x0 * scale));
-    s.extent.height = (uint32_t)std::max(0.0f, std::ceil(y1 * scale) - std::floor(y0 * scale));
+    s.x = (int32_t)std::floor(x0 * scale);
+    s.y = (int32_t)std::floor(y0 * scale);
+    s.width = (uint32_t)std::max(0.0f, std::ceil(x1 * scale) - std::floor(x0 * scale));
+    s.height = (uint32_t)std::max(0.0f, std::ceil(y1 * scale) - std::floor(y0 * scale));
 }
 
 } // namespace
 
-UIRenderer::UIRenderer(VulkanDevice* device)
+UIRenderer::UIRenderer(RHI::RenderBackend* device)
     : m_Device(device)
 {
-    auto dev = m_Device->GetDevice();
-
     // Descriptor set layout (binding 0: combined image sampler)
-    VkDescriptorSetLayoutBinding binding{};
-    binding.binding = 0;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    binding.descriptorCount = 1;
-    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    m_DescSetLayout = m_Device->CreateDescriptorSetLayout({ binding });
+    m_DescSetLayout = m_Device->CreateDescriptorSetLayout({
+        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
+    });
 
     // Pool: up to 64 textures
-    std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 }
+    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
+        { 0, RHI::DescriptorType::CombinedImageSampler, 64, RHI::ShaderStage::Fragment }
     };
-    m_DescPool = m_Device->CreateDescriptorPool(poolSizes, 64);
+    m_DescPool = m_Device->CreateDescriptorPool(poolBindings, 64);
 
     // Pipeline layout
-    VkPushConstantRange pushRange{};
-    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    RHI::RHIPushConstantRange pushRange{};
+    pushRange.stage = RHI::ShaderStageMask::Vertex;
     pushRange.offset = 0;
     pushRange.size = sizeof(Vector2);
     m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
 
     auto vertCode = Shader::ReadFile(LEIR_SHADER_DIR "/UI.vert.spv");
     auto fragCode = Shader::ReadFile(LEIR_SHADER_DIR "/UI.frag.spv");
-    VkShaderModule vertMod = m_Device->CreateShaderModule(vertCode);
-    VkShaderModule fragMod = m_Device->CreateShaderModule(fragCode);
+    RHI::RHIShaderModule vertMod = m_Device->CreateShaderModule(vertCode);
+    RHI::RHIShaderModule fragMod = m_Device->CreateShaderModule(fragCode);
 
-    VkPipelineShaderStageCreateInfo stages[2];
-    stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    RHI::RHIShaderStageInfo stages[2];
+    stages[0].stage = RHI::ShaderStage::Vertex;
     stages[0].module = vertMod;
-    stages[0].pName = "main";
-    stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[0].entryPoint = "main";
+    stages[1].stage = RHI::ShaderStage::Fragment;
     stages[1].module = fragMod;
-    stages[1].pName = "main";
+    stages[1].entryPoint = "main";
 
-    VkVertexInputBindingDescription bindingDesc{};
+    RHI::RHIVertexInputBinding bindingDesc{};
     bindingDesc.binding = 0;
     bindingDesc.stride = sizeof(UIVertex);
-    bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindingDesc.inputRate = RHI::VertexInputRate::Vertex;
 
-    std::vector<VkVertexInputAttributeDescription> attrs(3);
+    std::vector<RHI::RHIVertexAttribute> attrs(3);
     attrs[0].location = 0;
     attrs[0].binding = 0;
-    attrs[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attrs[0].format = RHI::Format::R32G32_SFLOAT;
     attrs[0].offset = offsetof(UIVertex, position);
     attrs[1].location = 1;
     attrs[1].binding = 0;
-    attrs[1].format = VK_FORMAT_R32G32_SFLOAT;
+    attrs[1].format = RHI::Format::R32G32_SFLOAT;
     attrs[1].offset = offsetof(UIVertex, texCoord);
     attrs[2].location = 2;
     attrs[2].binding = 0;
-    attrs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attrs[2].format = RHI::Format::R32G32B32A32_SFLOAT;
     attrs[2].offset = offsetof(UIVertex, color);
 
-    m_Pipeline = m_Device->CreateGraphicsPipeline(
-        m_PipelineLayout,
-        m_Device->GetOverlayRenderPass(),
-        { stages[0], stages[1] },
-        bindingDesc, attrs,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-        VK_POLYGON_MODE_FILL,
-        VK_CULL_MODE_NONE,
-        false,
-        true);
+    RHI::RHIPipelineDesc desc{};
+    desc.layout = m_PipelineLayout;
+    desc.renderPass = m_Device->GetOverlayRenderPass();
+    desc.stages = { stages[0], stages[1] };
+    desc.vertexBinding = bindingDesc;
+    desc.vertexAttributes = attrs;
+    desc.topology = RHI::Topology::TriangleStrip;
+    desc.polygonMode = RHI::PolygonMode::Fill;
+    desc.cullMode = RHI::CullMode::None;
+    desc.depthTestEnable = false;
+    desc.blend.enable = true;
+    m_Pipeline = m_Device->CreateGraphicsPipeline(desc);
 
-    vkDestroyShaderModule(dev, vertMod, nullptr);
-    vkDestroyShaderModule(dev, fragMod, nullptr);
+    m_Device->DestroyShaderModule(vertMod);
+    m_Device->DestroyShaderModule(fragMod);
 
     // White fallback texture for untextured quads
     Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     m_FallbackTex = new Texture2D(m_Device, whiteImg);
 
     m_MaxVertices = 65536;
-    VkDeviceSize vbSize = m_MaxVertices * sizeof(UIVertex);
+    uint32_t vbSize = m_MaxVertices * sizeof(UIVertex);
     for (int f = 0; f < 2; ++f) {
         m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            RHI::BufferUsage::Vertex,
+            RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
             m_VertexMemories[f]);
     }
 
@@ -136,14 +131,13 @@ UIRenderer::UIRenderer(VulkanDevice* device)
 
 UIRenderer::~UIRenderer()
 {
-    auto dev = m_Device->GetDevice();
-    if (m_Pipeline) vkDestroyPipeline(dev, m_Pipeline, nullptr);
-    if (m_PipelineLayout) vkDestroyPipelineLayout(dev, m_PipelineLayout, nullptr);
-    if (m_DescSetLayout) vkDestroyDescriptorSetLayout(dev, m_DescSetLayout, nullptr);
-    if (m_DescPool) vkDestroyDescriptorPool(dev, m_DescPool, nullptr);
+    if (m_Pipeline.IsValid()) m_Device->DestroyPipeline(m_Pipeline);
+    if (m_PipelineLayout.IsValid()) m_Device->DestroyPipelineLayout(m_PipelineLayout);
+    if (m_DescSetLayout.IsValid()) m_Device->DestroyDescriptorSetLayout(m_DescSetLayout);
+    if (m_DescPool.IsValid()) m_Device->DestroyDescriptorPool(m_DescPool);
     for (int f = 0; f < 2; ++f) {
-        if (m_VertexBuffers[f]) vkDestroyBuffer(dev, m_VertexBuffers[f], nullptr);
-        if (m_VertexMemories[f]) vkFreeMemory(dev, m_VertexMemories[f], nullptr);
+        if (m_VertexBuffers[f].IsValid()) m_Device->DestroyBuffer(m_VertexBuffers[f]);
+        if (m_VertexMemories[f].IsValid()) m_Device->DestroyMemory(m_VertexMemories[f]);
     }
     delete m_FallbackTex;
 }
@@ -188,36 +182,27 @@ void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const 
         m_DebugQuadClips.push_back({0.0f, 0.0f, m_ScreenSize.x, m_ScreenSize.y});
 }
 
-VkDescriptorSet UIRenderer::GetOrCreateDesc(Texture2D* texture)
+RHI::RHIDescriptorSet UIRenderer::GetOrCreateDesc(Texture2D* texture)
 {
     Texture2D* tex = texture ? texture : m_FallbackTex;
     auto it = m_DescCache.find(tex);
     if (it != m_DescCache.end()) return it->second;
 
-    VkDescriptorSet newSet;
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = m_DescPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &m_DescSetLayout;
-    if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, &newSet) != VK_SUCCESS) {
-        XConsole::PrintError("UIRenderer: failed to allocate desc set");
-        return VK_NULL_HANDLE;
-    }
-    VkDescriptorImageInfo imgInfo = tex->GetDescriptorInfo();
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    RHI::RHIDescriptorSet newSet = m_Device->AllocateDescriptorSet(m_DescPool, m_DescSetLayout);
+
+    RHI::RHIDescriptorWrite write{};
     write.dstSet = newSet;
     write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &imgInfo;
-    vkUpdateDescriptorSets(m_Device->GetDevice(), 1, &write, 0, nullptr);
+    write.count = 1;
+    write.type = RHI::DescriptorType::CombinedImageSampler;
+    write.imageInfo = tex->GetDescriptorInfo();
+    m_Device->WriteDescriptorSets({ write });
+
     m_DescCache[tex] = newSet;
     return newSet;
 }
 
-void UIRenderer::Flush(VkCommandBuffer cmd)
+void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
 {
     size_t regCount = m_QuadTextures.size();
     size_t vpCount = m_ViewportDraws.size();
@@ -235,21 +220,12 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     m_LastStats = {};
 
     // Batching with a TRIANGLE_STRIP pipeline needs 2 degenerate vertices
-    // between consecutive quads so strips never bridge across elements. A
-    // single vkCmdDraw of N quads in strip topology connects the last vertex of
-    // quad i with the first of quad i+1 — visible as stray diagonal triangles
-    // everywhere (and a triangle that follows the caret while typing). The
-    // interleaved buffer therefore uses 6 slots per quad (4 + 2 degenerate).
+    // between consecutive quads so strips never bridge across elements.
     const size_t slotPerQuad = 6;
     size_t maxQuads = (size_t)m_MaxVertices / slotPerQuad;
     if (totalQuads > maxQuads) {
         XConsole::Debug("UIRenderer: overflow, truncating {} -> {} quads",
             (int)totalQuads, (int)maxQuads);
-        // Drop regular quads from the END (and the debug overlay last) until
-        // everything fits. The viewport is always kept. Truncating is
-        // non-destructive — the old clear-everything-and-return left the
-        // overlay pass with LOAD_OP_LOAD + UNDEFINED layout, so the swapchain
-        // showed garbage (red/green glitches across the screen).
         size_t fixed = vpCount;
         while (regCount > 0 && regCount + fixed + dbgCount > maxQuads) {
             m_Vertices.resize(m_Vertices.size() - 4);
@@ -270,7 +246,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     struct FlushQuad {
         const UIVertex* src; // 4 source vertices
         Vector4 clip;
-        VkDescriptorSet desc;
+        RHI::RHIDescriptorSet desc;
     };
     std::vector<FlushQuad> quads;
     quads.reserve(totalQuads);
@@ -287,10 +263,9 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     size_t totalBytes = totalQuads * slotPerQuad * sizeof(UIVertex);
 
     void* data;
-    vkMapMemory(m_Device->GetDevice(), m_VertexMemories[frame], 0, totalBytes, 0, &data);
+    m_Device->MapMemory(m_VertexMemories[frame], 0, (uint32_t)totalBytes, &data);
 
-    // Interleave degenerate vertices between quads to break the strip. Quad i
-    // lives at vertex 6*i .. 6*i+3; slots 6*i+4/6*i+5 are the degenerate pair.
+    // Interleave degenerate vertices between quads to break the strip.
     UIVertex* dst = (UIVertex*)data;
     for (size_t qi = 0; qi < totalQuads; ++qi) {
         const UIVertex* src = quads[qi].src;
@@ -303,65 +278,57 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
         dst += slotPerQuad;
     }
 
-    vkUnmapMemory(m_Device->GetDevice(), m_VertexMemories[frame]);
+    m_Device->UnmapMemory(m_VertexMemories[frame]);
 
-    // Logical canvas size maps vertices (in logical units) to NDC. The
-    // swapchain/render pass is physical, but the vertex positions are in
-    // logical units, so the shader must divide by the logical size.
+    // Logical canvas size maps vertices (in logical units) to NDC.
     Vector2 screenSize = m_ScreenSize;
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
-    VkBuffer vb[] = { m_VertexBuffers[frame] };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(cmd, 0, 1, vb, offsets);
-    vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Vector2), &screenSize);
+    m_Device->CmdBindPipeline(cmd, m_Pipeline);
+    m_Device->CmdBindVertexBuffer(cmd, m_VertexBuffers[frame]);
+    m_Device->CmdPushConstants(cmd, m_PipelineLayout, RHI::ShaderStageMask::Vertex, 0, sizeof(Vector2), &screenSize);
 
     // Batched draw: consecutive quads that share the same texture (descriptor
-    // set) AND scissor are merged into a single vkCmdDraw. Text-heavy UI
-    // (e.g. a console with hundreds of glyphs) previously emitted one draw per
-    // quad (~1.500 draw calls/frame); after batching it becomes one draw per
-    // (texture, scissor) run, typically a handful.
-    VkDescriptorSet lastDesc = VK_NULL_HANDLE;
-    VkRect2D lastScissor{};
+    // set) AND scissor are merged into a single draw call.
+    RHI::RHIDescriptorSet lastDesc{};
+    RHI::RHIRect2D lastScissor{};
     bool lastScissorValid = false;
 
-    VkDescriptorSet batchDesc = VK_NULL_HANDLE;
-    VkRect2D batchScissor{};
+    RHI::RHIDescriptorSet batchDesc{};
+    RHI::RHIRect2D batchScissor{};
     uint32_t batchStart = 0;   // first vertex index of the current batch
     uint32_t batchCount = 0;   // quads in the current batch
     uint32_t drawnQuads = 0;
 
-    auto sameScissor = [](const VkRect2D& a, const VkRect2D& b) {
-        return a.offset.x == b.offset.x && a.offset.y == b.offset.y &&
-               a.extent.width == b.extent.width && a.extent.height == b.extent.height;
+    auto sameScissor = [](const RHI::RHIRect2D& a, const RHI::RHIRect2D& b) {
+        return a.x == b.x && a.y == b.y &&
+               a.width == b.width && a.height == b.height;
     };
 
     auto flushBatch = [&]() {
         if (batchCount == 0) return;
         // (count*6 - 2) vertices: count quads minus the trailing degenerate pair.
-        vkCmdDraw(cmd, batchCount * (uint32_t)slotPerQuad - 2, 1, batchStart, 0);
+        m_Device->CmdDraw(cmd, batchCount * (uint32_t)slotPerQuad - 2, batchStart);
         ++m_LastStats.drawCalls;
         batchCount = 0;
     };
 
-    auto pushQuad = [&](VkDescriptorSet desc, const Vector4& logicalClip, uint32_t quadIdx) {
-        if (desc == VK_NULL_HANDLE) { flushBatch(); return; }
-        VkRect2D scissor{};
+    auto pushQuad = [&](RHI::RHIDescriptorSet desc, const Vector4& logicalClip, uint32_t quadIdx) {
+        if (!desc.IsValid()) { flushBatch(); return; }
+        RHI::RHIRect2D scissor{};
         {
             const float pw = m_ScreenSize.x * m_ContentScale;
             const float ph = m_ScreenSize.y * m_ContentScale;
             ScissorFromLogicalClip(logicalClip, m_ContentScale, pw, ph, scissor);
         }
-        if (batchCount > 0 && desc == batchDesc && sameScissor(scissor, batchScissor)) {
+        if (batchCount > 0 && desc.handle == batchDesc.handle && sameScissor(scissor, batchScissor)) {
             ++batchCount;
             ++drawnQuads;
             return;
         }
         flushBatch();
         ApplyScissor(cmd, logicalClip, lastScissor, lastScissorValid);
-        if (desc != lastDesc) {
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                m_PipelineLayout, 0, 1, &desc, 0, nullptr);
+        if (desc.handle != lastDesc.handle) {
+            m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 0, { desc });
             lastDesc = desc;
         }
         batchDesc = desc;
@@ -381,7 +348,7 @@ void UIRenderer::Flush(VkCommandBuffer cmd)
     m_LastStats.batches = m_LastStats.drawCalls;
 }
 
-void UIRenderer::Render(VkCommandBuffer cmd, UICanvas* canvas)
+void UIRenderer::Render(RHI::RHICommandBuffer cmd, UICanvas* canvas)
 {
     m_Vertices.clear();
     m_QuadTextures.clear();
@@ -594,9 +561,6 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
             }
 
             if (textArea && textArea->IsWordWrapEnabled()) {
-                // Wrapped text: draw one visual row at a time. Each row's text
-                // is laid out with LayoutText(sub, 0) (no re-wrapping) and
-                // shifted to its visual row offset.
                 const float scrollY = textArea->GetScrollOffset().y;
                 const std::string& full = input->GetText();
                 if (!full.empty()) {
@@ -624,10 +588,6 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
                     }
                 }
             } else {
-                // Single-line inputs keep wrapping at the box edge; textarea with
-                // wrap off lays out without wrapping so wide lines overflow into
-                // horizontal scroll space (Font::LayoutText only wraps when
-                // maxWidth > 0).
                 if (textArea) {
                     baselineY = cr.y + 4.0f + ascender - textArea->GetScrollOffset().y;
                 } else {
@@ -672,16 +632,16 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         RenderElement(child, effClip, isDebug);
 }
 
-void UIRenderer::ApplyScissor(VkCommandBuffer cmd, const Vector4& logicalClip, VkRect2D& last, bool& valid)
+void UIRenderer::ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid)
 {
-    VkRect2D s{};
+    RHI::RHIRect2D s{};
     const float pw = m_ScreenSize.x * m_ContentScale;
     const float ph = m_ScreenSize.y * m_ContentScale;
     ScissorFromLogicalClip(logicalClip, m_ContentScale, pw, ph, s);
 
-    if (!valid || s.offset.x != last.offset.x || s.offset.y != last.offset.y ||
-        s.extent.width != last.extent.width || s.extent.height != last.extent.height) {
-        vkCmdSetScissor(cmd, 0, 1, &s);
+    if (!valid || s.x != last.x || s.y != last.y ||
+        s.width != last.width || s.height != last.height) {
+        m_Device->CmdSetScissor(cmd, s);
         last = s;
         valid = true;
     }

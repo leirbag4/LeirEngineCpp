@@ -17,6 +17,7 @@ add_library(LeirEngine SHARED
     src/Input/Touch.cpp
     src/Input/Pointer.cpp
     src/Rendering/VulkanDevice.cpp
+    src/RHI/VulkanBackend.cpp
     src/Rendering/Shader.cpp
     src/Rendering/Image.cpp
     src/Rendering/Texture2D.cpp

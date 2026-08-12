@@ -1,5 +1,5 @@
 #include "LeirEngine/Rendering/Shader.h"
-#include "LeirEngine/Rendering/VulkanDevice.h"
+#include "LeirEngine/RHI/RenderBackend.h"
 
 #include "LeirEngine/Core/Log.h"
 #include <fstream>
@@ -7,28 +7,26 @@
 
 namespace Leir {
 
-Shader::Shader(VulkanDevice* device, const std::string& vertexPath, const std::string& fragmentPath)
+Shader::Shader(RHI::RenderBackend* device,
+               const std::string& vertexPath, const std::string& fragmentPath)
     : m_Device(device)
 {
-    ShaderStage vertStage;
-    vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertStage.spirv = ReadFile(vertexPath);
-    m_Stages.push_back(vertStage);
+    m_Stages.push_back(RHI::ShaderStage::Vertex);
+    m_Stages.push_back(RHI::ShaderStage::Fragment);
 
-    ShaderStage fragStage;
-    fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragStage.spirv = ReadFile(fragmentPath);
-    m_Stages.push_back(fragStage);
+    auto vertCode = ReadFile(vertexPath);
+    auto fragCode = ReadFile(fragmentPath);
 
-    for (const auto& stage : m_Stages) {
-        VkShaderModule module = m_Device->CreateShaderModule(stage.spirv);
+    std::vector<std::vector<char>> codes = { std::move(vertCode), std::move(fragCode) };
+
+    for (size_t i = 0; i < m_Stages.size(); ++i) {
+        RHI::RHIShaderModule module = m_Device->CreateShaderModule(codes[i]);
         m_Modules.push_back(module);
 
-        VkPipelineShaderStageCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        info.stage = stage.stage;
+        RHI::RHIShaderStageInfo info{};
+        info.stage = m_Stages[i];
         info.module = module;
-        info.pName = "main";
+        info.entryPoint = "main";
         m_StageInfos.push_back(info);
     }
 
@@ -37,15 +35,8 @@ Shader::Shader(VulkanDevice* device, const std::string& vertexPath, const std::s
 
 Shader::~Shader()
 {
-    for (auto module : m_Modules)
-        vkDestroyShaderModule(m_Device->GetDevice(), module, nullptr);
-}
-
-VkPipelineShaderStageCreateInfo Shader::GetStageInfo(size_t index) const
-{
-    if (index < m_StageInfos.size())
-        return m_StageInfos[index];
-    return {};
+    for (auto& module : m_Modules)
+        m_Device->DestroyShaderModule(module);
 }
 
 std::vector<char> Shader::ReadFile(const std::string& path)

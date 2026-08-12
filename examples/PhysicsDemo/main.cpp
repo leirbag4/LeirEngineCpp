@@ -3,7 +3,8 @@
 #include <LeirEngine/Objects/Object3D.h>
 #include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/Scene/SceneManager.h>
-#include <LeirEngine/Rendering/VulkanDevice.h>
+#include <LeirEngine/RHI/RenderBackend.h>
+#include <LeirEngine/RHI/VulkanBackend.h>
 #include <LeirEngine/Rendering/RenderPipeline.h>
 #include <LeirEngine/Rendering/Shader.h>
 #include <LeirEngine/Rendering/Mesh.h>
@@ -32,8 +33,8 @@ public:
 
     ~PhysicsDemo()
     {
-        if (m_VulkanDevice)
-            vkDeviceWaitIdle(m_VulkanDevice->GetDevice());
+        if (m_Backend)
+            m_Backend->WaitIdle();
     }
 
 protected:
@@ -41,17 +42,14 @@ protected:
     {
         Leir::XConsole::Println("Physics Demo initializing");
 
-        // ---- Vulkan ----
-        Leir::VulkanDeviceConfig config;
-        config.appName = "LeirEngine Physics Demo";
-        config.windowWidth = GetWidth();
-        config.windowHeight = GetHeight();
-        m_VulkanDevice = std::make_unique<Leir::VulkanDevice>(GetWindow(), config);
+        // ---- RHI backend ----
+        m_Backend.reset(Leir::RHI::BackendFactory::Create(
+            GetWindow(), GetWidth(), GetHeight(), false, "LeirEngine Physics Demo"));
 
         // ---- Shaders ----
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
-            m_VulkanDevice.get(),
+            m_Backend.get(),
             shaderDir + "/Basic.vert.spv",
             shaderDir + "/Basic.frag.spv"
         );
@@ -59,25 +57,25 @@ protected:
         // ---- Default white texture ----
         unsigned char whitePixel[4] = { 255, 255, 255, 255 };
         m_WhiteTexture = std::make_shared<Leir::Texture2D>(
-            m_VulkanDevice.get(), 1, 1, whitePixel);
+            m_Backend.get(), 1, 1, whitePixel);
 
         // ---- Materials ----
-        m_GroundMat = std::make_shared<Leir::Material>(m_VulkanDevice.get(), m_Shader);
+        m_GroundMat = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
         m_GroundMat->SetTexture("texSampler", m_WhiteTexture);
         m_GroundMat->SetColor({0.3f, 0.3f, 0.35f, 1.0f});
-        m_GroundMat->RecreatePipeline(m_VulkanDevice->GetRenderPass());
+        m_GroundMat->RecreatePipeline(m_Backend->GetRenderPass());
 
-        m_BoxMat = std::make_shared<Leir::Material>(m_VulkanDevice.get(), m_Shader);
+        m_BoxMat = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
         m_BoxMat->SetTexture("texSampler", m_WhiteTexture);
         m_BoxMat->SetColor({0.85f, 0.25f, 0.15f, 1.0f});
-        m_BoxMat->RecreatePipeline(m_VulkanDevice->GetRenderPass());
+        m_BoxMat->RecreatePipeline(m_Backend->GetRenderPass());
 
         // ---- Meshes ----
         auto [boxVerts, boxIdxs] = Leir::Primitives::CreateCube();
-        m_BoxMesh = std::make_shared<Leir::Mesh>(m_VulkanDevice.get(), boxVerts, boxIdxs);
+        m_BoxMesh = std::make_shared<Leir::Mesh>(m_Backend.get(), boxVerts, boxIdxs);
 
         // ---- Render Pipeline ----
-        m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_VulkanDevice.get());
+        m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_Backend.get());
 
         // ---- Physics ----
         Leir::PhysicsWorld::GetInstance().Init();
@@ -187,11 +185,11 @@ protected:
 
     void OnRender() override
     {
-        if (m_VulkanDevice && m_VulkanDevice->BeginFrame()) {
-            VkCommandBuffer cmd = m_VulkanDevice->GetCurrentCommandBuffer();
+        if (m_Backend && m_Backend->BeginFrame(false)) {
+            auto cmd = m_Backend->GetCurrentCommandBuffer();
             auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
             m_RenderPipeline->Render(cmd, scene);
-            m_VulkanDevice->EndFrame();
+            m_Backend->EndFrame();
         }
     }
 
@@ -207,7 +205,7 @@ protected:
     }
 
 private:
-    std::unique_ptr<Leir::VulkanDevice> m_VulkanDevice;
+    std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
     std::shared_ptr<Leir::Shader> m_Shader;
     std::shared_ptr<Leir::Mesh> m_BoxMesh;

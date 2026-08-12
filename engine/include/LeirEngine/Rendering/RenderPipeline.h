@@ -4,7 +4,7 @@
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector4.h"
 #include "LeirEngine/Math/Matrix4x4.h"
-#include <vulkan/vulkan.h>
+#include "LeirEngine/RHI/RHI.h"
 #include <array>
 #include <memory>
 #include <unordered_map>
@@ -12,7 +12,7 @@
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 class Scene;
 class MeshRenderer;
 class Camera;
@@ -38,16 +38,16 @@ struct LEIR_API PerMeshUBO {
 };
 
 struct UBOBuffer {
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
+    RHI::RHIBuffer buffer;
+    RHI::RHIDeviceMemory memory;
 };
 
 struct LEIR_API SpriteVertex {
     Vector2 position;
     Vector2 texCoord;
 
-    static VkVertexInputBindingDescription GetBindingDescription();
-    static std::vector<VkVertexInputAttributeDescription> GetAttributeDescriptions();
+    static RHI::RHIVertexInputBinding GetBindingDescription();
+    static std::vector<RHI::RHIVertexAttribute> GetAttributeDescriptions();
 };
 
 struct LEIR_API SpritePushConstants {
@@ -58,40 +58,40 @@ struct LEIR_API SpritePushConstants {
 
 class LEIR_API RenderPipeline {
 public:
-    RenderPipeline(VulkanDevice* device);
+    RenderPipeline(RHI::RenderBackend* device);
     ~RenderPipeline();
 
-    void Render(VkCommandBuffer cmd, Scene* scene);
-    void RenderOverlay(VkCommandBuffer cmd, Scene* scene);
+    void Render(RHI::RHICommandBuffer cmd, Scene* scene);
+    void RenderOverlay(RHI::RHICommandBuffer cmd, Scene* scene);
 
 private:
-    void RenderMeshRenderer(VkCommandBuffer cmd, MeshRenderer* renderer,
+    void RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer* renderer,
         const Matrix4x4& viewProj, const Matrix4x4& model,
         const PushConstants& push);
 
     void CreateSpriteResources();
     void DestroySpriteResources();
-    void RenderSprite(VkCommandBuffer cmd, SpriteRenderer* renderer,
+    void RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* renderer,
         const Matrix4x4& mvp);
 
-    VulkanDevice* m_Device;
+    RHI::RenderBackend* m_Device;
     std::vector<UBOBuffer> m_UBOBuffers;
-    std::vector<VkDescriptorSet> m_UBOSets;
-    VkDescriptorPool m_UBODescriptorPool = VK_NULL_HANDLE;
+    std::vector<RHI::RHIDescriptorSet> m_UBOSets;
+    RHI::RHIDescriptorPool m_UBODescriptorPool;
 
     // 2D sprite pipeline
     struct {
-        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-        VkPipeline pipeline = VK_NULL_HANDLE;
-        VkDescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
-        VkDescriptorPool descPool = VK_NULL_HANDLE;
-        VkBuffer vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
-        VkBuffer indexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory indexMemory = VK_NULL_HANDLE;
+        RHI::RHIPipelineLayout pipelineLayout;
+        RHI::RHIPipeline pipeline;
+        RHI::RHIDescriptorSetLayout descSetLayout;
+        RHI::RHIDescriptorPool descPool;
+        RHI::RHIBuffer vertexBuffer;
+        RHI::RHIDeviceMemory vertexMemory;
+        RHI::RHIBuffer indexBuffer;
+        RHI::RHIDeviceMemory indexMemory;
         int indexCount = 0;
         Texture2D* fallbackTexture = nullptr;
-        std::unordered_map<Texture2D*, VkDescriptorSet> descSetCache;
+        std::unordered_map<Texture2D*, RHI::RHIDescriptorSet> descSetCache;
     } m_Sprite;
 };
 

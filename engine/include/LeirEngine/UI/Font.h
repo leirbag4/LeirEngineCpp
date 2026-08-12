@@ -9,12 +9,12 @@
 
 namespace Leir {
 
-class VulkanDevice;
+namespace RHI { class RenderBackend; }
 class Texture2D;
 
 class LEIR_API Font {
 public:
-    Font(VulkanDevice* device, const std::string& ttfPath, int fontSize = 16);
+    Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize = 16);
     ~Font();
 
     struct GlyphInfo {
@@ -36,8 +36,7 @@ public:
 private:
     void BuildAtlas();
 
-    VulkanDevice* m_Device = nullptr;
-    std::vector<uint8_t> m_TTFData;
+    RHI::RenderBackend* m_Device = nullptr;    std::vector<uint8_t> m_TTFData;
     int m_FontSize;
     float m_Scale;
     float m_LineHeight;
