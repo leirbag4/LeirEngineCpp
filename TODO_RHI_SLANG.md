@@ -6,8 +6,11 @@ Documento de decisión y plan. Fecha: 2026-08-10.
 
 - **Objetivo**: editor en Windows/macOS/Linux; runtime del motor en Windows, macOS, Linux,
   Android, iOS y Web (WebGPU, con fallback WebGL2).
-- **Shaders**: **Slang** como fuente única (HLSL-superconjunto, Khronos governance, Apache 2.0,
-  producción: Source 2/Valve). Emite SPIR-V, DXIL, MSL, WGSL y GLSL desde un solo frontend.
+- **Shaders**: **Slang** como fuente única. Slang es un **superconjunto de HLSL**. Los shaders se
+  escriben en un **subconjunto HLSL-vanilla** (HLSL es el lenguaje de la industria 3D; GLSL quedó
+  obsoleto), usando **solo** las adiciones de Slang imprescindibles para la compilación
+  multi-backend. Objetivo: si a futuro se cambia Slang por HLSL+DXC puro, **no reescribir los
+  shaders** — solo la capa de compilación (ya aislada en `IShaderCompiler`). Ver §2.1b.
 - **Integración**: **libslang linkeada en el editor** (compilar shaders al vuelo vía
   `IShaderCompiler`); `slangc` como tool en CMake para el build dev del engine. **Runtime sin
   saber nada de Slang** — carga solo el binario precompilado.
@@ -22,6 +25,48 @@ Documento de decisión y plan. Fecha: 2026-08-10.
 ### 2.1 Fuente única
 Todo shader vive como `.slang` en `engine/shaders/`. El editor y el motor dev compilan desde esa
 fuente. Fuentes actuales a migrar: `Basic`, `Sprite`, `UI` (`.vert`/`.frag`).
+
+### 2.1b Directiva "HLSL-vanilla" — regla de estilo para shaders (decisión 2026-08-12)
+
+Slang es un superconjunto de HLSL: acepta HLSL vanilla y le añade features propias. Para
+maximizar portabilidad futura (cambio a HLSL+DXC puro sin reescribir) y usar el lenguaje que
+domina la industria 3D, **los shaders se escriben en un subconjunto HLSL-vanilla**. Se usa
+**Enfoque A**: atributos `vk` directos en el shader (compartidos con DXC), no registers + mapeo.
+
+**Permitido — HLSL vanilla (el cuerpo del shader):**
+- Tipos: `float`, `float2/3/4`, `float4x4`, `int`, `uint`, `bool`.
+- `cbuffer`, structs, `mul()`, `normalize()`, `dot()`, `max/min/clamp`, operadores.
+- `Sampler2D.Sample(uv)` (combined image sampler).
+- Semánticas `SV_Position` / `SV_Target` y etiquetas de entrada `: POSITION0/TEXCOORD0/COLOR0`.
+- Structs de entrada/salida con `[[vk::location(N)]]`.
+
+**Permitido — atributos de stage/binding estándar (punto de convergencia Slang↔DXC):**
+- `[shader("vertex"/"fragment")]` — entrada de stage.
+- `[[vk::binding(a, b)]]` — binding `a`, set `b`.
+- `[[vk::location(N)]]` — ubicación de atributo/salida.
+- `[[vk::push_constant]]` — push constant.
+
+Estos atributos son los **mismos que usa DXC con `-fvk`**, así que el mismo shader compila en
+Slang (multi-target) y en DXC (SPIR-V). Son "HLSL + atributos de binding estándar", no features
+exóticas de Slang.
+
+**Prohibido — features exclusivas de Slang sin equivalente en HLSL/DXC** (solo si un shader lo
+exige y se documenta): generics `<T>`, `interface`/`extension`, `var`/`let`, `__intrinsics`,
+`This`, matrices/funciones propias de Slang, dynamic dispatch. Si un shader necesita una de
+estas, se marca con comentario `// SLANG-ONLY: <feature>` y se justifica en este doc.
+
+**Ejemplo mínimo permitido:**
+```hlsl
+[shader("vertex")]
+VSOutput main(VSInput input) {              // cuerpo 100% HLSL vanilla
+    VSOutput o; o.position = mul(push.mvp, float4(input.inPosition, 0.0, 1.0)); return o;
+}
+```
+**Prohibido:** `float3 tint<T>(T x)` (generic), `interface ILight { float3 eval(); }` (interface),
+`let v = ...` (Slang `let`), `Texture2D<float4>` especializaciones, etc.
+
+Los 6 shaders migrados en el spike ya cumplen esta directiva (~95% HLSL vanilla; lo único de
+Slang son los atributos de stage/binding/push_constant).
 
 ### 2.2 `IShaderCompiler` — interfaz pública (desacople clave)
 ```
@@ -186,12 +231,63 @@ nombre `slang` en una ruta de include.
 
 Editor: backend del host (Windows: Vulkan o D3D12 elegible por `LEIR_BACKEND`).
 
+### 4.1 Resultados del Spike (Fase 0, 2026-08-12)
+
+Herramienta: `slangc 2026.13.1` del Vulkan SDK 1.4.357.0
+(`C:\VulkanSDK\1.4.357.0\Bin\slangc.exe`). Los 6 shaders actuales
+(`Basic`, `Sprite`, `UI`, .vert/.frag) se reescribieron a `.slang` (sintaxis
+HLSL/Slang: `[shader("vertex"/"fragment")]`, `[[vk::binding(binding, set)]]`,
+`[[vk::push_constant]]`, tipos `Sampler2D` combinados) y se compilaron a cada
+target. **30/30 compilaciones OK** entre los 5 targets viables:
+
+| Shader | SPIR-V | DXIL | Metal | WGSL | GLSL 450 |
+|---|---|---|---|---|---|
+| Basic.vert | OK | OK | OK | OK | OK |
+| Basic.frag | OK | OK | OK | OK | OK |
+| Sprite.vert | OK | OK | OK | OK | OK |
+| Sprite.frag | OK | OK | OK | OK | OK |
+| UI.vert | OK | OK | OK | OK | OK |
+| UI.frag | OK | OK | OK | OK | OK |
+
+**Verificación de compatibilidad SPIR-V (render idéntico al actual):**
+- `[[vk::binding(a, b)]]` = **binding `a`, set `b`** (orden binding, set).
+- Basic.vert: UBO → set 0, binding 0; push constants offsets 0/12/16/28/32/44/48/64
+  (coinciden con `struct PushConstants` C++); atributos inPosition/Normal/TexCoord 0/1/2.
+- Basic.frag: sampler → set 1, binding 0 (coincide con `layout(set=1, binding=0)`);
+  push constants del fragment idénticos al vertex (mismo rango compartido).
+- Sprite: sampler → set 0, binding 0; push constants 0/64/80 (= 96 bytes =
+  `sizeof(SpritePushConstants)`); atributos 0/1.
+- UI.vert: push constant `float2 screenSize` @0 (8 bytes = `sizeof(Vector2)`), stage
+  VERTEX only; atributos 0/1/2. UI.frag: sampler set 0, binding 0; sin push constant.
+
+**Hallazgos y decisiones con datos:**
+1. **GLSL ES 3.00 NO soportado directamente por Slang** — no existe profile ni
+   capability `glsl_es`/`glsl_300_es` (los profiles GLSL van solo de 130 a 460
+   desktop). El doc §2.3 asumía pedir "GLSL con profile ES 3.00" — **incorrecto**.
+   Para WebGL2 (fallback) hay que usar **SPIRV-Cross** (SPIR-V → GLSL ES 3.00) o
+   escribir shaders WebGL2 a mano. El escape hatch SPIRV-Cross ya estaba previsto
+   en §7; ahora es el **camino obligatorio** para WebGL2.
+2. **Warnings de Metal benignos**: cada shader emite `warning[E40100]: entry point
+   'main' has been renamed to 'main_0'` — Slang renombra el entry point para no
+   colisionar con `main()` del host MSL. Es normal; no es un error.
+3. **Binding combinado**: para emular `sampler2D` (combined image sampler) de GLSL
+   en Slang hay que usar el tipo `Sampler2D` (un solo binding). Separar en
+   `Texture2D` + `SamplerState` con el mismo binding produce
+   `warning[E39001]: explicit binding overlap`.
+4. **Target MSL**: el nombre del target ahora es `metal` (antes `msl`).
+5. **GLSL 450 generado es limpio** (verificado en Basic.frag): `sampler2D` con
+   `binding = 0, set = 1`, push constants std430 con los pads, mismo algoritmo.
+
+Conclusión: los 6 shaders actuales son **100% migrables a Slang** con render
+idéntico en Vulkan (SPIR-V verificado), y los targets DXIL/Metal/WGSL/GLSL-450
+compilan sin cambios. El único gap es WebGL2 (GLSL ES), que requerirá SPIRV-Cross.
+
 ## 5. Fases
 
 | Fase | Qué | Verificación |
 |---|---|---|
-| **0** | Spike: `slangc` → SPIR-V/DXIL/MSL/WGSL/GLSL con los 6 shaders actuales; inspeccionar MSL y GLSL ES | Decisión con datos |
-| **1** | Migrar shaders a `.slang` + `slangc` en CMake (renderer Vulkan intacto) | Igual visual que hoy |
+| **0** | ✅ Spike: `slangc` → SPIR-V/DXIL/MSL/WGSL/GLSL con los 6 shaders actuales; inspeccionar MSL y GLSL ES | **Hecho 2026-08-12** — 30/30 OK, render SPIR-V idéntico (ver §4.1); GLSL ES 3.00 no soportado directo → SPIRV-Cross |
+| **1** | ✅ Migrar shaders a `.slang` + `slangc` en CMake (renderer Vulkan intacto) | **Hecho 2026-08-12** — los 6 shaders `.slang` en `engine/shaders/`, CMake usa `slangc -target spirv -profile spirv_1_3`, `.spv` en la misma ruta/nombres; render idéntico |
 | **2** | **RHI propia** + backend **Vulkan**; portar Mesh/Material/Texture/RenderPipeline/UIRenderer/RenderTexture | Regresión cero, headers sin `Vk*`, validation CI |
 | **3** | `IShaderCompiler` en el editor (libslang **estática**, `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato | Exportar shaders por plataforma; **hot-reload de shaders funcionando** |
 | **4** | Backend **D3D12** | `LEIR_BACKEND=d3d12` corre igual |
@@ -216,7 +312,7 @@ Editor: backend del host (Windows: Vulkan o D3D12 elegible por `LEIR_BACKEND`).
 | MSL / WGSL / GLSL experimentales en Slang | Spike F0; escape hatch SPIRV-Cross (→MSL) / Tint·naga (→WGSL) |
 | libslang pesada de compilar | Flag CMake opcional; solo el editor la linkea (estática, sin DLLs de distribución); CI usa slangc |
 | DXIL/validador en CI Linux | DXIL solo en exporter Windows; CI Linux valida SPIR-V/WGSL |
-| GLSL sin paridad de features | WebGL2 es el backend degradado (features limitadas por diseño vía GCaps) |
+| GLSL sin paridad de features | WebGL2 es el backend degradado (features limitadas por diseño vía GCaps). **Spike 2026-08-12**: Slang no emite GLSL ES 3.00 directo (sin profile) → WebGL2 usa SPIRV-Cross (SPIR-V → GLSL ES), ya previsto |
 | Complejidad RHI | Scope v1 acotado: sin frame graph total, barreras auto + modo Explicit |
 | Bindless limitado en WebGL2 | GCaps por backend; WebGL2 usa tables clásicas |
 

@@ -57,26 +57,37 @@ add_library(LeirEngine SHARED
     src/Physics/RigidBody.cpp
 )
 
-# Shader compilation
-find_program(GLSLC glslc)
-if(GLSLC)
+# Shader compilation (Slang)
+find_program(SLANGC slangc)
+if(SLANGC)
     set(SHADER_SOURCES
-        shaders/Basic.vert
-        shaders/Basic.frag
-        shaders/Sprite.vert
-        shaders/Sprite.frag
-        shaders/UI.vert
-        shaders/UI.frag
+        shaders/Basic.vert.slang
+        shaders/Basic.frag.slang
+        shaders/Sprite.vert.slang
+        shaders/Sprite.frag.slang
+        shaders/UI.vert.slang
+        shaders/UI.frag.slang
     )
     set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
     file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")
     foreach(SHADER ${SHADER_SOURCES})
         get_filename_component(SHADER_NAME ${SHADER} NAME)
-        set(SPV_FILE "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
+        # Base output name: strip the trailing .slang (Sprite.vert.slang -> Sprite.vert)
+        string(REGEX REPLACE "\\.slang$" "" SHADER_BASE ${SHADER_NAME})
+        set(SPV_FILE "${SHADER_OUTPUT_DIR}/${SHADER_BASE}.spv")
+        # Derive stage from the filename (.vert. -> vertex, .frag. -> fragment)
+        if(SHADER_NAME MATCHES "\\.vert\\.")
+            set(SHADER_STAGE vertex)
+        elseif(SHADER_NAME MATCHES "\\.frag\\.")
+            set(SHADER_STAGE fragment)
+        else()
+            set(SHADER_STAGE "")
+        endif()
         add_custom_command(
             OUTPUT ${SPV_FILE}
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}
-            COMMAND ${GLSLC} ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER} -o ${SPV_FILE}
+            COMMAND ${SLANGC} -target spirv -profile spirv_1_3 -stage ${SHADER_STAGE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER} -o ${SPV_FILE}
             COMMENT "Compiling ${SHADER_NAME}"
         )
         list(APPEND SHADER_SPVS ${SPV_FILE})
@@ -85,7 +96,7 @@ if(GLSLC)
     add_dependencies(LeirEngine LeirShaders)
     target_compile_definitions(LeirEngine PUBLIC LEIR_SHADER_DIR="${SHADER_OUTPUT_DIR}")
 else()
-    message(WARNING "glslc not found — shaders will not be compiled at build time")
+    message(WARNING "slangc not found — shaders will not be compiled at build time")
 endif()
 
 # stb headers are fetched via FetchContent; bring them into scope
