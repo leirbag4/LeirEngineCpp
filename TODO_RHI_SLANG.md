@@ -284,17 +284,58 @@ compilan sin cambios. El único gap es WebGL2 (GLSL ES), que requerirá SPIRV-Cr
 
 ## 5. Fases
 
-| Fase | Qué | Verificación |
-|---|---|---|
-| **0** | ✅ Spike: `slangc` → SPIR-V/DXIL/MSL/WGSL/GLSL con los 6 shaders actuales; inspeccionar MSL y GLSL ES | **Hecho 2026-08-12** — 30/30 OK, render SPIR-V idéntico (ver §4.1); GLSL ES 3.00 no soportado directo → SPIRV-Cross |
-| **1** | ✅ Migrar shaders a `.slang` + `slangc` en CMake (renderer Vulkan intacto) | **Hecho 2026-08-12** — los 6 shaders `.slang` en `engine/shaders/`, CMake usa `slangc -target spirv -profile spirv_1_3`, `.spv` en la misma ruta/nombres; render idéntico |
-| **2** | **RHI propia** + backend **Vulkan**; portar Mesh/Material/Texture/RenderPipeline/UIRenderer/RenderTexture | Regresión cero, headers sin `Vk*`, validation CI |
-| **3** | `IShaderCompiler` en el editor (libslang **estática**, `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato | Exportar shaders por plataforma; **hot-reload de shaders funcionando** |
-| **4** | Backend **D3D12** | `LEIR_BACKEND=d3d12` corre igual |
-| **5** | Backend **Metal** (+ MoltenVK fallback) | macOS |
-| **6** | **WebGPU + WebGL2** + Emscripten + capa de plataforma (sacar GLFW) | `leir_engine.js`, fallback funcionando |
-| **7** | **Android** (reusa Vulkan + plataforma) | APK |
-| **8** | **iOS** (reusa Metal + plataforma) | App iOS |
+### RHI mínima evolutiva (paso previo al RHI completo) — decisión 2026-08-12
+
+Para lograr **Vulkan + D3D12 intercambiables en Windows sin romper nada**, se va por un enfoque
+**incremental**: primero una **RHI mínima evolutiva** que abstrae solo lo que el motor usa hoy
+(device, buffer, texture, pipeline, render pass, command buffer, descriptor set) con **handles
+opacos** (sin `Vk*` en headers públicos). El primer backend es **Vulkan** reusando
+`VulkanDevice` (sin reescribir su lógica), se verifica **regresión cero**, y recién ahí se añade
+D3D12. Las features avanzadas del diseño completo (§3: `GCommandGraph` con record multithread,
+bindless-first, bindings por reflection, `GCaps`, especialización) **no bloquean este objetivo**:
+se migran al RHI completo en un paso posterior, cuando la RHI mínima esté estable con ambos
+backends desktop.
+
+```
+Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] → [RHI mínima + D3D12]
+                                                             ↓ (estable, 2 backends desktop)
+                                                      RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
+```
+
+### Checkboxes de fases
+
+- [x] **Fase 0** — Spike: `slangc` → SPIR-V/DXIL/MSL/WGSL/GLSL con los 6 shaders actuales;
+      inspeccionar MSL y GLSL ES. **Hecho 2026-08-12** — 30/30 OK, render SPIR-V idéntico
+      (§4.1); GLSL ES 3.00 no soportado directo → SPIRV-Cross.
+- [x] **Fase 1** — Migrar shaders a `.slang` + `slangc` en CMake (renderer Vulkan intacto).
+      **Hecho 2026-08-12** — 6 `.slang` en `engine/shaders/`, CMake usa
+      `slangc -target spirv -profile spirv_1_3`, `.spv` en la misma ruta/nombres; render idéntico.
+- [ ] **Fase 2a — RHI mínima + backend Vulkan** (paso previo al RHI completo §3):
+  - [ ] Definir interfaz `RenderBackend`/`IRHI` mínima en headers públicos SIN `Vk*`:
+        handles opacos `RHICommandBuffer`, `RHIBuffer`, `RHITexture`, `RHIImageView`,
+        `RHISampler`, `RHIPipeline`, `RHIPipelineLayout`, `RHIDescriptorSet`,
+        `RHIDescriptorSetLayout`, `RHIRenderPass`, `RHIResource`.
+  - [ ] Implementar backend **Vulkan**: adaptar `VulkanDevice` para que implemente la interfaz
+        (o un `VulkanBackend` que la envuelva), **sin reescribir** la lógica Vulkan existente.
+  - [ ] Migrar `Shader`, `Material`, `Mesh`, `Texture2D`, `RenderTexture`, `RenderPipeline`,
+        `UIRenderer` para usar la interfaz RHI (reemplazar `Vk*` por handles opacos).
+  - [ ] Migrar `editor/src/main.cpp` para crear el backend RHI (Vulkan por defecto) en vez de
+        `VulkanDevice` directo.
+  - [ ] Verificación: **regresión cero** (render idéntico), headers públicos sin `Vk*`,
+        validation layers limpias, selector de backend `LEIR_BACKEND`.
+- [ ] **Fase 2b — Backend D3D12** (v2, sobre la misma RHI mínima): implementar la interfaz con
+      D3D12; los shaders ya están en DXIL desde Fase 0/1. `LEIR_BACKEND=d3d12` corre igual.
+- [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
+      `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato.
+      Verificación: exportar shaders por plataforma; **hot-reload de shaders funcionando**.
+- [ ] **Fase 4** — Backend **Metal** (+ MoltenVK fallback). Verificación: macOS.
+- [ ] **Fase 5** — **WebGPU + WebGL2** + Emscripten + capa de plataforma (sacar GLFW).
+      Verificación: `leir_engine.js`, fallback funcionando.
+- [ ] **Fase 6** — **Android** (reusa Vulkan + plataforma). Verificación: APK.
+- [ ] **Fase 7** — **iOS** (reusa Metal + plataforma). Verificación: App iOS.
+- [ ] **Migración al RHI completo §3** (cuando la RHI mínima esté estable con Vulkan+D3D12):
+      `GCommandGraph` con record multithread, bindless-first, bindings por reflection,
+      `GCaps`, especialización de shaders.
 
 ## 6. Aislamiento / desacople total
 
@@ -313,7 +354,7 @@ compilan sin cambios. El único gap es WebGL2 (GLSL ES), que requerirá SPIRV-Cr
 | libslang pesada de compilar | Flag CMake opcional; solo el editor la linkea (estática, sin DLLs de distribución); CI usa slangc |
 | DXIL/validador en CI Linux | DXIL solo en exporter Windows; CI Linux valida SPIR-V/WGSL |
 | GLSL sin paridad de features | WebGL2 es el backend degradado (features limitadas por diseño vía GCaps). **Spike 2026-08-12**: Slang no emite GLSL ES 3.00 directo (sin profile) → WebGL2 usa SPIRV-Cross (SPIR-V → GLSL ES), ya previsto |
-| Complejidad RHI | Scope v1 acotado: sin frame graph total, barreras auto + modo Explicit |
+| Complejidad RHI | Enfoque incremental (decisión 2026-08-12): RHI **mínima** primero (backend Vulkan + D3D12 desktop, regresión cero), luego se migra al RHI completo §3 (GCommandGraph/bindless/reflection/GCaps) cuando esté estable. Scope v1: sin frame graph total, barreras auto + modo Explicit |
 | Bindless limitado en WebGL2 | GCaps por backend; WebGL2 usa tables clásicas |
 
 ## 8. NO hacemos (v1)
