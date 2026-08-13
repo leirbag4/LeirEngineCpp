@@ -130,6 +130,17 @@ void UIDebugOverlay::CreatePanel(Font* font)
     m_Canvas->AddChild(m_Panel);
 }
 
+void UIDebugOverlay::SetFont(Font* font)
+{
+    if (!m_Panel || !font) return;
+    UILabel* labels[] = {
+        m_FpsLabel, m_FrameTimeLabel, m_DrawCallsLabel, m_MemoryLabel,
+        m_MouseLabel, m_ButtonsLabel, m_KeysLabel, m_HoverLabel, m_LastEventLabel
+    };
+    for (UILabel* l : labels)
+        if (l) l->SetFont(font);
+}
+
 void UIDebugOverlay::Update(float deltaTime)
 {
     if (!m_Active || !m_Panel) return;

@@ -14,8 +14,12 @@ class Texture2D;
 
 class LEIR_API Font {
 public:
-    Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize = 16);
+    Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize = 16, float contentScale = 1.0f);
     ~Font();
+
+    // Re-rasterizes the atlas for a new DPI scale in place (metrics stay
+    // logical, so all Font* holders remain valid; no rebuild needed there).
+    void SetContentScale(float contentScale);
 
     struct GlyphInfo {
         Vector2 uv0, uv1;
@@ -35,9 +39,11 @@ public:
 
 private:
     void BuildAtlas();
+    void Rebuild(float contentScale);
 
     RHI::RenderBackend* m_Device = nullptr;    std::vector<uint8_t> m_TTFData;
     int m_FontSize;
+    float m_ContentScale = 1.0f;
     float m_Scale;
     float m_LineHeight;
     float m_Ascender;

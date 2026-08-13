@@ -7,12 +7,13 @@
 
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
-Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize)
-    : m_Device(device), m_FontSize(fontSize)
+Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize, float contentScale)
+    : m_Device(device), m_FontSize(fontSize), m_ContentScale(std::max(0.1f, contentScale))
 {
     FILE* f = fopen(ttfPath.c_str(), "rb");
     if (!f) {
@@ -40,17 +41,40 @@ Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize)
         return;
     }
 
-    m_Scale = stbtt_ScaleForPixelHeight(&info, (float)fontSize);
+    Rebuild(m_ContentScale);
+
+    XConsole::Println("Font loaded: {} ({}px, {} glyphs)", ttfPath, fontSize, m_PackedGlyphs.size());
+}
+
+void Font::SetContentScale(float scale)
+{
+    if (scale < 0.1f) scale = 0.1f;
+    if (scale == m_ContentScale) return;
+    m_ContentScale = scale;
+    Rebuild(scale);
+}
+
+void Font::Rebuild(float scale)
+{
+    // Rasterize the atlas at fontSize x contentScale so each glyph texel maps
+    // 1:1 to a physical pixel (crisp text at any DPI). All metrics below are
+    // kept in LOGICAL units (atlas px / contentScale) so the UI layout is
+    // unchanged; only the sampling resolution improves.
+    stbtt_fontinfo info;
+    if (!stbtt_InitFont(&info, m_TTFData.data(), 0)) return;
+
+    m_Scale = stbtt_ScaleForPixelHeight(&info, (float)m_FontSize * scale);
     int ascent, descent, lineGap;
     stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
-    m_LineHeight = (float)(ascent - descent + lineGap) * m_Scale;
-    m_Ascender = (float)ascent * m_Scale;
+    m_LineHeight = (float)(ascent - descent + lineGap) * m_Scale / scale;
+    m_Ascender = (float)ascent * m_Scale / scale;
 
     int advance;
     stbtt_GetCodepointHMetrics(&info, 32, &advance, nullptr);
-    m_SpaceWidth = (float)advance * m_Scale;
+    m_SpaceWidth = (float)advance * m_Scale / scale;
 
     m_PackedGlyphs.clear();
+    m_GlyphCache.clear();
     for (uint32_t cp = 32; cp <= 126; ++cp) {
         int w, h, xOff, yOff;
         unsigned char* bitmap = stbtt_GetCodepointBitmap(&info, m_Scale, m_Scale, cp, &w, &h, &xOff, &yOff);
@@ -61,9 +85,9 @@ Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize)
         pg.codepoint = cp;
         pg.w = w;
         pg.h = h;
-        pg.advance = (float)advance * m_Scale;
-        pg.bearingX = (float)xOff;
-        pg.bearingY = (float)yOff;
+        pg.advance = (float)advance * m_Scale / scale;
+        pg.bearingX = (float)xOff / scale;
+        pg.bearingY = (float)yOff / scale;
 
         int found = -1;
         for (size_t i = 0; i < m_PackedGlyphs.size(); ++i) {
@@ -80,8 +104,6 @@ Font::Font(RHI::RenderBackend* device, const std::string& ttfPath, int fontSize)
     }
 
     BuildAtlas();
-
-    XConsole::Println("Font loaded: {} ({}px, {} glyphs)", ttfPath, fontSize, m_PackedGlyphs.size());
 }
 
 Font::~Font() = default;
@@ -162,7 +184,7 @@ void Font::BuildAtlas()
         GlyphInfo gi;
         gi.uv0 = {(float)(cursorX) / atlasW, (float)(cursorY) / atlasH};
         gi.uv1 = {(float)(cursorX + w) / atlasW, (float)(cursorY + h) / atlasH};
-        gi.size = {(float)w, (float)h};
+        gi.size = {(float)w / m_ContentScale, (float)h / m_ContentScale};
         gi.bearing = {pg.bearingX, pg.bearingY};
         gi.advance = pg.advance;
         m_GlyphCache[pg.codepoint] = gi;

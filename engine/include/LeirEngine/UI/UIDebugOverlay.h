@@ -16,6 +16,7 @@ public:
     UIDebugOverlay(Font* font, UICanvas* canvas);
     ~UIDebugOverlay();
 
+    void SetFont(Font* font);
     void Update(float deltaTime);
     void SetActive(bool active);
     bool IsActive() const { return m_Active; }

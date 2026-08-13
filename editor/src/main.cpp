@@ -259,8 +259,9 @@ protected:
         }
 
         if (!fontPath.empty()) {
-            m_Font = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 16);
-            m_FontSmall = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 13);
+            float dpr = GetContentScale();
+            m_Font = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 16, dpr);
+            m_FontSmall = std::make_unique<Leir::Font>(m_Backend.get(), fontPath, 13, dpr);
         }
 
         m_Canvas = std::make_unique<Leir::UICanvas>();
@@ -605,6 +606,10 @@ protected:
             GetContentScale(), GetWidth(), GetHeight());
         if (m_UIRenderer)
             m_UIRenderer->SetContentScale(GetContentScale());
+        // Re-rasterize the font atlases at the new DPI (in place, so all
+        // Font* holders stay valid) for crisp text on the new scale.
+        if (m_Font) m_Font->SetContentScale(GetContentScale());
+        if (m_FontSmall) m_FontSmall->SetContentScale(GetContentScale());
     }
 
 private:
