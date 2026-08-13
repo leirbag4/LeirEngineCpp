@@ -663,8 +663,8 @@ void VulkanDevice::CreateSyncObjects()
     }
 
     // Render-finished semaphores are created per swapchain image in
-    // CreateSwapchain (indexed by the acquired image, not by frame).
-    m_RenderFinishedSemaphores.clear();
+    // CreateSwapchain (which runs BEFORE this in the constructor) and indexed
+    // by the acquired image, not by frame. Do NOT touch that vector here.
 }
 
 // ---- Frame Lifecycle ----
