@@ -5,9 +5,7 @@
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
 #include <vulkan/vulkan.h>
-#include <cctype>
 #include <cstring>
-#include <cstdlib>
 #include <stdexcept>
 
 #include "LeirEngine/Core/Log.h"
@@ -26,18 +24,6 @@ namespace RHI {
 namespace {
 
 // ---- enum conversions ----
-
-// Case-insensitive ASCII compare (avoids _stricmp, which is not portable to
-// the Linux/macOS CI runners).
-bool EqualNoCase(const char* a, const char* b) {
-    while (*a && *b) {
-        char ca = static_cast<char>(std::tolower(static_cast<unsigned char>(*a)));
-        char cb = static_cast<char>(std::tolower(static_cast<unsigned char>(*b)));
-        if (ca != cb) return false;
-        ++a; ++b;
-    }
-    return *a == *b;
-}
 
 VkFormat ToVk(Format f) {
     switch (f) {
@@ -834,13 +820,12 @@ void VulkanBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
 
 // ---- Factory ----
 
-RenderBackend* BackendFactory::Create(void* window, int width, int height,
-    bool vsync, const std::string& appName) {
-    // Runtime override (LEIR_BACKEND env var) takes precedence for testing.
-    // The compile-time LEIR_BACKEND macro stays the default.
-    const char* env = std::getenv("LEIR_BACKEND");
-    if (env && EqualNoCase(env, "d3d12"))
+RenderBackend* BackendFactory::Create(const std::string& backend,
+    void* window, int width, int height, bool vsync, const std::string& appName) {
+    if (backend == "d3d12")
         return CreateD3D12(window, width, height, vsync, appName);
+    if (backend == "vulkan")
+        return CreateVulkan(window, width, height, vsync, appName);
 #if LEIR_BACKEND == LEIR_BACKEND_D3D12
     return CreateD3D12(window, width, height, vsync, appName);
 #else

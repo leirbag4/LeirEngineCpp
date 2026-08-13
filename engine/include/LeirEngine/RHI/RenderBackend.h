@@ -141,14 +141,13 @@ public:
         Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) = 0;
 };
 
-// Factory: create the default backend (Vulkan) for a window.
+// Factory: create the backend for a window.
 class LEIR_API BackendFactory {
 public:
-    // Creates the backend selected by the LEIR_BACKEND macro (overridable at
-    // runtime via the LEIR_BACKEND env var: "vulkan" / "d3d12"). Returns
-    // nullptr on failure.
-    static RenderBackend* Create(void* window, int width, int height,
-        bool vsync, const std::string& appName);
+    // Creates the backend named by `backend` ("vulkan" / "d3d12"; empty string
+    // = the compile-time LEIR_BACKEND default). Returns nullptr on failure.
+    static RenderBackend* Create(const std::string& backend,
+        void* window, int width, int height, bool vsync, const std::string& appName);
     // Creates a specific backend.
     static RenderBackend* CreateVulkan(void* window, int width, int height,
         bool vsync, const std::string& appName);

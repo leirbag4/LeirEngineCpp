@@ -72,6 +72,8 @@ bool LeirSettings::Load(const std::string& path)
         debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
         debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
 
+        graphics.backend = j.value("graphics", nlohmann::json::object()).value("backend", "vulkan");
+
         layout.hierarchy_width = j.value("layout", nlohmann::json::object()).value("hierarchy_width", 264.0f);
         layout.inspector_width = j.value("layout", nlohmann::json::object()).value("inspector_width", 290.0f);
 
@@ -103,6 +105,7 @@ bool LeirSettings::Save()
     j["debug"]["show_overlay"] = debug.show_overlay;
     j["debug"]["show_glyph_quads"] = debug.show_glyph_quads;
     j["debug"]["ui_event_log"] = debug.ui_event_log;
+    j["graphics"]["backend"] = graphics.backend;
     j["layout"]["hierarchy_width"] = layout.hierarchy_width;
     j["layout"]["inspector_width"] = layout.inspector_width;
     j["dock"]["layout"] = dock.layout;
@@ -147,6 +150,7 @@ void LeirSettings::SetDefaults()
     debug.show_overlay = true;
     debug.show_glyph_quads = false;
     debug.ui_event_log = false;
+    graphics.backend = "vulkan";
     layout.hierarchy_width = 300.0f;
     layout.inspector_width = 300.0f;
     dock.layout.clear();

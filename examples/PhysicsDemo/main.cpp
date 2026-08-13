@@ -44,7 +44,7 @@ protected:
 
         // ---- RHI backend ----
         m_Backend.reset(Leir::RHI::BackendFactory::Create(
-            GetWindow(), GetWidth(), GetHeight(), false, "LeirEngine Physics Demo"));
+            "", GetWindow(), GetWidth(), GetHeight(), false, "LeirEngine Physics Demo"));
 
         // ---- Shaders ----
         std::string shaderDir = LEIR_SHADER_DIR;

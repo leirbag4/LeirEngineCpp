@@ -32,6 +32,11 @@ public:
     } debug;
 
     struct {
+        // Graphics API backend: "vulkan" or "d3d12" (empty = compile-time default).
+        std::string backend = "vulkan";
+    } graphics;
+
+    struct {
         float hierarchy_width = 300.0f;
         float inspector_width = 300.0f;
     } layout;

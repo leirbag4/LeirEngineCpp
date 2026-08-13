@@ -138,6 +138,7 @@ protected:
         Leir::XConsole::Println("Editor initialized");
 
         m_Backend.reset(Leir::RHI::BackendFactory::Create(
+            Leir::LeirSettings::Get().graphics.backend,
             GetWindow(), GetWidth(), GetHeight(),
             Leir::LeirSettings::Get().window.vsync, "LeirEngine Editor"));
         if (!m_Backend) {
