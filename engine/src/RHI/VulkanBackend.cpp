@@ -710,9 +710,13 @@ void VulkanBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass rende
     rpInfo.pClearValues = vkClears.data();
     vkCmdBeginRenderPass(vkCmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    // Flip viewport Y: GLM/NDC (y-up) → Vulkan framebuffer (y-down)
     VkViewport vp{};
+    vp.x = 0;
+    vp.y = (float)height;
     vp.width = (float)width;
-    vp.height = (float)height;
+    vp.height = -(float)height;
+    vp.minDepth = 0.0f;
     vp.maxDepth = 1.0f;
     vkCmdSetViewport(vkCmd, 0, 1, &vp);
     VkRect2D scissor{};

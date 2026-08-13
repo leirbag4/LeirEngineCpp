@@ -355,7 +355,7 @@ struct D3D12Backend::Impl {
         DXGI_SWAP_CHAIN_DESC1 scDesc{};
         scDesc.Width = (UINT)width;
         scDesc.Height = (UINT)height;
-        scDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        scDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // resource stays UNORM; sRGB applied via RTV view format
         scDesc.Stereo = FALSE;
         scDesc.SampleDesc.Count = 1;
         scDesc.SampleDesc.Quality = 0;
@@ -366,9 +366,11 @@ struct D3D12Backend::Impl {
         scDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
         ComPtr<IDXGISwapChain1> sc1;
-        if (FAILED(factory->CreateSwapChainForHwnd(queue.Get(), hwnd, &scDesc,
-                nullptr, nullptr, &sc1)))
-            throw std::runtime_error("D3D12: failed to create swap chain");
+        HRESULT hres = factory->CreateSwapChainForHwnd(queue.Get(), hwnd, &scDesc,
+                nullptr, nullptr, &sc1);
+        if (FAILED(hres))
+            throw std::runtime_error("D3D12: failed to create swap chain (HRESULT 0x"
+                + [&]{ char b[16]; sprintf(b, "%08X", (unsigned)hres); return std::string(b); }() + ")");
         if (FAILED(sc1->QueryInterface(IID_PPV_ARGS(&swapchain))))
             throw std::runtime_error("D3D12: failed to QI swap chain");
         factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
@@ -392,7 +394,14 @@ struct D3D12Backend::Impl {
             UINT slot = AllocRtv();
             backBufferRtvSlots[i] = slot;
             D3D12_CPU_DESCRIPTOR_HANDLE rtv = RtvCpu(slot);
-            device->CreateRenderTargetView(backBuffers[i].Get(), nullptr, rtv);
+            // Backbuffer resource is UNORM (the Intel UHD driver device-removes on an
+            // sRGB flip-model swapchain), but the RTV is UNORM_SRGB so the GPU encodes
+            // linear→sRGB on store — identical result to an sRGB swapchain, and the PSO
+            // color formats (mainRenderPass/overlayRenderPass) already declare UNORM_SRGB.
+            D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+            rtvDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+            device->CreateRenderTargetView(backBuffers[i].Get(), &rtvDesc, rtv);
             backBufferRTVs[i] = rtv;
             backBufferState[i] = D3D12_RESOURCE_STATE_PRESENT;
         }
@@ -463,13 +472,13 @@ struct D3D12Backend::Impl {
 
     void CreateBuiltinRenderPasses() {
         mainRenderPass = new RenderPassRec();
-        mainRenderPass->colorFormats = { DXGI_FORMAT_B8G8R8A8_UNORM };
+        mainRenderPass->colorFormats = { DXGI_FORMAT_B8G8R8A8_UNORM_SRGB };
         mainRenderPass->depthFormat = DXGI_FORMAT_D32_FLOAT;
         mainRenderPass->hasDepth = true;
         mainRenderPass->overlay = false;
 
         overlayRenderPass = new RenderPassRec();
-        overlayRenderPass->colorFormats = { DXGI_FORMAT_B8G8R8A8_UNORM };
+        overlayRenderPass->colorFormats = { DXGI_FORMAT_B8G8R8A8_UNORM_SRGB };
         overlayRenderPass->hasDepth = false;
         overlayRenderPass->overlay = true;
     }

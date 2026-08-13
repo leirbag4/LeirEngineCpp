@@ -718,9 +718,13 @@ bool VulkanDevice::BeginFrame(bool skipRenderPass)
 
         vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+        // Flip viewport Y: GLM/NDC (y-up) → Vulkan framebuffer (y-down)
         VkViewport viewport{};
+        viewport.x = 0;
+        viewport.y = (float)m_SwapchainExtent.height;
         viewport.width = (float)m_SwapchainExtent.width;
-        viewport.height = (float)m_SwapchainExtent.height;
+        viewport.height = -(float)m_SwapchainExtent.height;
+        viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmd, 0, 1, &viewport);
 

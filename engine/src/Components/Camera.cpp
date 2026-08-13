@@ -12,7 +12,6 @@ void Camera::SetPerspective(float fovDegrees, float aspect, float nearPlane, flo
     m_Near = nearPlane;
     m_Far = farPlane;
     m_ProjectionMatrix = Matrix4x4::Perspective(fovDegrees, aspect, nearPlane, farPlane);
-    m_ProjectionMatrix(1, 1) *= -1.0f;
 }
 
 void Camera::SetOrthographic(float size, float aspect, float nearPlane, float farPlane)

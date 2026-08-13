@@ -362,6 +362,28 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
       **Estado**: `LEIR_BACKEND=d3d12` corre el editor (12-15 s sin crash, con y sin debug layer),
       stderr limpio, binds de descriptor sets OK, sin device removal. Pendiente: verificar render
       visual del viewport + UI, resize, y limpiar la ruta de teardown D3D12.
+### Checkboxes — Paridad de render D3D12 vs Vulkan (Fase 2b, 2026-08-13)
+
+Los 3 bugs reportados al activar `LEIR_BACKEND=d3d12` con `hidpi:true`. Objetivo: render visual
+idéntico entre backends con soluciones **universales** (sin hardcodear por API). Regla aprendida:
+la convención NDC es **per-backend** (D3D12/Metal/WebGL: y-up → viewport positivo; Vulkan/WebGPU:
+y-down → viewport negativo); el código compartido (Camera, RenderPipeline) queda como matemática
+GLM pura y front-face **CCW en todos los backends**.
+
+- [ ] **BUG03 — cubo invertido/faltan caras + eje Y de cámara invertido (D3D12)**.
+      Causa: `Camera::SetPerspective` hace `m_ProjectionMatrix(1,1) *= -1.0f` incondicional — era
+      la compensación de Vulkan (NDC y-down) pero rompe D3D12 (NDC y-up, igual a GLM). Fix:
+      quitar el flip de `Camera` y mover la compensación al backend Vulkan con viewport de altura
+      negativa en la pasada 3D (swapchain `VulkanDevice::BeginFrame` + `VulkanBackend::CmdBeginRenderPass`
+      para el RenderTexture). D3D12 sin cambios.
+- [ ] **BUG01 — colores más oscuros en D3D12**. Causa: swapchain D3D12 en `B8G8R8A8_UNORM`
+      (Vulkan en `B8G8R8A8_SRGB`) → sRGB no aplicada al presentar. Fix: `B8G8R8A8_UNORM_SRGB` en
+      el formato del swapchain, `ResizeBuffers` y los `colorFormats` de los render passes builtin
+      (main + overlay).
+- [ ] **BUG02 — UI pixelada con `hidpi:true` solo en D3D12**. Diagnóstico en runtime (logs de
+      sizes reales por backend) → fix según causa confirmada (candidatos: `DXGI_SCALING_STRETCH`
+      del swapchain vs atlas de fuente a resolución lógica upscaleado con sampler `Nearest`).
+
 - [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
       `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato.
       Verificación: exportar shaders por plataforma; **hot-reload de shaders funcionando**.
