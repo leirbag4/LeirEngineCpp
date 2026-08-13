@@ -26,6 +26,7 @@ namespace RHI {
 // Compile-time backend selector (TODO_RHI_SLANG.md §5). Defaults to Vulkan.
 // Define LEIR_BACKEND before including to pick another backend once available.
 #define LEIR_BACKEND_VULKAN 1
+#define LEIR_BACKEND_D3D12 2
 #ifndef LEIR_BACKEND
 #define LEIR_BACKEND LEIR_BACKEND_VULKAN
 #endif
@@ -205,6 +206,9 @@ struct RHIVertexAttribute {
     uint32_t binding = 0;
     Format format = Format::R32G32B32_SFLOAT;
     uint32_t offset = 0;
+    // D3D12 input-layout semantic name (e.g. "POSITION"). Ignored by the
+    // Vulkan backend; must match the semantic name the shader expects.
+    const char* semantic = "";
 };
 
 struct RHIDescriptorBinding {

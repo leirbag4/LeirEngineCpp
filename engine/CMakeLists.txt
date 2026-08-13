@@ -19,6 +19,7 @@ add_library(LeirEngine SHARED
     src/Rendering/VulkanDevice.cpp
     src/RHI/VulkanBackend.cpp
     src/Rendering/Shader.cpp
+
     src/Rendering/Image.cpp
     src/Rendering/Texture2D.cpp
     src/Rendering/Mesh.cpp
@@ -58,6 +59,10 @@ add_library(LeirEngine SHARED
     src/Physics/RigidBody.cpp
 )
 
+if(WIN32 AND MSVC)
+    target_sources(LeirEngine PRIVATE src/RHI/D3D12Backend.cpp)
+endif()
+
 # Shader compilation (Slang)
 find_program(SLANGC slangc)
 if(SLANGC)
@@ -92,10 +97,29 @@ if(SLANGC)
             COMMENT "Compiling ${SHADER_NAME}"
         )
         list(APPEND SHADER_SPVS ${SPV_FILE})
+
+        # DXIL (D3D12) twin of the same shader, only built on MSVC (the D3D12
+        # backend is not compiled on the MinGW CI preset).
+        if(WIN32 AND MSVC)
+            set(DXIL_FILE "${SHADER_OUTPUT_DIR}/${SHADER_BASE}.dxil")
+            add_custom_command(
+                OUTPUT ${DXIL_FILE}
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}
+                COMMAND ${SLANGC} -target dxil -profile sm_6_0 -stage ${SHADER_STAGE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER} -o ${DXIL_FILE}
+                COMMENT "Compiling ${SHADER_NAME} (DXIL)"
+            )
+            list(APPEND SHADER_DXILS ${DXIL_FILE})
+        endif()
     endforeach()
     add_custom_target(LeirShaders ALL DEPENDS ${SHADER_SPVS})
     add_dependencies(LeirEngine LeirShaders)
     target_compile_definitions(LeirEngine PUBLIC LEIR_SHADER_DIR="${SHADER_OUTPUT_DIR}")
+    if(WIN32 AND MSVC)
+        add_custom_target(LeirShadersDXIL ALL DEPENDS ${SHADER_DXILS})
+        add_dependencies(LeirShadersDXIL LeirShaders)
+        add_dependencies(LeirEngine LeirShadersDXIL)
+    endif()
 else()
     message(WARNING "slangc not found — shaders will not be compiled at build time")
 endif()
@@ -121,6 +145,10 @@ target_link_libraries(LeirEngine
         nlohmann_json::nlohmann_json
         cereal::cereal
 )
+
+if(WIN32 AND MSVC)
+    target_link_libraries(LeirEngine PRIVATE d3d12 dxgi)
+endif()
 
 # Vulkan
 if(APPLE)

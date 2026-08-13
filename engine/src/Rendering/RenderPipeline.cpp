@@ -40,10 +40,12 @@ std::vector<RHI::RHIVertexAttribute> SpriteVertex::GetAttributeDescriptions()
     attrs[0].binding = 0;
     attrs[0].format = RHI::Format::R32G32_SFLOAT;
     attrs[0].offset = offsetof(SpriteVertex, position);
+    attrs[0].semantic = "POSITION";
     attrs[1].location = 1;
     attrs[1].binding = 0;
     attrs[1].format = RHI::Format::R32G32_SFLOAT;
     attrs[1].offset = offsetof(SpriteVertex, texCoord);
+    attrs[1].semantic = "TEXCOORD";
     return attrs;
 }
 
@@ -150,8 +152,10 @@ void RenderPipeline::CreateSpriteResources()
         { m_Sprite.descSetLayout }, { pushRange });
 
     // Load sprite shaders
-    auto vertCode = Shader::ReadFile(LEIR_SHADER_DIR "/Sprite.vert.spv");
-    auto fragCode = Shader::ReadFile(LEIR_SHADER_DIR "/Sprite.frag.spv");
+    auto vertCode = Shader::ReadFile(
+        std::string(LEIR_SHADER_DIR) + "/Sprite.vert" + m_Device->GetShaderFileExtension());
+    auto fragCode = Shader::ReadFile(
+        std::string(LEIR_SHADER_DIR) + "/Sprite.frag" + m_Device->GetShaderFileExtension());
     RHI::RHIShaderModule vertMod = m_Device->CreateShaderModule(vertCode);
     RHI::RHIShaderModule fragMod = m_Device->CreateShaderModule(fragCode);
 
@@ -211,7 +215,6 @@ void RenderPipeline::Render(RHI::RHICommandBuffer cmd, Scene* scene)
         return;
 
     auto& objects = scene->GetObjects();
-
     Camera* primaryCamera = nullptr;
     Light* primaryLight = nullptr;
 
@@ -270,7 +273,6 @@ void RenderPipeline::Render(RHI::RHICommandBuffer cmd, Scene* scene)
             continue;
 
         push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-
         RenderMeshRenderer(cmd, renderer, viewProj,
             obj->GetTransform().GetLocalToWorldMatrix(), push);
     }

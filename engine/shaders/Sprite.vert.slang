@@ -15,7 +15,7 @@ struct SpritePushConstants {
 };
 
 [[vk::push_constant]]
-SpritePushConstants push;
+SpritePushConstants push : register(b1, space0);
 
 [shader("vertex")]
 VSOutput main(VSInput input) {

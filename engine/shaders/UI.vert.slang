@@ -11,7 +11,7 @@ struct VSOutput {
 };
 
 [[vk::push_constant]]
-float2 screenSize;
+float2 screenSize : register(b1, space0);
 
 [shader("vertex")]
 VSOutput main(VSInput input) {

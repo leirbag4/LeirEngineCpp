@@ -28,7 +28,7 @@ struct PushConstants {
 };
 
 [[vk::push_constant]]
-PushConstants push;
+PushConstants push : register(b1, space0);
 
 [shader("vertex")]
 VSOutput main(VSInput input) {

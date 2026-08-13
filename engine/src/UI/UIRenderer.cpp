@@ -65,8 +65,10 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
     pushRange.size = sizeof(Vector2);
     m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
 
-    auto vertCode = Shader::ReadFile(LEIR_SHADER_DIR "/UI.vert.spv");
-    auto fragCode = Shader::ReadFile(LEIR_SHADER_DIR "/UI.frag.spv");
+    auto vertCode = Shader::ReadFile(
+        std::string(LEIR_SHADER_DIR) + "/UI.vert" + m_Device->GetShaderFileExtension());
+    auto fragCode = Shader::ReadFile(
+        std::string(LEIR_SHADER_DIR) + "/UI.frag" + m_Device->GetShaderFileExtension());
     RHI::RHIShaderModule vertMod = m_Device->CreateShaderModule(vertCode);
     RHI::RHIShaderModule fragMod = m_Device->CreateShaderModule(fragCode);
 
@@ -88,14 +90,17 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
     attrs[0].binding = 0;
     attrs[0].format = RHI::Format::R32G32_SFLOAT;
     attrs[0].offset = offsetof(UIVertex, position);
+    attrs[0].semantic = "POSITION";
     attrs[1].location = 1;
     attrs[1].binding = 0;
     attrs[1].format = RHI::Format::R32G32_SFLOAT;
     attrs[1].offset = offsetof(UIVertex, texCoord);
+    attrs[1].semantic = "TEXCOORD";
     attrs[2].location = 2;
     attrs[2].binding = 0;
     attrs[2].format = RHI::Format::R32G32B32A32_SFLOAT;
     attrs[2].offset = offsetof(UIVertex, color);
+    attrs[2].semantic = "COLOR";
 
     RHI::RHIPipelineDesc desc{};
     desc.layout = m_PipelineLayout;

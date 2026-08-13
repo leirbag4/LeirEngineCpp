@@ -148,8 +148,8 @@ protected:
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
             m_Backend.get(),
-            shaderDir + "/Basic.vert.spv",
-            shaderDir + "/Basic.frag.spv"
+            shaderDir + "/Basic.vert" + m_Backend->GetShaderFileExtension(),
+            shaderDir + "/Basic.frag" + m_Backend->GetShaderFileExtension()
         );
 
         unsigned char whitePixel[4] = { 255, 255, 255, 255 };

@@ -14,7 +14,10 @@ void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint
 {
     m_Width = width;
     m_Height = height;
-    uint32_t imageSize = width * height * 4;
+    uint32_t rowPitch = width * 4;
+    uint32_t align = m_Device->GetCopyRowPitchAlignment();
+    if (align > 1) rowPitch = (rowPitch + align - 1) / align * align;
+    uint32_t imageSize = rowPitch * height;
 
     RHI::RHIBuffer stagingBuffer;
     RHI::RHIDeviceMemory stagingMemory;
@@ -25,7 +28,14 @@ void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint
 
     void* data;
     m_Device->MapMemory(stagingMemory, 0, imageSize, &data);
-    memcpy(data, pixels, (size_t)imageSize);
+    if (align > 1 && rowPitch != width * 4) {
+        // Pad each row so the D3D12 footprint's RowPitch alignment holds.
+        for (uint32_t y = 0; y < height; ++y)
+            memcpy((char*)data + (size_t)y * rowPitch,
+                pixels + (size_t)y * width * 4, (size_t)width * 4);
+    } else {
+        memcpy(data, pixels, (size_t)imageSize);
+    }
     m_Device->UnmapMemory(stagingMemory);
 
     m_Image = m_Device->CreateImage(width, height, RHI::Format::R8G8B8A8_SRGB,
@@ -93,7 +103,12 @@ Texture2D::~Texture2D()
 
 void Texture2D::UpdateFromImage(Image& image)
 {
-    uint32_t imageSize = (uint32_t)(image.GetWidth() * image.GetHeight() * 4);
+    uint32_t width = image.GetWidth();
+    uint32_t height = image.GetHeight();
+    uint32_t rowPitch = width * 4;
+    uint32_t align = m_Device->GetCopyRowPitchAlignment();
+    if (align > 1) rowPitch = (rowPitch + align - 1) / align * align;
+    uint32_t imageSize = rowPitch * height;
 
     RHI::RHIBuffer stagingBuffer;
     RHI::RHIDeviceMemory stagingMemory;
@@ -104,7 +119,13 @@ void Texture2D::UpdateFromImage(Image& image)
 
     void* data;
     m_Device->MapMemory(stagingMemory, 0, imageSize, &data);
-    memcpy(data, image.GetData(), (size_t)imageSize);
+    if (align > 1 && rowPitch != width * 4) {
+        for (uint32_t y = 0; y < height; ++y)
+            memcpy((char*)data + (size_t)y * rowPitch,
+                image.GetData() + (size_t)y * width * 4, (size_t)width * 4);
+    } else {
+        memcpy(data, image.GetData(), (size_t)imageSize);
+    }
     m_Device->UnmapMemory(stagingMemory);
 
     m_Device->TransitionImageLayout(m_Image, RHI::Format::R8G8B8A8_SRGB,

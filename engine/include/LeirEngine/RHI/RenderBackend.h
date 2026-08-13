@@ -37,6 +37,10 @@ public:
     virtual RHIRenderPass GetRenderPass() const = 0;
     virtual RHIRenderPass GetOverlayRenderPass() const = 0;
 
+    // Shader bytecode extension this backend consumes (".spv" Vulkan, ".dxil"
+    // D3D12). Used by pipeline builders to pick the right file.
+    virtual const char* GetShaderFileExtension() const { return ".spv"; }
+
     virtual bool WasResized() const = 0;
     virtual void ResetResized() = 0;
     virtual void NotifyResized() = 0;
@@ -92,6 +96,12 @@ public:
     virtual void CopyBufferToImage(RHIBuffer buffer, RHIImage image,
         uint32_t width, uint32_t height) = 0;
 
+    // Row-pitch alignment (in bytes) required for buffer->texture staging
+    // buffers. D3D12 requires a multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+    // (256) when UnrestrictedBufferTextureCopyPitchSupported is false; Vulkan
+    // copies tightly-packed rows (bufferRowLength=0), so it returns 1.
+    virtual uint32_t GetCopyRowPitchAlignment() const { return 1; }
+
     virtual RHIRenderPass CreateRenderPass(const std::vector<Format>& colorFormats,
         Format depthFormat, bool overlay) = 0;
     virtual void DestroyRenderPass(RHIRenderPass renderPass) = 0;
@@ -134,12 +144,15 @@ public:
 // Factory: create the default backend (Vulkan) for a window.
 class LEIR_API BackendFactory {
 public:
-    // Creates the backend selected by the LEIR_BACKEND macro. Returns nullptr
-    // on failure.
+    // Creates the backend selected by the LEIR_BACKEND macro (overridable at
+    // runtime via the LEIR_BACKEND env var: "vulkan" / "d3d12"). Returns
+    // nullptr on failure.
     static RenderBackend* Create(void* window, int width, int height,
         bool vsync, const std::string& appName);
-    // Creates a specific backend (Vulkan).
+    // Creates a specific backend.
     static RenderBackend* CreateVulkan(void* window, int width, int height,
+        bool vsync, const std::string& appName);
+    static RenderBackend* CreateD3D12(void* window, int width, int height,
         bool vsync, const std::string& appName);
     static void Destroy(RenderBackend* backend);
 };

@@ -12,7 +12,7 @@ struct SpritePushConstants {
 };
 
 [[vk::push_constant]]
-SpritePushConstants push;
+SpritePushConstants push : register(b1, space0);
 
 [shader("fragment")]
 float4 main(PSInput input) : SV_Target {

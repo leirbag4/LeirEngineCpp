@@ -133,6 +133,11 @@ void Material::CreatePipeline(RHI::RHIRenderPass renderPass)
 
     auto binding = Vertex::GetBindingDescription();
     auto attrs = Vertex::GetAttributeDescriptions();
+    // D3D12 input-layout semantic names (ignored by the Vulkan backend). Must
+    // match the semantics Slang derives from the shader's varying fields.
+    static const char* kBasicSemantics[] = { "POSITION", "NORMAL", "TEXCOORD" };
+    for (size_t i = 0; i < attrs.size() && i < 3; ++i)
+        attrs[i].semantic = kBasicSemantics[i];
 
     RHI::RHIPipelineDesc desc{};
     desc.layout = m_PipelineLayout;

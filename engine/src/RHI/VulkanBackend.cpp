@@ -1,8 +1,13 @@
 #include "LeirEngine/RHI/VulkanBackend.h"
+#if defined(_WIN32) && defined(_MSC_VER)
+#include "LeirEngine/RHI/D3D12Backend.h"
+#endif
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
 #include <vulkan/vulkan.h>
+#include <cctype>
 #include <cstring>
+#include <cstdlib>
 #include <stdexcept>
 
 #include "LeirEngine/Core/Log.h"
@@ -21,6 +26,18 @@ namespace RHI {
 namespace {
 
 // ---- enum conversions ----
+
+// Case-insensitive ASCII compare (avoids _stricmp, which is not portable to
+// the Linux/macOS CI runners).
+bool EqualNoCase(const char* a, const char* b) {
+    while (*a && *b) {
+        char ca = static_cast<char>(std::tolower(static_cast<unsigned char>(*a)));
+        char cb = static_cast<char>(std::tolower(static_cast<unsigned char>(*b)));
+        if (ca != cb) return false;
+        ++a; ++b;
+    }
+    return *a == *b;
+}
 
 VkFormat ToVk(Format f) {
     switch (f) {
@@ -819,17 +836,32 @@ void VulkanBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
 
 RenderBackend* BackendFactory::Create(void* window, int width, int height,
     bool vsync, const std::string& appName) {
-#if LEIR_BACKEND == LEIR_BACKEND_VULKAN
-    return CreateVulkan(window, width, height, vsync, appName);
+    // Runtime override (LEIR_BACKEND env var) takes precedence for testing.
+    // The compile-time LEIR_BACKEND macro stays the default.
+    const char* env = std::getenv("LEIR_BACKEND");
+    if (env && EqualNoCase(env, "d3d12"))
+        return CreateD3D12(window, width, height, vsync, appName);
+#if LEIR_BACKEND == LEIR_BACKEND_D3D12
+    return CreateD3D12(window, width, height, vsync, appName);
 #else
-    (void)window; (void)width; (void)height; (void)vsync; (void)appName;
-    return nullptr;
+    return CreateVulkan(window, width, height, vsync, appName);
 #endif
 }
 
 RenderBackend* BackendFactory::CreateVulkan(void* window, int width, int height,
     bool vsync, const std::string& appName) {
     return new VulkanBackend(window, width, height, vsync, appName);
+}
+
+RenderBackend* BackendFactory::CreateD3D12(void* window, int width, int height,
+    bool vsync, const std::string& appName) {
+#if defined(_WIN32) && defined(_MSC_VER)
+    return new D3D12Backend(window, width, height, vsync, appName);
+#else
+    // D3D12 backend requires MSVC (MinGW CI builds Vulkan only).
+    (void)window; (void)width; (void)height; (void)vsync; (void)appName;
+    return nullptr;
+#endif
 }
 
 void BackendFactory::Destroy(RenderBackend* backend) {

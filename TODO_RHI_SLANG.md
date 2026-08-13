@@ -126,7 +126,7 @@ createGlobalSession()                       // UNA vez, al abrir el editor (~30-
 | Target | Formato | Estado Slang | Uso |
 |---|---|---|---|
 | Vulkan | SPIR-V | ✅ soportado | Windows/Linux/Android |
-| D3D12 | DXIL (`sm_6_6`) | ✅ soportado | Windows |
+| D3D12 | DXIL (`sm_6_0` — el driver Intel UHD soporta hasta 6.5; `sm_6_6` falla en PSO creation, ver Fase 2b) | ✅ soportado | Windows |
 | Metal | MSL | ⚠️ experimental | macOS/iOS |
 | WebGPU | WGSL | ⚠️ WIP | Web |
 | WebGL2 | GLSL ES 3.00 (`#version 300 es`) | ⚠️ limitado | Web fallback |
@@ -339,6 +339,29 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
           `m_RenderFinishedSemaphores` (los crea `CreateSwapchain`, que corre antes en el ctor).
 - [ ] **Fase 2b — Backend D3D12** (v2, sobre la misma RHI mínima): implementar la interfaz con
       D3D12; los shaders ya están en DXIL desde Fase 0/1. `LEIR_BACKEND=d3d12` corre igual.
+      **Avance 2026-08-12**: `D3D12Backend` implementa la RHI mínima completa (device, buffers,
+      textures 2D + staging con row-pitch alineado, samplers, descriptor sets sobre heaps
+      shader-visible, pipeline layout/root signature con CBV root + tablas SRV/SAMPLER, PSO,
+      framebuffer/render pass, swapchain 3 buffers con fences por frame). Dos bugs de driver/compilación
+      encontrados y resueltos con datos (info queue):
+      - **Device removed** (`0x887A0005`, reason `0x887A0001`): `CopyTextureRegion` exige
+        `RowPitch % 256 == 0` (`D3D12_TEXTURE_DATA_PITCH_ALIGNMENT`) cuando
+        `UnrestrictedBufferTextureCopyPitchSupported=false` (Intel UHD) — la textura 1×1 usaba
+        row pitch 4. Fix: `RenderBackend::GetCopyRowPitchAlignment()` (1 por defecto, 256 en
+        D3D12) y `Texture2D`/`CopyBufferToImage` alinean el staging por filas.
+      - **PSO creation fail** (`0x80070057`/E_INVALIDARG): el driver Intel solo soporta hasta
+        `sm_6_5` y los DXIL se compilaban `sm_6_6`. Fix: CMake usa `-profile sm_6_0`.
+      - **Crash Intel UMD en `SetGraphicsRootDescriptorTable`** (AV `0xc0000005` en
+        `igd12umd64.dll`, offset fijo `0x1ad7da` en cada run): se llamaba a los setters de root
+        arguments **sin vincular antes la root signature** (`SetGraphicsRootSignature`), undefined
+        behavior que el driver Intel materializa como AV. Fix: `CmdBindDescriptorSets` enlaza la
+        root signature del layout antes de tocar root params. (Un intento intermedio de migrar el
+        sampler set a SRV root descriptor + root sampler se descartó: **las texturas no admiten
+        root descriptors** — solo Raw/Structured buffers, `Root Signature doesn't match Pixel
+        Shader`; se mantienen las tablas de descriptores.)
+      **Estado**: `LEIR_BACKEND=d3d12` corre el editor (12-15 s sin crash, con y sin debug layer),
+      stderr limpio, binds de descriptor sets OK, sin device removal. Pendiente: verificar render
+      visual del viewport + UI, resize, y limpiar la ruta de teardown D3D12.
 - [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
       `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato.
       Verificación: exportar shaders por plataforma; **hot-reload de shaders funcionando**.
