@@ -238,6 +238,7 @@ struct D3D12Backend::Impl {
 
     // Current pipeline (for vertex-buffer stride in CmdBindVertexBuffer)
     PipelineRec* currentPipeline = nullptr;
+    ComPtr<ID3D12RootSignature> currentRootSig;
 
     Impl(void* window, int w, int h, bool vs, const std::string& appName) {
         hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
@@ -570,6 +571,7 @@ bool D3D12Backend::BeginFrame(bool skipRenderPass) {
 
     ID3D12DescriptorHeap* heaps[] = { im.srvHeap.Get(), im.samplerHeap.Get() };
     im.cmdList->SetDescriptorHeaps(2, heaps);
+    im.currentRootSig.Reset();
 
     // Back buffer: PRESENT -> RENDER_TARGET
     D3D12_RESOURCE_BARRIER bbBarrier{};
@@ -1244,6 +1246,11 @@ void D3D12Backend::CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) {
     m_Impl->cmdList->SetPipelineState(rec->pso.Get());
     m_Impl->cmdList->IASetPrimitiveTopology(rec->primitiveTopology);
     m_Impl->currentPipeline = rec;
+    // Root signature must be bound before any root-argument setters; binding it
+    // here (only once per pipeline change) preserves root arguments (e.g. push
+    // constants) written between the pipeline bind and the descriptor-set bind.
+    m_Impl->cmdList->SetGraphicsRootSignature(rec->layout->rootSig.Get());
+    m_Impl->currentRootSig = rec->layout->rootSig;
 }
 
 void D3D12Backend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout layout,
@@ -1251,9 +1258,14 @@ void D3D12Backend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout
     (void)cmd;
     Impl& im = *m_Impl;
     PipelineLayoutRec* pl = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
-    // Root signature must be bound before any root-argument setters; omitting
-    // this made the Intel UMD fault inside SetGraphicsRootDescriptorTable.
-    im.cmdList->SetGraphicsRootSignature(pl->rootSig.Get());
+    // Bind the root signature only when it changes. Re-binding the same root
+    // signature invalidates previously set root arguments (including push
+    // constants), which made UIRenderer's push-then-bind-descriptor-sets order
+    // drop screenSize -> all quads collapsed -> empty window.
+    if (pl->rootSig.Get() != im.currentRootSig.Get()) {
+        im.cmdList->SetGraphicsRootSignature(pl->rootSig.Get());
+        im.currentRootSig = pl->rootSig;
+    }
     for (size_t i = 0; i < sets.size(); ++i) {
         uint32_t setIndex = firstSet + (uint32_t)i;
         DescSetRec* set = reinterpret_cast<DescSetRec*>(sets[i].handle);
