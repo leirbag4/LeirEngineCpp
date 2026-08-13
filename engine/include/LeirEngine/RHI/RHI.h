@@ -250,9 +250,12 @@ struct RHIViewportState {
 
 struct RHIClearValue {
     // color (rgba) or depthStencil — only one is meaningful per attachment.
+    // Set isDepth=true for a depth attachment clear (VkClearValue is a union,
+    // so the backend must only write the matching member).
     Vector4 color = {0.0f, 0.0f, 0.0f, 1.0f};
     float depth = 1.0f;
     uint32_t stencil = 0;
+    bool isDepth = false;
 };
 
 struct RHIDescriptorImageInfo {

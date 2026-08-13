@@ -689,8 +689,11 @@ void VulkanBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass rende
     vkClears.reserve(clearValues.size());
     for (const auto& c : clearValues) {
         VkClearValue vc{};
-        vc.color = { {c.color.x, c.color.y, c.color.z, c.color.w} };
-        vc.depthStencil = { c.depth, c.stencil };
+        if (c.isDepth) {
+            vc.depthStencil = { c.depth, c.stencil };
+        } else {
+            vc.color = { {c.color.x, c.color.y, c.color.z, c.color.w} };
+        }
         vkClears.push_back(vc);
     }
 

@@ -108,6 +108,7 @@ void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearVa
 
     RHI::RHIClearValue depthClearValue;
     depthClearValue.depth = depthClear;
+    depthClearValue.isDepth = true;
 
     m_Device->CmdBeginRenderPass(cmd, m_RenderPass, m_Framebuffer,
         { clearColor, depthClearValue }, m_Width, m_Height);
