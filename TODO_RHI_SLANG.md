@@ -363,7 +363,57 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
       stderr limpio, binds de descriptor sets OK, sin device removal. **Paridad de render D3D12 vs
       Vulkan completada y verificada por el usuario (2026-08-13)**: colores, orientación de cubo/
       cámara y nitidez de texto con `hidpi:true` idénticos (ver checkboxes BUG01/BUG02/BUG03 abajo).
-      Pendiente menor: limpiar la ruta de teardown D3D12.
+      **Teardown D3D12 verificado (2026-08-13)**: cierre limpio en 162-186 ms, sin VUIDs ni crash
+      (ver "Teardown limpio" abajo).
+
+#### Teardown limpio D3D12 (2026-08-13, verificado)
+
+- [x] **Teardown limpio verificado con cierre normal** (antes se mataba el proceso con
+      `Stop-Process` y nunca se sabía si salía sin VUIDs). Reproducción: lanzar el editor, esperar
+      y cerrar con `WM_CLOSE` → los `[Timing]` de `main.cpp`/`CoreApplication.cpp` bisecan el
+      teardown; un crash caía directo a WER (varios segundos) sin log porque `CrashDiagnostics`
+      solo atrapaba excepciones C++.
+- **Fix 1 — `CrashDiagnostics` con `SetUnhandledExceptionFilter`** (`OnUnhandledException` →
+  `LogStackWalk`, `EXCEPTION_EXECUTE_HANDLER` = sin WER ni diálogo). Cierra el hueco SEH/AV que
+  dejaba cualquier crash nativo mudo (y que también habría atrapado el bug del double-free de
+  Vulkan).
+- **Fix 2 — el crash real (0x87d en teardown)**: el SEH dump apuntó a
+  `RenderTexture::~RenderTexture` → `DestroyResources` → `DestroyMemory` → release de un
+  `ID3D12Resource` todavía referenciado por la GPU. La **debug layer** D3D12
+  (`D3D12SDKLayers`) levantó `0x87d` en el release. El dtor destruía recursos **sin `WaitIdle`**
+  (a diferencia de `Resize()`, que sí espera). Fix: `m_Device->WaitIdle()` al inicio de
+  `RenderTexture::~RenderTexture`. Resultado: cierre 162-186 ms, teardown completo, sin
+  `crash_diagnostics.log` y sin reportes WER nuevos (3 corridas).
+
+
+#### Limitaciones conocidas del backend D3D12 (2026-08-13)
+
+> **DECISIÓN (registrada)**: los dos ítems de abajo se **documentan como limitación** y se resuelven
+> de raíz en el **RHI completo (§3)**, no en la RHI mínima. NO arreglarlos ahora.
+
+1. **Slots de descriptores SRV/sampler que nunca se liberan.** El backend aloca un slot del
+   `srvHeap` (4096) por cada `WriteDescriptorSets` de imagen (`AllocSrv()`, `D3D12Backend.cpp:912`)
+   y un slot de `samplerHeap` (64) por cada sampler único (`AllocSampler()`, cacheado), pero **nunca
+   los devuelve**: la interfaz `RenderBackend` no tiene `DestroyDescriptorSet`, y `DestroyImageView`
+   solo libera slots RTV/DSV (`D3D12Backend.cpp:1089-1094`). Consecuencia: cada (re)creación del
+   descriptor del viewport RT (cada resize) gotea **1 slot SRV**; el sampler gotea solo con
+   combinaciones filtro/address nuevas (acotado). El heap SRV es 4096 → no se agota en una sesión
+   normal (solo con cientos de resizes en un mismo run); en el reinicio se recrea desde cero.
+   **Por qué no se arregla ahora**: la solución "correcta" (free list en `DestroyDescriptorSet`)
+   exige tocar la interfaz RHI + ambos backends + todos los owners; el leak es lento y no afecta
+   render ni teardown. **En el RHI completo esto desaparece**: los motores profesionales (Unity,
+   Unreal, Godot; guías Microsoft/Khronos) NO dejan descriptores huérfanos — usan **pools con free
+   list**, **ring buffers por frame** (descriptores efímeros, reset del ring al fin del frame), o
+   **bindless** (heap gigante + índices directos en el shader, nada se libera). El diseño §3 ya
+   apunta a **bindless-first + bindings por reflection** (ver checkbox Fase "Migración al RHI
+   completo"), así que la deuda se paga ahí.
+2. **`cmdList4` sin uso** (residuo del intento descartado de root sampler): declarado en
+   `D3D12Backend.cpp:196` y creado por `QueryInterface` en `CreateFrameObjects` (`:423`), nunca se
+   usa. Se puede eliminar en cualquier limpieza menor.
+3. **`mainRenderPass`/`overlayRenderPass` nunca borrados** en `~Impl` (2 `RenderPassRec` `new` en el
+   ctor, usados como handles por el render pipeline que NO los destruye). Leak cosmético de ~2
+   structs por backend; el `RenderTexture` sí crea/destruye su propio render pass.
+
 ### Checkboxes — Paridad de render D3D12 vs Vulkan (Fase 2b, 2026-08-13)
 
 Los 3 bugs reportados al activar `LEIR_BACKEND=d3d12` con `hidpi:true`. Objetivo: render visual

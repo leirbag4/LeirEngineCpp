@@ -16,6 +16,12 @@ RenderTexture::RenderTexture(RHI::RenderBackend* device, uint32_t width, uint32_
 
 RenderTexture::~RenderTexture()
 {
+    // Drain the GPU before destroying the resources: the last frame may still
+    // be rendering to/from them (the editor destroys the viewport RT in
+    // OnShutdown, before the backend's own WaitIdle runs). Mirrors Resize().
+    // Without this the D3D12 debug layer raises 0x87d (resource destroyed while
+    // in GPU use) → unhandled break → WER → multi-second close.
+    m_Device->WaitIdle();
     DestroyDescriptorResources();
     DestroyResources();
     if (m_Sampler.IsValid()) m_Device->DestroySampler(m_Sampler);

@@ -98,9 +98,10 @@ void OnInvalidParam(const wchar_t* expression, const wchar_t* function,
     abort();
 }
 
-// Symbolized stack walk of the whole process via DbgHelp. Used by the alloc
-// hook below to pinpoint the call site that requests the huge allocation.
-void LogStackWalk(size_t size)
+// Symbolized stack walk of the whole process via DbgHelp. Logs the current
+// stack (the call chain that reached this handler). The "where" header line
+// is caller-supplied so it works for bad_alloc AND the SEH handler.
+void LogStackWalk(const char* header)
 {
     HANDLE proc = GetCurrentProcess();
     static bool symInit = false;
@@ -114,7 +115,7 @@ void LogStackWalk(size_t size)
     void* stack[64];
     USHORT frames = CaptureStackBackTrace(0, 64, stack, nullptr);
 
-    LogDiagf("[bad_alloc] size=%zu frames=%u", size, (unsigned)frames);
+    LogDiagf("%s frames=%u", header, (unsigned)frames);
 
     for (USHORT i = 0; i < frames; ++i) {
         DWORD64 addr = (DWORD64)stack[i];
@@ -135,6 +136,22 @@ void LogStackWalk(size_t size)
     }
 }
 
+// SEH (access violation / heap / any native exception) handler. set_terminate
+// only covers C++ exceptions; a plain AV or a CRT-raised code would otherwise
+// fall straight through to WER with no log (that is exactly how the old
+// 5s-close double-free and the D3D12 teardown crash went undiagnosed). Log the
+// fault + a stack walk, then terminate the process immediately (no WER dialog,
+// no seconds-long dump collection).
+LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* ep)
+{
+    char where[256];
+    snprintf(where, sizeof(where), "[SEH] unhandled exception code=0x%08X at 0x%p",
+        (unsigned)(ep ? ep->ExceptionRecord->ExceptionCode : 0),
+        ep ? ep->ExceptionRecord->ExceptionAddress : nullptr);
+    LogStackWalk(where);
+    return EXCEPTION_EXECUTE_HANDLER; // handled here: log + clean exit, no WER
+}
+
 // MSVC CRT debug allocation hook: catches (>512MB) allocations process-wide
 // (engine DLL + editor share the debug heap) and logs a symbolized stack walk
 // BEFORE bad_alloc aborts, pointing at the call site that asks for the huge
@@ -151,7 +168,7 @@ int MyAllocHook(int allocType, void* /*userData*/, size_t size, int blockType,
             filename ? reinterpret_cast<const char*>(filename) : "(null)", lineNumber);
         if (!inHook) {
             inHook = true;
-            LogStackWalk(size);
+            LogStackWalk("[bad_alloc]");
             inHook = false;
         }
     }
@@ -167,6 +184,7 @@ void Init()
     std::set_terminate(&OnTerminate);
     _set_invalid_parameter_handler(&OnInvalidParam);
     _CrtSetAllocHook(&MyAllocHook);
+    SetUnhandledExceptionFilter(&OnUnhandledException);
 #elif defined(__APPLE__)
     // TODO(macOS): register std::signal handlers (SIGSEGV/SIGABRT) + a
     // backtrace()/execinfo stack dump to ~/Library/Logs/LeirEngine/. The
