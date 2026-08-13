@@ -297,9 +297,9 @@ se migran al RHI completo en un paso posterior, cuando la RHI mínima esté esta
 backends desktop.
 
 ```
-Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] → [RHI mínima + D3D12]
-                                                             ↓ (estable, 2 backends desktop)
-                                                      RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
+Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima + D3D12]
+                                                              ↓ (estable, 2 backends desktop)
+                                                       RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
 ```
 
 ### Checkboxes de fases
@@ -310,19 +310,33 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] → [RHI mínima + D3
 - [x] **Fase 1** — Migrar shaders a `.slang` + `slangc` en CMake (renderer Vulkan intacto).
       **Hecho 2026-08-12** — 6 `.slang` en `engine/shaders/`, CMake usa
       `slangc -target spirv -profile spirv_1_3`, `.spv` en la misma ruta/nombres; render idéntico.
-- [ ] **Fase 2a — RHI mínima + backend Vulkan** (paso previo al RHI completo §3):
-  - [ ] Definir interfaz `RenderBackend`/`IRHI` mínima en headers públicos SIN `Vk*`:
-        handles opacos `RHICommandBuffer`, `RHIBuffer`, `RHITexture`, `RHIImageView`,
-        `RHISampler`, `RHIPipeline`, `RHIPipelineLayout`, `RHIDescriptorSet`,
-        `RHIDescriptorSetLayout`, `RHIRenderPass`, `RHIResource`.
-  - [ ] Implementar backend **Vulkan**: adaptar `VulkanDevice` para que implemente la interfaz
-        (o un `VulkanBackend` que la envuelva), **sin reescribir** la lógica Vulkan existente.
-  - [ ] Migrar `Shader`, `Material`, `Mesh`, `Texture2D`, `RenderTexture`, `RenderPipeline`,
-        `UIRenderer` para usar la interfaz RHI (reemplazar `Vk*` por handles opacos).
-  - [ ] Migrar `editor/src/main.cpp` para crear el backend RHI (Vulkan por defecto) en vez de
-        `VulkanDevice` directo.
-  - [ ] Verificación: **regresión cero** (render idéntico), headers públicos sin `Vk*`,
-        validation layers limpias, selector de backend `LEIR_BACKEND`.
+- [x] **Fase 2a — RHI mínima + backend Vulkan** (paso previo al RHI completo §3).
+      **Hecho 2026-08-12** (commit `737dd53` + fixes `e4f186b`/`8345ce0`):
+  - [x] Interfaz `RenderBackend`/`IRHI` mínima en headers públicos SIN `Vk*`: handles opacos
+        `RHICommandBuffer`, `RHIBuffer`, `RHITexture`, `RHIImageView`, `RHISampler`, `RHIPipeline`,
+        `RHIPipelineLayout`, `RHIDescriptorSet`, `RHIDescriptorSetLayout`, `RHIRenderPass`,
+        `RHIFramebuffer`, `RHIDeviceMemory` (+ structs `RHIClearValue`, `RHIDescriptorWrite`,
+        `RHIDescriptorImageInfo`, `RHIDescriptorBufferInfo`, enums de formato/uso/estado/layout).
+  - [x] Backend **Vulkan**: `VulkanBackend` que envuelve/adapta `VulkanDevice` (lógica nativa intacta).
+        Se crea vía `BackendFactory::Create()` según el selector `LEIR_BACKEND` (`LEIR_BACKEND_VULKAN`
+        por defecto). Incluye `WaitIdle()`, `CmdTransitionImageLayout`, `CmdPushConstants` (con
+        `ShaderStageMask`).
+  - [x] Migrados a la interfaz RHI: `Shader`, `Material`, `Mesh`, `Texture2D`, `RenderTexture`,
+        `RenderPipeline`, `UIRenderer`, `Font` (+ ejemplo `PhysicsDemo`). Headers públicos sin `Vk*`
+        (solo `VulkanDevice.h`/`VulkanBackend.h` tocan Vulkan, ambos internos).
+  - [x] `editor/src/main.cpp` crea el backend RHI (`BackendFactory::Create`) en vez de `VulkanDevice`
+        directo.
+  - [x] Verificación **regresión cero**: render idéntico, validation layers limpias (stderr vacío),
+        selector `LEIR_BACKEND` funcionando. Fixes incluidos en la misma tanda:
+        - `CmdTransitionImageLayout` en `RenderTexture::BeginRender/EndRender` (transiciones del RT
+          que la migración había perdido).
+        - `WaitIdle()` en `RenderTexture::Resize` (elimina flicker/glitch al arrastrar splitters).
+        - Semáforos render-finished **por imagen de swapchain** + in-flight fence por imagen
+          (`VUID-vkQueueSubmit-pSignalSemaphores-00067`).
+        - Bug de la unión `VkClearValue` en `CmdBeginRenderPass` (el clear de color se pisaba con el
+          del depth → fondo magenta del viewport; se añadió `RHIClearValue::isDepth`).
+        - Crash de arranque (`vector Line 1931`): `CreateSyncObjects` ya no toca
+          `m_RenderFinishedSemaphores` (los crea `CreateSwapchain`, que corre antes en el ctor).
 - [ ] **Fase 2b — Backend D3D12** (v2, sobre la misma RHI mínima): implementar la interfaz con
       D3D12; los shaders ya están en DXIL desde Fase 0/1. `LEIR_BACKEND=d3d12` corre igual.
 - [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
