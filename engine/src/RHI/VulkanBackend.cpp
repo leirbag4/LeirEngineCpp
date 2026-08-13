@@ -772,6 +772,46 @@ void VulkanBackend::CmdBarrier(RHICommandBuffer cmd) {
     (void)cmd;
 }
 
+void VulkanBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
+    Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) {
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = ToVk(oldLayout);
+    barrier.newLayout = ToVk(newLayout);
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = reinterpret_cast<VkImage>(image.handle);
+    barrier.subresourceRange.aspectMask = ToVk(aspect);
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags srcStage, dstStage;
+    if (oldLayout == ImageLayout::Undefined &&
+        newLayout == ImageLayout::ColorAttachment) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } else if (oldLayout == ImageLayout::ColorAttachment &&
+               newLayout == ImageLayout::ShaderReadOnly) {
+        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        srcStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+
+    vkCmdPipelineBarrier(reinterpret_cast<VkCommandBuffer>(cmd.handle),
+        srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    (void)format;
+}
+
 // ---- Factory ----
 
 RenderBackend* BackendFactory::Create(void* window, int width, int height,

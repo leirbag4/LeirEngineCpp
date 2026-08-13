@@ -174,6 +174,7 @@ private:
     std::vector<VkSemaphore> m_ImageAvailableSemaphores;
     std::vector<VkSemaphore> m_RenderFinishedSemaphores;
     std::vector<VkFence> m_InFlightFences;
+    std::vector<VkFence> m_ImagesInFlight; // per swapchain image (which fence last used it)
     uint32_t m_CurrentFrame = 0;
     bool m_FramebufferResized = false;
 

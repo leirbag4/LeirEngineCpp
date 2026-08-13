@@ -121,6 +121,8 @@ public:
     void CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewport) override;
     void CmdSetScissor(RHICommandBuffer cmd, const RHIRect2D& scissor) override;
     void CmdBarrier(RHICommandBuffer cmd) override;
+    void CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
+        Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) override;
 
 private:
     struct Impl;

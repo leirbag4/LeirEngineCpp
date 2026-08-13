@@ -67,10 +67,10 @@ VulkanDevice::~VulkanDevice()
         m_RenderPass = VK_NULL_HANDLE;
     }
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
         vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
         vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
     }
+    // m_RenderFinishedSemaphores (per swapchain image) are freed in CleanupSwapchain.
     vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
     auto t2 = std::chrono::steady_clock::now();
     XConsole::Debug("[Timing] VulkanDevice resource destruction: {:.1f} ms", ms(t1, t2));
@@ -357,7 +357,18 @@ void VulkanDevice::CreateSwapchain()
 
     vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &imageCount, nullptr);
     m_SwapchainImages.resize(imageCount);
+    m_ImagesInFlight.resize(imageCount, VK_NULL_HANDLE);
     vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &imageCount, m_SwapchainImages.data());
+
+    // One render-finished semaphore per swapchain image, so a presented image's
+    // semaphore is only reused once that image is re-acquired (indexing by the
+    // frame slot reused the semaphore while the swapchain still referenced it
+    // → VUID-vkQueueSubmit-pSignalSemaphores-00067).
+    VkSemaphoreCreateInfo semInfo{};
+    semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    m_RenderFinishedSemaphores.resize(imageCount);
+    for (uint32_t i = 0; i < imageCount; ++i)
+        vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_RenderFinishedSemaphores[i]);
     m_SwapchainFormat = format.format;
     m_SwapchainExtent = extent;
 }
@@ -637,7 +648,6 @@ void VulkanDevice::CreateCommandBuffers()
 void VulkanDevice::CreateSyncObjects()
 {
     m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkSemaphoreCreateInfo semInfo{};
@@ -649,9 +659,12 @@ void VulkanDevice::CreateSyncObjects()
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_ImageAvailableSemaphores[i]);
-        vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_RenderFinishedSemaphores[i]);
         vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]);
     }
+
+    // Render-finished semaphores are created per swapchain image in
+    // CreateSwapchain (indexed by the acquired image, not by frame).
+    m_RenderFinishedSemaphores.clear();
 }
 
 // ---- Frame Lifecycle ----
@@ -670,6 +683,14 @@ bool VulkanDevice::BeginFrame(bool skipRenderPass)
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
+
+    // If the swapchain image was used by a previous frame, wait for that frame
+    // to finish before writing to it again (prevents re-acquiring an image that
+    // is still being presented, which reuses the acquire semaphore while it is
+    // in flight → VUID-vkQueueSubmit-pSignalSemaphores-00067).
+    if (m_ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        vkWaitForFences(m_Device, 1, &m_ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    m_ImagesInFlight[imageIndex] = m_InFlightFences[m_CurrentFrame];
 
     vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
@@ -817,6 +838,8 @@ void VulkanDevice::EndFrame()
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 
+    VkSemaphore renderFinished = m_RenderFinishedSemaphores[m_CurrentImageIndex];
+
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -827,14 +850,14 @@ void VulkanDevice::EndFrame()
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &cmd;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &m_RenderFinishedSemaphores[m_CurrentFrame];
+    submitInfo.pSignalSemaphores = &renderFinished;
 
     vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFences[m_CurrentFrame]);
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphores[m_CurrentFrame];
+    presentInfo.pWaitSemaphores = &renderFinished;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &m_Swapchain;
     presentInfo.pImageIndices = &m_CurrentImageIndex;
@@ -891,6 +914,10 @@ void VulkanDevice::CleanupSwapchain()
     vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
     vkDestroyImage(m_Device, m_DepthImage, nullptr);
     vkFreeMemory(m_Device, m_DepthMemory, nullptr);
+
+    for (auto sem : m_RenderFinishedSemaphores)
+        vkDestroySemaphore(m_Device, sem, nullptr);
+    m_RenderFinishedSemaphores.clear();
 
     for (auto fb : m_SwapchainFramebuffers)
         vkDestroyFramebuffer(m_Device, fb, nullptr);

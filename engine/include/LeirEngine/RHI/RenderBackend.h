@@ -123,6 +123,12 @@ public:
 
     // ---- Pipeline barrier (manual, for RT transitions inside a command) ----
     virtual void CmdBarrier(RHICommandBuffer cmd) = 0;
+
+    // Record an image-layout transition inside the given command buffer
+    // (used by RenderTexture to move its color attachment between
+    // COLOR_ATTACHMENT and SHADER_READ_ONLY each frame).
+    virtual void CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
+        Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) = 0;
 };
 
 // Factory: create the default backend (Vulkan) for a window.

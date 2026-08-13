@@ -27,6 +27,13 @@ void RenderTexture::Resize(uint32_t width, uint32_t height)
     if (width == m_Width && height == m_Height)
         return;
 
+    // Wait for the GPU to finish using the current resources before destroying
+    // them (they are recreated at the new size below). Without this wait,
+    // destroying the image/framebuffer while the previous frame still renders
+    // to it causes flicker/glitches during splitter drags (restored from the
+    // pre-RHI implementation).
+    m_Device->WaitIdle();
+
     DestroyResources();
     m_Width = width;
     m_Height = height;
@@ -91,6 +98,14 @@ void RenderTexture::DestroyResources()
 
 void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearValue& clearColor, float depthClear)
 {
+    // Transition the color image to COLOR_ATTACHMENT_OPTIMAL before the render
+    // pass. The render pass initialLayout is COLOR_ATTACHMENT_OPTIMAL, but the
+    // previous frame's EndRender left it in SHADER_READ_ONLY — a mismatch the
+    // validation layer rejects (VUID-vkCmdDraw-None-09600) and that reads back
+    // garbage (magenta viewport). Restored from the pre-RHI implementation.
+    m_Device->CmdTransitionImageLayout(cmd, m_ColorImage, RHI::Format::B8G8R8A8_SRGB,
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment, RHI::Aspect::Color);
+
     RHI::RHIClearValue depthClearValue;
     depthClearValue.depth = depthClear;
 
@@ -101,6 +116,10 @@ void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearVa
 void RenderTexture::EndRender(RHI::RHICommandBuffer cmd)
 {
     m_Device->CmdEndRenderPass(cmd);
+
+    // Sync so the sampled read (UI viewport) sees the rendered content.
+    m_Device->CmdTransitionImageLayout(cmd, m_ColorImage, RHI::Format::B8G8R8A8_SRGB,
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly, RHI::Aspect::Color);
 }
 
 RHI::RHIDescriptorImageInfo RenderTexture::GetDescriptorInfo() const
