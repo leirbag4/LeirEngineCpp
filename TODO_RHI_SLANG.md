@@ -360,8 +360,10 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
         root descriptors** — solo Raw/Structured buffers, `Root Signature doesn't match Pixel
         Shader`; se mantienen las tablas de descriptores.)
       **Estado**: `LEIR_BACKEND=d3d12` corre el editor (12-15 s sin crash, con y sin debug layer),
-      stderr limpio, binds de descriptor sets OK, sin device removal. Pendiente: verificar render
-      visual del viewport + UI, resize, y limpiar la ruta de teardown D3D12.
+      stderr limpio, binds de descriptor sets OK, sin device removal. **Paridad de render D3D12 vs
+      Vulkan completada y verificada por el usuario (2026-08-13)**: colores, orientación de cubo/
+      cámara y nitidez de texto con `hidpi:true` idénticos (ver checkboxes BUG01/BUG02/BUG03 abajo).
+      Pendiente menor: limpiar la ruta de teardown D3D12.
 ### Checkboxes — Paridad de render D3D12 vs Vulkan (Fase 2b, 2026-08-13)
 
 Los 3 bugs reportados al activar `LEIR_BACKEND=d3d12` con `hidpi:true`. Objetivo: render visual
@@ -370,19 +372,35 @@ la convención NDC es **per-backend** (D3D12/Metal/WebGL: y-up → viewport posi
 y-down → viewport negativo); el código compartido (Camera, RenderPipeline) queda como matemática
 GLM pura y front-face **CCW en todos los backends**.
 
-- [ ] **BUG03 — cubo invertido/faltan caras + eje Y de cámara invertido (D3D12)**.
+- [x] **BUG03 — cubo invertido/faltan caras + eje Y de cámara invertido (D3D12)**.
       Causa: `Camera::SetPerspective` hace `m_ProjectionMatrix(1,1) *= -1.0f` incondicional — era
       la compensación de Vulkan (NDC y-down) pero rompe D3D12 (NDC y-up, igual a GLM). Fix:
       quitar el flip de `Camera` y mover la compensación al backend Vulkan con viewport de altura
       negativa en la pasada 3D (swapchain `VulkanDevice::BeginFrame` + `VulkanBackend::CmdBeginRenderPass`
-      para el RenderTexture). D3D12 sin cambios.
-- [ ] **BUG01 — colores más oscuros en D3D12**. Causa: swapchain D3D12 en `B8G8R8A8_UNORM`
-      (Vulkan en `B8G8R8A8_SRGB`) → sRGB no aplicada al presentar. Fix: `B8G8R8A8_UNORM_SRGB` en
-      el formato del swapchain, `ResizeBuffers` y los `colorFormats` de los render passes builtin
-      (main + overlay).
-- [ ] **BUG02 — UI pixelada con `hidpi:true` solo en D3D12**. Diagnóstico en runtime (logs de
-      sizes reales por backend) → fix según causa confirmada (candidatos: `DXGI_SCALING_STRETCH`
-      del swapchain vs atlas de fuente a resolución lógica upscaleado con sampler `Nearest`).
+      para el RenderTexture). D3D12 sin cambios. **Verificado por el usuario (2026-08-13): cubo y
+      cámara correctos en ambos backends.**
+- [x] **BUG01 — colores más oscuros en D3D12**. Causa: swapchain D3D12 en `B8G8R8A8_UNORM`
+      (Vulkan en `B8G8R8A8_SRGB`) → sRGB no aplicada al presentar. Fix original: `B8G8R8A8_UNORM_SRGB`
+      en el formato del swapchain, `ResizeBuffers` y los `colorFormats` de los render passes builtin
+      (main + overlay). **Desviación encontrada en el smoke test**: el driver **Intel UHD
+      device-removes el swapchain** (`DXGI_ERROR_DEVICE_REMOVED` 0x887A0001) al crearlo con sRGB.
+      Fix final (equivalente): el **recurso** del backbuffer queda en `UNORM` (CreateSwapchain y
+      `ResizeBuffers`), pero los **RTVs del backbuffer se crean con `B8G8R8A8_UNORM_SRGB`**
+      (`InitBackBuffers`, `D3D12_RENDER_TARGET_VIEW_DESC` con `ViewDimension=TEXTURE2D`); los
+      `colorFormats` de main/overlay pasan a `UNORM_SRGB`. El encode sRGB ocurre en el store del
+      RTV → idéntico a un swapchain sRGB. **Verificado por el usuario: colores idénticos a Vulkan.**
+- [x] **BUG02 — UI pixelada con `hidpi:true` solo en D3D12**. Diagnóstico: capturas DPI-aware +
+      análisis programático (cross-correlación → renders **alineados a píxel** entre backends,
+      escala/posiciones idénticas; solo difieren bordes de glifos en ~0.7pp). Causa confirmada:
+      el atlas de fuente se rasterizaba a **`fontSize` lógicos** (16/13px) y se upscaleaba con
+      sampler **`Nearest`** a 1.25× → trazos desiguales (grumoso). Fix universal: **rasterizar el
+      atlas a `fontSize × contentScale`** (`Font::Font(..., float contentScale)`), manteniendo
+      todas las métricas en **unidades lógicas** (atlas px ÷ scale: `advance`/`bearing`/`size`/
+      `LineHeight`/`Ascender`/`SpaceWidth`), así el layout no cambia y cada texel mapea 1:1 a un
+      píxel físico → texto nítido a cualquier DPI en **ambos** backends. `Font::SetContentScale()`
+      re-rasteriza el atlas in-place (los `Font*` holders siguen válidos); el editor la llama en
+      `OnContentScaleChanged` y pasa `GetContentScale()` al crear las fuentes. **Verificado por el
+      usuario (2026-08-13): texto perfecto en D3D12 con `hidpi:true`.**
 
 - [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
       `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato.

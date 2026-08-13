@@ -107,6 +107,11 @@ GLFW. En las 3 plataformas se usa el mismo código.
 - `InputManager`: `ToLogical(x,y)` divide por el scale efectivo en Windows (no-op en mac/linux);
   `SetContentScale()` lo setea CoreApplication (antes de `Init` y al cambiar DPI).
 - `UIRenderer`: push-constant `screenSize` = tamaño lógico del canvas (no swapchain).
+- **Font atlas (2026-08-13, fix BUG02)**: el atlas se rasteriza a **`fontSize × dpr`** con todas
+  las métricas en **unidades lógicas** (atlas px ÷ dpr), así cada texel del glifo mapea 1:1 a un
+  píxel físico → texto nítido a cualquier DPI (antes se upscaleaba un atlas de `fontSize` lógicos
+  con sampler `Nearest`, quedando grumoso a 125%). `Font::SetContentScale()` re-rasteriza in-place
+  (los `Font*` holders no se invalidan); el editor la llama en `OnContentScaleChanged`.
 - Editor: `settings.window.hidpi` (default true); RT del viewport = `lógico × dpr` (3D nítido);
   camera aspect en lógico; `OnContentScaleChanged` loguea (layout/RT se re-sincronizan por frame).
 - **Fix de arranque maximizado** (encontrado durante la verificación): el ctor ya no pisa
