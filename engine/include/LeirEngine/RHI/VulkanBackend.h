@@ -33,6 +33,8 @@ public:
     void EndFrame() override;
     void WaitIdle() override;
 
+    const GCaps& GetCaps() const override;
+
     RHICommandBuffer GetCurrentCommandBuffer() const override;
     uint32_t GetCurrentFrameIndex() const override;
     uint32_t GetSwapchainWidth() const override;
@@ -97,15 +99,16 @@ public:
         Format depthFormat, bool overlay) override;
     void DestroyRenderPass(RHIRenderPass renderPass) override;
 
+    RHIPassTemplate CreatePassTemplate(const RHIPassTemplateDesc& desc) override;
+    void DestroyPassTemplate(RHIPassTemplate passTemplate) override;
+
     RHIFramebuffer CreateFramebuffer(RHIRenderPass renderPass,
         uint32_t width, uint32_t height,
         const std::vector<RHIImageView>& attachments) override;
     void DestroyFramebuffer(RHIFramebuffer framebuffer) override;
 
-    void CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass renderPass,
-        RHIFramebuffer framebuffer,
-        const std::vector<RHIClearValue>& clearValues,
-        uint32_t width, uint32_t height) override;
+    void CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
+        RHIFramebuffer framebuffer) override;
     void CmdEndRenderPass(RHICommandBuffer cmd) override;
 
     void CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) override;

@@ -571,10 +571,18 @@ Pasos (en orden, cada uno verificado antes del siguiente):
 1. **`GCaps`** (§3.6): struct de capacidades por backend (max textures/UBOs/samplers por table,
    bindless, MRT, instancing, compute, sRGB, formatos RT). Rellenar Vulkan y D3D12; exponer vía
    `RDDevice`. Verificación: `Println` de caps por backend; degradación por `if (caps.x)`, no `#ifdef`.
+   ✅ **Hecho 2026-08-14 (Fase 1)**: `GCaps` en `RHI.h`, `RenderBackend::GetCaps()`, relleno Vulkan
+   (desde `VkPhysicalDeviceProperties/Features2` + descriptor indexing) y D3D12 (tier de binding,
+   límites de heaps). Editor imprime `[GCaps]` por backend. Verificado: Vulkan
+   `textures=200 ubo=200 samplers=64 ssbo=200 push=256B bindless=true` (iGPU Intel UHD, descriptor
+   indexing disponible); D3D12 `1M slots, samplers=2048, push=256B, bindless=true` (tier 3).
 2. **Bindings por reflection** (§3.3): `GPipeline` obtiene su firma de `IShaderCompiler::Reflect`;
    `GBindTable` se valida contra esa firma (runtime debug / load release). Eliminar los layouts
    escritos a mano y la clase de errores "Root Signature doesn't match Pixel Shader". Verificación:
    renders idénticos con validación en runtime; un binding mal puesto falla en debug.
+   → **Decisión 2026-08-14**: firma por **sidecar offline** (el exporter emite los bindings por
+   shader; el engine carga el sidecar en runtime). Engine queda 100% slang-free (§6) y el flujo es
+   idéntico para SPIR-V y DXIL (parsear DXIL en runtime exigiría linkear dxcompiler/LLVM al DLL).
 3. **Bindless-first** (§3.5): descriptor indexing (Vulkan `VK_EXT_descriptor_indexing` / D3D12
    heap SRV grande) + `GBindTable` con arrays; límite por `GCaps`, no por diseño. **Paga la deuda
    documentada** ("Limitaciones conocidas del backend D3D12" #1: slots SRV/sampler nunca liberados)
@@ -587,6 +595,14 @@ Pasos (en orden, cada uno verificado antes del siguiente):
    serializa al ejecutar. Verificación: benchmark de frame time vs hilo único.
 6. **`GPassTemplate`** (§3.1): render pass persistente/reutilizable (attachments, load/store/clear,
    scissor/viewport); `RenderTexture`/offscreen lo reusan sin re-encodear por frame.
+   ✅ **Hecho 2026-08-14 (Fase 1)**: `RHIPassTemplateDesc`/`RHIPassTemplate` en `RHI.h`,
+   `RenderBackend::CreatePassTemplate`/`DestroyPassTemplate`, `CmdBeginRenderPass` ahora toma el
+   template. Vulkan precomputa clears + viewport Y-flip + renderArea; D3D12 clears + viewport +
+   scissor. `RenderTexture` usa template persistente (recreado solo en resize o si cambian los
+   clears). Verificado: paridad de render vs baseline (Vulkan 0.3%, D3D12 0.2% de diff = cursor/FPS),
+   layers limpias, cierres 219-321 ms. Nota: bug de doble-free en Resize (destroy explícito +
+   BuildPassTemplate) arreglado durante la verificación — el crash lo capturó CrashDiagnostics
+   (doble `delete` de `PassTemplateRec` → `_Orphan_all` → 0xC0000005).
 7. **Especialización de shaders** (§3.7): generics de Slang expuestos en `GPipeline`; compilar
    variantes a pedido.
 8. **Verificación final**: paridad de render Vulkan↔D3D12 con screenshots pixel-diff; validation

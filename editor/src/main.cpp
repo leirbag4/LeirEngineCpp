@@ -152,6 +152,17 @@ protected:
             return;
         }
 
+        const auto& caps = m_Backend->GetCaps();
+        Leir::XConsole::Println(
+            "[GCaps] backend={} textures={} ubo={} samplers={} ssbo={} push={}B MRT={} maxRT={} maxTex={} "
+            "bindless={} instancing={} compute={} storage={} sRGB={} wireframe={} aniso={}",
+            m_Backend->GetShaderFileExtension(),
+            caps.maxTexturesPerTable, caps.maxUniformBuffersPerTable, caps.maxSamplersPerTable,
+            caps.maxStorageBuffersPerTable, caps.maxPushConstantsSize, caps.multiRenderTarget,
+            caps.maxColorAttachments, caps.maxTextureSize,
+            caps.bindless, caps.instancing, caps.compute, caps.storageBuffers, caps.sRGB,
+            caps.wireframe, caps.anisotropicFiltering);
+
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
             m_Backend.get(),

@@ -34,6 +34,11 @@ private:
     void UpdateDescriptor();
     void DestroyDescriptorResources();
 
+    // Builds the persistent pass template (clears + full-rect viewport/scissor).
+    // Rebuilt on Resize and when the requested clears change.
+    void BuildPassTemplate(const RHI::RHIClearValue& clearColor, float depthClear);
+    void DestroyPassTemplate();
+
     RHI::RenderBackend* m_Device;
     uint32_t m_Width, m_Height;
 
@@ -46,6 +51,9 @@ private:
     RHI::RHIImageView m_DepthImageView;
 
     RHI::RHIRenderPass m_RenderPass;
+    RHI::RHIPassTemplate m_PassTemplate;
+    RHI::RHIClearValue m_BakedClearColor;
+    float m_BakedDepthClear = 1.0f;
     RHI::RHIFramebuffer m_Framebuffer;
     RHI::RHISampler m_Sampler;
 

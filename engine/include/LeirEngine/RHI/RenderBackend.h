@@ -30,6 +30,9 @@ public:
     virtual void EndFrame() = 0;
     virtual void WaitIdle() = 0;
 
+    // Backend capabilities (TODO_RHI_SLANG.md §3.6). Filled once at creation.
+    virtual const GCaps& GetCaps() const = 0;
+
     virtual RHICommandBuffer GetCurrentCommandBuffer() const = 0;
     virtual uint32_t GetCurrentFrameIndex() const = 0;
     virtual uint32_t GetSwapchainWidth() const = 0;
@@ -106,16 +109,19 @@ public:
         Format depthFormat, bool overlay) = 0;
     virtual void DestroyRenderPass(RHIRenderPass renderPass) = 0;
 
+    // Persistent pass templates: precompute the render-pass state once (clears,
+    // viewport, scissor) so CmdBeginRenderPass just references it per frame.
+    virtual RHIPassTemplate CreatePassTemplate(const RHIPassTemplateDesc& desc) = 0;
+    virtual void DestroyPassTemplate(RHIPassTemplate passTemplate) = 0;
+
     virtual RHIFramebuffer CreateFramebuffer(RHIRenderPass renderPass,
         uint32_t width, uint32_t height,
         const std::vector<RHIImageView>& attachments) = 0;
     virtual void DestroyFramebuffer(RHIFramebuffer framebuffer) = 0;
 
     // ---- Command recording ----
-    virtual void CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass renderPass,
-        RHIFramebuffer framebuffer,
-        const std::vector<RHIClearValue>& clearValues,
-        uint32_t width, uint32_t height) = 0;
+    virtual void CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
+        RHIFramebuffer framebuffer) = 0;
     virtual void CmdEndRenderPass(RHICommandBuffer cmd) = 0;
 
     virtual void CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) = 0;

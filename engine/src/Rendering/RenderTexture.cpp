@@ -24,6 +24,7 @@ RenderTexture::~RenderTexture()
     m_Device->WaitIdle();
     DestroyDescriptorResources();
     DestroyResources();
+    if (m_PassTemplate.IsValid()) m_Device->DestroyPassTemplate(m_PassTemplate);
     if (m_Sampler.IsValid()) m_Device->DestroySampler(m_Sampler);
     if (m_RenderPass.IsValid()) m_Device->DestroyRenderPass(m_RenderPass);
 }
@@ -45,6 +46,8 @@ void RenderTexture::Resize(uint32_t width, uint32_t height)
     m_Height = height;
     CreateResources();
     UpdateDescriptor();
+    // The template viewport/scissor/renderArea depend on the size.
+    BuildPassTemplate(m_BakedClearColor, m_BakedDepthClear);
 }
 
 void RenderTexture::CreateRenderPass()
@@ -53,6 +56,37 @@ void RenderTexture::CreateRenderPass()
         { RHI::Format::B8G8R8A8_SRGB },
         RHI::Format::D32_SFLOAT,
         false);
+    BuildPassTemplate(m_BakedClearColor, m_BakedDepthClear);
+}
+
+void RenderTexture::BuildPassTemplate(const RHI::RHIClearValue& clearColor, float depthClear)
+{
+    if (m_PassTemplate.IsValid()) {
+        m_Device->DestroyPassTemplate(m_PassTemplate);
+        m_PassTemplate = RHI::RHIPassTemplate{};
+    }
+
+    RHI::RHIClearValue depthClearValue;
+    depthClearValue.depth = depthClear;
+    depthClearValue.isDepth = true;
+
+    RHI::RHIPassTemplateDesc desc;
+    desc.renderPass = m_RenderPass;
+    desc.clearValues = { clearColor, depthClearValue };
+    desc.viewport.x = 0.0f;
+    desc.viewport.y = 0.0f;
+    desc.viewport.width = (float)m_Width;
+    desc.viewport.height = (float)m_Height;
+    desc.viewport.minDepth = 0.0f;
+    desc.viewport.maxDepth = 1.0f;
+    desc.scissor.x = 0;
+    desc.scissor.y = 0;
+    desc.scissor.width = m_Width;
+    desc.scissor.height = m_Height;
+
+    m_BakedClearColor = clearColor;
+    m_BakedDepthClear = depthClear;
+    m_PassTemplate = m_Device->CreatePassTemplate(desc);
 }
 
 void RenderTexture::CreateSampler()
@@ -104,6 +138,11 @@ void RenderTexture::DestroyResources()
 
 void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearValue& clearColor, float depthClear)
 {
+    // Rebuild the persistent template only when the requested clears change
+    // (steady state: no per-frame re-encode of the render-pass state).
+    if (clearColor.color != m_BakedClearColor.color || depthClear != m_BakedDepthClear)
+        BuildPassTemplate(clearColor, depthClear);
+
     // Transition the color image to COLOR_ATTACHMENT_OPTIMAL before the render
     // pass. The render pass initialLayout is COLOR_ATTACHMENT_OPTIMAL, but the
     // previous frame's EndRender left it in SHADER_READ_ONLY — a mismatch the
@@ -112,12 +151,7 @@ void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearVa
     m_Device->CmdTransitionImageLayout(cmd, m_ColorImage, RHI::Format::B8G8R8A8_SRGB,
         RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment, RHI::Aspect::Color);
 
-    RHI::RHIClearValue depthClearValue;
-    depthClearValue.depth = depthClear;
-    depthClearValue.isDepth = true;
-
-    m_Device->CmdBeginRenderPass(cmd, m_RenderPass, m_Framebuffer,
-        { clearColor, depthClearValue }, m_Width, m_Height);
+    m_Device->CmdBeginRenderPass(cmd, m_PassTemplate, m_Framebuffer);
 }
 
 void RenderTexture::EndRender(RHI::RHICommandBuffer cmd)

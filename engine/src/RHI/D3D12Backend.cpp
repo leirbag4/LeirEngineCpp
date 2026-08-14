@@ -168,6 +168,14 @@ struct RenderPassRec {
     bool overlay = false;
 };
 
+// Persistent render-pass state (TODO_RHI_SLANG.md §3.1 GPassTemplate): clears
+// + viewport + scissor precomputed once, referenced per frame.
+struct PassTemplateRec {
+    std::vector<RHIClearValue> clears;
+    D3D12_VIEWPORT viewport{};
+    D3D12_RECT scissor{};
+};
+
 struct FramebufferRec {
     RenderPassRec* rp = nullptr;
     UINT width = 0, height = 0;
@@ -181,6 +189,8 @@ struct D3D12Backend::Impl {
     // Debug controller must be declared first so it is destroyed LAST (after
     // the device), letting the debug layer report device destruction.
     ComPtr<ID3D12Debug> m_debugCtrl;
+
+    GCaps caps;
 
     ComPtr<IDXGIFactory4> factory;
     ComPtr<ID3D12Device> device;
@@ -295,6 +305,28 @@ struct D3D12Backend::Impl {
         CreateFrameObjects();
         CreateCopyHelper();
         CreateBuiltinRenderPasses();
+
+        // ---- Capabilities (TODO_RHI_SLANG.md §3.6) ----
+        D3D12_FEATURE_DATA_D3D12_OPTIONS opts{};
+        if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &opts, sizeof(opts)))) {
+            memset(&opts, 0, sizeof(opts));
+        }
+        caps.bindless = opts.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_3;
+        caps.maxTexturesPerTable = 1000000;      // max descriptors in a shader-visible CBV/SRV/UAV heap
+        caps.maxUniformBuffersPerTable = 1000000;
+        caps.maxStorageBuffersPerTable = 1000000;
+        caps.maxSamplersPerTable = 2048;         // max samplers in a shader-visible sampler heap
+        caps.maxPushConstantsSize = 256;         // 64 DWORDs of root constants
+        caps.maxColorAttachments = 8;            // D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT
+        caps.maxTextureSize = 16384;             // D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION
+        caps.minUniformBufferOffsetAlignment = 256;
+        caps.multiRenderTarget = true;
+        caps.instancing = true;
+        caps.compute = true;
+        caps.storageBuffers = true;
+        caps.sRGB = true;
+        caps.wireframe = true;
+        caps.anisotropicFiltering = true;
 
         XConsole::Println("D3D12 backend created ({}x{})", width, height);
     }
@@ -636,6 +668,8 @@ void D3D12Backend::EndFrame() {
 }
 
 void D3D12Backend::WaitIdle() { m_Impl->WaitIdle(); }
+
+const GCaps& D3D12Backend::GetCaps() const { return m_Impl->caps; }
 
 RHICommandBuffer D3D12Backend::GetCurrentCommandBuffer() const {
     RHICommandBuffer cb;
@@ -1186,6 +1220,22 @@ void D3D12Backend::DestroyRenderPass(RHIRenderPass renderPass) {
     delete reinterpret_cast<RenderPassRec*>(renderPass.handle);
 }
 
+RHIPassTemplate D3D12Backend::CreatePassTemplate(const RHIPassTemplateDesc& desc) {
+    PassTemplateRec* rec = new PassTemplateRec();
+    rec->clears = desc.clearValues;
+    rec->viewport = { desc.viewport.x, desc.viewport.y, desc.viewport.width,
+                      desc.viewport.height, desc.viewport.minDepth, desc.viewport.maxDepth };
+    rec->scissor = { (LONG)desc.scissor.x, (LONG)desc.scissor.y,
+                     (LONG)(desc.scissor.x + desc.scissor.width),
+                     (LONG)(desc.scissor.y + desc.scissor.height) };
+    RHIPassTemplate out;
+    out.handle = reinterpret_cast<uint64_t>(rec);
+    return out;
+}
+void D3D12Backend::DestroyPassTemplate(RHIPassTemplate passTemplate) {
+    delete reinterpret_cast<PassTemplateRec*>(passTemplate.handle);
+}
+
 RHIFramebuffer D3D12Backend::CreateFramebuffer(RHIRenderPass renderPass,
     uint32_t width, uint32_t height, const std::vector<RHIImageView>& attachments) {
     FramebufferRec* rec = new FramebufferRec();
@@ -1207,12 +1257,12 @@ void D3D12Backend::DestroyFramebuffer(RHIFramebuffer framebuffer) {
 
 // ---- Command recording ----
 
-void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass renderPass,
-    RHIFramebuffer framebuffer, const std::vector<RHIClearValue>& clearValues,
-    uint32_t width, uint32_t height) {
-    (void)cmd; (void)renderPass;
+void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
+    RHIFramebuffer framebuffer) {
+    (void)cmd;
     Impl& im = *m_Impl;
     FramebufferRec* fb = reinterpret_cast<FramebufferRec*>(framebuffer.handle);
+    PassTemplateRec* tpl = reinterpret_cast<PassTemplateRec*>(passTemplate.handle);
 
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvs;
     for (auto* att : fb->colorAttachments)
@@ -1225,13 +1275,13 @@ void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass render
     im.cmdList->OMSetRenderTargets((UINT)rtvs.size(),
         rtvs.empty() ? nullptr : rtvs.data(), FALSE, hasDsv ? &dsv : nullptr);
 
-    for (size_t i = 0; i < rtvs.size() && i < clearValues.size(); ++i) {
-        const auto& cv = clearValues[i];
+    for (size_t i = 0; i < rtvs.size() && i < tpl->clears.size(); ++i) {
+        const auto& cv = tpl->clears[i];
         float c[4] = { cv.color.x, cv.color.y, cv.color.z, cv.color.w };
         im.cmdList->ClearRenderTargetView(rtvs[i], c, 0, nullptr);
     }
     if (hasDsv) {
-        for (const auto& cv : clearValues) {
+        for (const auto& cv : tpl->clears) {
             if (cv.isDepth) {
                 im.cmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH,
                     cv.depth, (UINT8)cv.stencil, 0, nullptr);
@@ -1240,10 +1290,8 @@ void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass render
         }
     }
 
-    D3D12_VIEWPORT vp{ 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
-    im.cmdList->RSSetViewports(1, &vp);
-    D3D12_RECT sc{ 0, 0, (LONG)width, (LONG)height };
-    im.cmdList->RSSetScissorRects(1, &sc);
+    im.cmdList->RSSetViewports(1, &tpl->viewport);
+    im.cmdList->RSSetScissorRects(1, &tpl->scissor);
 }
 void D3D12Backend::CmdEndRenderPass(RHICommandBuffer cmd) {
     (void)cmd; // D3D12 has no render-pass objects; the RT is transitioned via CmdTransitionImageLayout

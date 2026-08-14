@@ -176,6 +176,7 @@ struct RHIDescriptorSet   { Handle handle = 0; bool IsValid() const { return han
 struct RHIRenderPass      { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHIFramebuffer     { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHICommandBuffer   { Handle handle = 0; bool IsValid() const { return handle != 0; } };
+struct RHIPassTemplate    { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 
 // ---- Description structs (backend-neutral) ----
 
@@ -262,6 +263,17 @@ struct RHIClearValue {
     bool isDepth = false;
 };
 
+// Persistent, reusable render-pass state (TODO_RHI_SLANG.md §3.1 GPassTemplate):
+// attachments (via the render pass), load/store/clear, and the viewport/scissor
+// are precomputed once and referenced per frame — the backend does not re-encode
+// them. The referenced RHIRenderPass stays owned by the caller.
+struct RHIPassTemplateDesc {
+    RHIRenderPass renderPass;
+    std::vector<RHIClearValue> clearValues; // one per attachment, in attachment order
+    RHIViewport viewport;                    // applied automatically at pass begin
+    RHIRect2D scissor;                       // applied automatically at pass begin
+};
+
 struct RHIDescriptorImageInfo {
     RHIImageView imageView;
     RHISampler sampler;
@@ -282,6 +294,31 @@ struct RHIDescriptorWrite {
     DescriptorType type = DescriptorType::CombinedImageSampler;
     RHIDescriptorImageInfo imageInfo;
     RHIDescriptorBufferInfo bufferInfo;
+};
+
+// Capabilities and limits of a backend (TODO_RHI_SLANG.md §3.6). The engine
+// adapts at runtime with `if (caps.x)`, never `#ifdef`. A zero value means the
+// capability is unavailable / the limit is unknown.
+struct GCaps {
+    // ---- Limits ----
+    uint32_t maxTexturesPerTable = 0;         // max sampled textures per bind table
+    uint32_t maxUniformBuffersPerTable = 0;   // max uniform buffers per bind table
+    uint32_t maxSamplersPerTable = 0;         // max samplers per bind table
+    uint32_t maxStorageBuffersPerTable = 0;   // max storage buffers per bind table
+    uint32_t maxPushConstantsSize = 0;        // max push-constant (root-constant) bytes
+    uint32_t maxColorAttachments = 0;         // max render targets per pass
+    uint32_t maxTextureSize = 0;              // max single texture dimension (px)
+    uint32_t minUniformBufferOffsetAlignment = 1; // required UBO offset alignment (bytes)
+
+    // ---- Features ----
+    bool bindless = false;             // descriptor indexing / unbounded descriptor tables
+    bool multiRenderTarget = false;    // MRT
+    bool instancing = false;           // vertex-instanced draws
+    bool compute = false;              // compute pipeline support
+    bool storageBuffers = false;       // storage (read-write) buffers
+    bool sRGB = false;                 // sRGB swapchain/render-target formats
+    bool wireframe = false;            // non-fill polygon modes
+    bool anisotropicFiltering = false; // anisotropic texture filtering
 };
 
 } // namespace RHI

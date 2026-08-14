@@ -25,6 +25,15 @@ namespace {
 
 // ---- enum conversions ----
 
+// Persistent render-pass state record (TODO_RHI_SLANG.md §3.1 GPassTemplate).
+struct PassTemplateRec {
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    std::vector<VkClearValue> clears;
+    VkViewport viewport{};
+    VkRect2D scissor{};
+    VkExtent2D renderArea{};
+};
+
 VkFormat ToVk(Format f) {
     switch (f) {
         case Format::R32G32B32_SFLOAT:    return VK_FORMAT_R32G32B32_SFLOAT;
@@ -186,12 +195,50 @@ VkVertexInputAttributeDescription ToVk(const RHIVertexAttribute& a) {
 
 struct VulkanBackend::Impl {
     VulkanDevice device;
+    GCaps caps;
     Impl(void* window, int width, int height, bool vsync, const std::string& appName)
         : device(static_cast<GLFWwindow*>(window),
                  VulkanDeviceConfig{
                      appName, VK_MAKE_VERSION(0, 1, 0), width, height,
                      true, vsync })
     {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(device.GetPhysicalDevice(), &props);
+
+        VkPhysicalDeviceFeatures features{};
+        vkGetPhysicalDeviceFeatures(device.GetPhysicalDevice(), &features);
+
+        // Feature query for descriptor indexing (bindless).
+        bool descriptorIndexing = false;
+        if (device.GetDevice()) {
+            VkPhysicalDeviceDescriptorIndexingFeatures dif{};
+            dif.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+            VkPhysicalDeviceFeatures2 f2{};
+            f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            f2.pNext = &dif;
+            vkGetPhysicalDeviceFeatures2(device.GetPhysicalDevice(), &f2);
+            descriptorIndexing =
+                dif.descriptorBindingPartiallyBound && dif.shaderSampledImageArrayNonUniformIndexing &&
+                dif.runtimeDescriptorArray;
+        }
+
+        const auto& lim = props.limits;
+        caps.maxTexturesPerTable = lim.maxPerStageDescriptorSampledImages;
+        caps.maxUniformBuffersPerTable = lim.maxPerStageDescriptorUniformBuffers;
+        caps.maxSamplersPerTable = lim.maxPerStageDescriptorSamplers;
+        caps.maxStorageBuffersPerTable = lim.maxPerStageDescriptorStorageBuffers;
+        caps.maxPushConstantsSize = lim.maxPushConstantsSize;
+        caps.maxColorAttachments = lim.maxColorAttachments;
+        caps.maxTextureSize = lim.maxImageDimension2D;
+        caps.minUniformBufferOffsetAlignment = (uint32_t)lim.minUniformBufferOffsetAlignment;
+        caps.bindless = descriptorIndexing;
+        caps.multiRenderTarget = lim.maxColorAttachments >= 2;
+        caps.instancing = true;
+        caps.compute = true; // compute is core Vulkan since 1.0
+        caps.storageBuffers = true;
+        caps.sRGB = true;
+        caps.wireframe = features.fillModeNonSolid;
+        caps.anisotropicFiltering = features.samplerAnisotropy;
     }
 };
 
@@ -202,6 +249,8 @@ VulkanBackend::VulkanBackend(void* window, int width, int height, bool vsync,
 }
 
 VulkanBackend::~VulkanBackend() = default;
+
+const GCaps& VulkanBackend::GetCaps() const { return m_Impl->caps; }
 
 // ---- Frame lifecycle ----
 
@@ -653,6 +702,42 @@ void VulkanBackend::DestroyRenderPass(RHIRenderPass renderPass) {
     vkDestroyRenderPass(m_Impl->device.GetDevice(), reinterpret_cast<VkRenderPass>(renderPass.handle), nullptr);
 }
 
+RHIPassTemplate VulkanBackend::CreatePassTemplate(const RHIPassTemplateDesc& desc) {
+    PassTemplateRec* rec = new PassTemplateRec();
+    rec->renderPass = reinterpret_cast<VkRenderPass>(desc.renderPass.handle);
+
+    rec->clears.reserve(desc.clearValues.size());
+    for (const auto& c : desc.clearValues) {
+        VkClearValue vc{};
+        if (c.isDepth) {
+            vc.depthStencil = { c.depth, c.stencil };
+        } else {
+            vc.color = { {c.color.x, c.color.y, c.color.z, c.color.w} };
+        }
+        rec->clears.push_back(vc);
+    }
+
+    // Viewport is in logical units; flip Y once here: GLM/NDC (y-up) → Vulkan
+    // framebuffer (y-down). Matches the previous per-frame CmdBeginRenderPass.
+    rec->viewport.x = desc.viewport.x;
+    rec->viewport.y = desc.viewport.y + desc.viewport.height;
+    rec->viewport.width = desc.viewport.width;
+    rec->viewport.height = -desc.viewport.height;
+    rec->viewport.minDepth = desc.viewport.minDepth;
+    rec->viewport.maxDepth = desc.viewport.maxDepth;
+
+    rec->scissor.offset = { (int32_t)desc.scissor.x, (int32_t)desc.scissor.y };
+    rec->scissor.extent = { desc.scissor.width, desc.scissor.height };
+    rec->renderArea = rec->scissor.extent;
+
+    RHIPassTemplate out;
+    out.handle = reinterpret_cast<uint64_t>(rec);
+    return out;
+}
+void VulkanBackend::DestroyPassTemplate(RHIPassTemplate passTemplate) {
+    delete reinterpret_cast<PassTemplateRec*>(passTemplate.handle);
+}
+
 RHIFramebuffer VulkanBackend::CreateFramebuffer(RHIRenderPass renderPass,
     uint32_t width, uint32_t height, const std::vector<RHIImageView>& attachments) {
     std::vector<VkImageView> views;
@@ -683,45 +768,23 @@ void VulkanBackend::DestroyFramebuffer(RHIFramebuffer framebuffer) {
 
 // ---- Command recording ----
 
-void VulkanBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIRenderPass renderPass,
-    RHIFramebuffer framebuffer, const std::vector<RHIClearValue>& clearValues,
-    uint32_t width, uint32_t height) {
+void VulkanBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
+    RHIFramebuffer framebuffer) {
     VkCommandBuffer vkCmd = reinterpret_cast<VkCommandBuffer>(cmd.handle);
-
-    std::vector<VkClearValue> vkClears;
-    vkClears.reserve(clearValues.size());
-    for (const auto& c : clearValues) {
-        VkClearValue vc{};
-        if (c.isDepth) {
-            vc.depthStencil = { c.depth, c.stencil };
-        } else {
-            vc.color = { {c.color.x, c.color.y, c.color.z, c.color.w} };
-        }
-        vkClears.push_back(vc);
-    }
+    PassTemplateRec* rec = reinterpret_cast<PassTemplateRec*>(passTemplate.handle);
 
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpInfo.renderPass = reinterpret_cast<VkRenderPass>(renderPass.handle);
+    rpInfo.renderPass = rec->renderPass;
     rpInfo.framebuffer = reinterpret_cast<VkFramebuffer>(framebuffer.handle);
     rpInfo.renderArea.offset = {0, 0};
-    rpInfo.renderArea.extent = {width, height};
-    rpInfo.clearValueCount = (uint32_t)vkClears.size();
-    rpInfo.pClearValues = vkClears.data();
+    rpInfo.renderArea.extent = rec->renderArea;
+    rpInfo.clearValueCount = (uint32_t)rec->clears.size();
+    rpInfo.pClearValues = rec->clears.empty() ? nullptr : rec->clears.data();
     vkCmdBeginRenderPass(vkCmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Flip viewport Y: GLM/NDC (y-up) → Vulkan framebuffer (y-down)
-    VkViewport vp{};
-    vp.x = 0;
-    vp.y = (float)height;
-    vp.width = (float)width;
-    vp.height = -(float)height;
-    vp.minDepth = 0.0f;
-    vp.maxDepth = 1.0f;
-    vkCmdSetViewport(vkCmd, 0, 1, &vp);
-    VkRect2D scissor{};
-    scissor.extent = {width, height};
-    vkCmdSetScissor(vkCmd, 0, 1, &scissor);
+    vkCmdSetViewport(vkCmd, 0, 1, &rec->viewport);
+    vkCmdSetScissor(vkCmd, 0, 1, &rec->scissor);
 }
 void VulkanBackend::CmdEndRenderPass(RHICommandBuffer cmd) {
     vkCmdEndRenderPass(reinterpret_cast<VkCommandBuffer>(cmd.handle));
