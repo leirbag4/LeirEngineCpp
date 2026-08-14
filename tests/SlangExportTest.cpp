@@ -32,11 +32,17 @@ int main()
             anyFailure = true;
     }
 
-    // Expect one "N/6 shaders" line per target (SPIR-V, DXIL, Metal, WGSL,
-    // GLSL 450) and zero failures.
-    if (fullTargets != 5 || anyFailure) {
-        std::fprintf(stderr, "SlangExportTest: FAILED (full targets=%d, failures=%s)\n",
-            fullTargets, anyFailure ? "yes" : "no");
+    // Expect one "N/6 shaders" line per target: SPIR-V, Metal, WGSL, GLSL 450
+    // everywhere; DXIL additionally on Windows (it needs the external dxc,
+    // which only the Windows Vulkan SDK provides).
+#ifdef _WIN32
+    const int kExpectedTargets = 5;
+#else
+    const int kExpectedTargets = 4;
+#endif
+    if (fullTargets != kExpectedTargets || anyFailure) {
+        std::fprintf(stderr, "SlangExportTest: FAILED (full targets=%d/%d, failures=%s)\n",
+            fullTargets, kExpectedTargets, anyFailure ? "yes" : "no");
         return 1;
     }
     std::printf("SlangExportTest: OK\n");

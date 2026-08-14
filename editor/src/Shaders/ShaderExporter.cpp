@@ -14,13 +14,19 @@ const std::string kExportRoot = LEIR_SHADER_EXPORT_DIR;
 
 std::vector<Leir::RHI::ShaderTarget> AllTargets()
 {
-    return {
+    std::vector<Leir::RHI::ShaderTarget> targets = {
         Leir::RHI::ShaderTarget::SpirV,
-        Leir::RHI::ShaderTarget::DXIL,
         Leir::RHI::ShaderTarget::Metal,
         Leir::RHI::ShaderTarget::WGSL,
         Leir::RHI::ShaderTarget::GLSL450,
     };
+    // DXIL needs the external 'dxc' downstream compiler (dxcompiler.dll), which
+    // ships with the Vulkan SDK on Windows and is never present on macOS/Linux.
+    // D3D12 is Windows-only, so the DXIL target is a Windows-only export.
+#ifdef _WIN32
+    targets.insert(targets.begin() + 1, Leir::RHI::ShaderTarget::DXIL);
+#endif
+    return targets;
 }
 
 const std::vector<ShaderExporter::ShaderFile>& ShaderExporter::ShaderFiles()

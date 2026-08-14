@@ -14,6 +14,10 @@ build/
 *.lib
 *.dll
 *.exe
+# Vendored Slang runtime for the editor shader tooling — track the prebuilt
+# .lib/.dll/.so/.dylib even though *.lib / *.dll are normally ignored.
+!editor/vendor/slang/windows/*.lib
+!editor/vendor/slang/windows/*.dll
 __pycache__/
 *.pyc
 .DS_Store
