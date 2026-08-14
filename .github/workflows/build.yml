@@ -86,8 +86,21 @@ jobs:
           sudo apt-get install -y glslc 2>/dev/null || echo "glslc not found via LunarG"
           which glslc || echo "glslc not found — shaders won't compile at build time"
 
+      - name: Set up MSVC build environment (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake
-        run: cmake --preset=${{ steps.preset.outputs.name }} -DLEIR_BUILD_TESTS=ON
+        shell: bash
+        run: |
+          # Windows CI builds with MSVC (cl) — same compiler as the local
+          # windows-debug preset. Without this the Ninja generator falls back to
+          # the MinGW that happens to be on the runner image.
+          COMPILER_ARGS=""
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            COMPILER_ARGS="-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
+          fi
+          cmake --preset=${{ steps.preset.outputs.name }} -DLEIR_BUILD_TESTS=ON $COMPILER_ARGS
 
       - name: Build
         run: cmake --build build/${{ steps.preset.outputs.name }}
@@ -100,16 +113,6 @@ jobs:
           case "${{ matrix.os }}" in
             windows-latest)
               export PATH="$BUILD_DIR/engine:$PATH"
-              # MinGW-built exes need the MinGW runtime DLLs (libstdc++-6.dll,
-              # libgcc_s_seh-1.dll, libwinpthread-1.dll). CMake finds the
-              # compiler by scanning known MinGW roots, so C:\mingw64\bin is
-              # NOT guaranteed to be on the runner PATH — without it the exes
-              # block on a missing-DLL dialog (silent hang, no output).
-              CXX_BIN="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "$BUILD_DIR/CMakeCache.txt" | head -1 | cut -d= -f2- | xargs dirname)"
-              if [ -n "$CXX_BIN" ]; then
-                export PATH="$CXX_BIN:$PATH"
-              fi
-              echo "test PATH gcc: $(command -v gcc || echo NOT_ON_PATH) | CXX_BIN=$CXX_BIN"
               ;;
             macos-latest)
               export DYLD_LIBRARY_PATH="$BUILD_DIR/engine:$DYLD_LIBRARY_PATH"
