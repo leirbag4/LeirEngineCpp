@@ -10,12 +10,19 @@ namespace Leir {
 Shader::Shader(RHI::RenderBackend* device,
                const std::string& vertexPath, const std::string& fragmentPath)
     : m_Device(device)
+    , m_VertexPath(vertexPath)
+    , m_FragmentPath(fragmentPath)
 {
     m_Stages.push_back(RHI::ShaderStage::Vertex);
     m_Stages.push_back(RHI::ShaderStage::Fragment);
+    Load();
+    XConsole::Println("Shader loaded: {} + {}", vertexPath, fragmentPath);
+}
 
-    auto vertCode = ReadFile(vertexPath);
-    auto fragCode = ReadFile(fragmentPath);
+void Shader::Load()
+{
+    auto vertCode = ReadFile(m_VertexPath);
+    auto fragCode = ReadFile(m_FragmentPath);
 
     std::vector<std::vector<char>> codes = { std::move(vertCode), std::move(fragCode) };
 
@@ -29,8 +36,19 @@ Shader::Shader(RHI::RenderBackend* device,
         info.entryPoint = "main";
         m_StageInfos.push_back(info);
     }
+}
 
-    XConsole::Println("Shader loaded: {} + {}", vertexPath, fragmentPath);
+void Shader::Reload()
+{
+    // Destroy the previous modules, re-read the bytecode and recreate them.
+    // The stage list / entry points are unchanged.
+    for (auto& module : m_Modules)
+        m_Device->DestroyShaderModule(module);
+    m_Modules.clear();
+    m_StageInfos.clear();
+
+    Load();
+    XConsole::Println("Shader reloaded: {} + {}", m_VertexPath, m_FragmentPath);
 }
 
 Shader::~Shader()

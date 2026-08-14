@@ -64,12 +64,17 @@ public:
     void Render(RHI::RHICommandBuffer cmd, Scene* scene);
     void RenderOverlay(RHI::RHICommandBuffer cmd, Scene* scene);
 
+    // Hot-reload: re-read Sprite.vert/Sprite.frag and recreate the sprite
+    // pipeline (buffers, descriptor sets and layout stay valid).
+    void ReloadSpritePipeline();
+
 private:
     void RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer* renderer,
         const Matrix4x4& viewProj, const Matrix4x4& model,
         const PushConstants& push);
 
     void CreateSpriteResources();
+    void CreateSpritePipeline();
     void DestroySpriteResources();
     void RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* renderer,
         const Matrix4x4& mvp);

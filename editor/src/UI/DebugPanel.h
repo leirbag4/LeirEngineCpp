@@ -28,6 +28,10 @@ public:
 
     void SetFont(Leir::Font* font);
 
+    // Shader tooling hooks (wired from main.cpp when LEIR_EDITOR_SLANG).
+    void SetOnExportShaders(std::function<void()> cb) { m_OnExportShaders = std::move(cb); }
+    void SetOnReloadShaders(std::function<void()> cb) { m_OnReloadShaders = std::move(cb); }
+
 private:
     void SendToConsole(const std::string& text, int count);
 
@@ -36,4 +40,8 @@ private:
     Leir::UIButton* m_BtnX10 = nullptr;
     Leir::UIButton* m_BtnX50 = nullptr;
     Leir::UIButton* m_BtnX100 = nullptr;
+    Leir::UIButton* m_BtnExport = nullptr;
+    Leir::UIButton* m_BtnReload = nullptr;
+    std::function<void()> m_OnExportShaders;
+    std::function<void()> m_OnReloadShaders;
 };

@@ -44,6 +44,12 @@
 #include "UI/InspectorTransformPanel.h"
 #include "Camera/EditorCamera.h"
 
+#ifdef LEIR_EDITOR_SLANG
+#include "Shaders/SlangShaderCompiler.h"
+#include "Shaders/ShaderExporter.h"
+#include "Shaders/ShaderHotReloader.h"
+#endif
+
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
 
@@ -407,6 +413,45 @@ protected:
             }
         });
 
+#ifdef LEIR_EDITOR_SLANG
+        // ---- Shader tooling (Plan A) ----
+        // libslang-backed compiler + hot-reload. The engine itself never links
+        // Slang; this is editor-only dev tooling.
+        m_ShaderCompiler = std::make_unique<Leir::RHI::SlangShaderCompiler>();
+        if (m_ShaderCompiler->IsAvailable()) {
+            Leir::XConsole::Println("Shader compiler ready: {} (libslang)",
+                m_ShaderCompiler->GetVersion());
+
+            m_HotReloader = std::make_unique<ShaderHotReloader>();
+            m_HotReloader->SetCompiler(m_ShaderCompiler.get());
+            m_HotReloader->SetOnReload([this]() {
+                if (m_Shader)
+                    m_Shader->Reload();
+                if (m_Material && m_ViewportRT)
+                    m_Material->ReloadShaders(m_ViewportRT->GetRenderPass());
+                if (m_RenderPipeline)
+                    m_RenderPipeline->ReloadSpritePipeline();
+                if (m_UIRenderer)
+                    m_UIRenderer->ReloadShaders();
+            });
+            m_HotReloader->Snap();
+
+            // DebugPanel: Export writes all targets to LEIR_SHADER_EXPORT_DIR;
+            // Reload recompiles + reloads every pipeline.
+            if (m_DebugPanel) {
+                m_DebugPanel->SetOnExportShaders([this]() {
+                    auto lines = ShaderExporter::ExportAll(m_ShaderCompiler.get());
+                    for (const auto& line : lines)
+                        Leir::XConsole::Println("{}", line);
+                });
+                m_DebugPanel->SetOnReloadShaders([this]() {
+                    if (m_HotReloader)
+                        m_HotReloader->ForceReload(ActiveShaderTarget());
+                });
+            }
+        }
+#endif
+
         // Sync scene camera from EditorCamera initial position
         auto* camObj = scene.FindObjectByName("Camera");
         if (camObj) {
@@ -499,6 +544,12 @@ protected:
             m_TextAreaWrapPanel->Refresh();
         if (m_InspectorTransformPanel)
             m_InspectorTransformPanel->Refresh();
+
+#ifdef LEIR_EDITOR_SLANG
+        // Shader hot-reload poll (cheap: one stat per .slang file per frame).
+        if (m_HotReloader)
+            m_HotReloader->Update(ActiveShaderTarget());
+#endif
     }
 
     void OnRender() override
@@ -613,6 +664,17 @@ protected:
     }
 
 private:
+#ifdef LEIR_EDITOR_SLANG
+    Leir::RHI::ShaderTarget ActiveShaderTarget() const
+    {
+        // The bytecode the engine reads is .spv (Vulkan) or .dxil (D3D12).
+        const char* ext = m_Backend ? m_Backend->GetShaderFileExtension() : ".spv";
+        return (ext && std::string(ext) == ".dxil")
+            ? Leir::RHI::ShaderTarget::DXIL
+            : Leir::RHI::ShaderTarget::SpirV;
+    }
+#endif
+
     void UpdateViewportRenderTarget()
     {
         if (!m_ViewportRT || !m_ViewportPanel)
@@ -692,6 +754,12 @@ private:
     TextAreaWrapPanel* m_TextAreaWrapPanel = nullptr;
     DebugPanel* m_DebugPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
+
+#ifdef LEIR_EDITOR_SLANG
+    std::unique_ptr<Leir::RHI::SlangShaderCompiler> m_ShaderCompiler;
+    std::unique_ptr<ShaderHotReloader> m_HotReloader;
+#endif
+
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;
 

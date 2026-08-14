@@ -41,6 +41,9 @@ public:
 
     void Render(RHI::RHICommandBuffer cmd, UICanvas* canvas);
 
+    // Hot-reload: re-read UI.vert/UI.frag and recreate the UI pipeline.
+    void ReloadShaders();
+
     // Physical/logical ratio (1.0 when HiDPI disabled). Scissor rects are
     // logical clip rects scaled by this factor.
     void SetContentScale(float scale) { m_ContentScale = scale; }
@@ -50,6 +53,7 @@ public:
     const UIRenderStats& GetLastStats() const { return m_LastStats; }
 
 private:
+    void CreatePipeline();
     void RenderElement(UIElement* elem, const Vector4* clip, bool isDebug);
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);

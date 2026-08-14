@@ -452,17 +452,137 @@ GLM pura y front-face **CCW en todos los backends**.
       `OnContentScaleChanged` y pasa `GetContentScale()` al crear las fuentes. **Verificado por el
       usuario (2026-08-13): texto perfecto en D3D12 con `hidpi:true`.**
 
-- [ ] **Fase 3** — `IShaderCompiler` en el editor (libslang **estática**,
-      `SLANG_LIB_TYPE=STATIC`, `IGlobalSession`/`ISession`) + exporter multi-formato.
-      Verificación: exportar shaders por plataforma; **hot-reload de shaders funcionando**.
+- [x] **Fase 3** — `IShaderCompiler` en el editor + exporter multi-formato + hot-reload.
+      Verificación (2026-08-14): export 6/6 en los 5 targets (30 archivos en `shaders_export/`);
+      **hot-reload funcionando** — editar `Basic.vert.slang` en vivo → `[HotReload] ... -> Basic.vert.dxil`
+      (5412 bytes), stderr vacío (sin errores de compilación ni VUIDs), salida limpia.
+      Implementado con **libslang dinámica** del SDK (no la `SLANG_LIB_TYPE=STATIC` original —
+      desviación documentada en el "Estado Plan A" abajo).
+      **Plan de acción detallado → "Plan A" abajo (2026-08-14).**
 - [ ] **Fase 4** — Backend **Metal** (+ MoltenVK fallback). Verificación: macOS.
+      **Pospuesto hasta después de WebGPU** (ver decisión en el Plan C: no hay Mac; CI solo
+      compila, no renderiza; VM con macOS no da Metal real).
 - [ ] **Fase 5** — **WebGPU + WebGL2** + Emscripten + capa de plataforma (sacar GLFW).
       Verificación: `leir_engine.js`, fallback funcionando.
+      **Plan de acción detallado → "Plan C" abajo (2026-08-14).**
 - [ ] **Fase 6** — **Android** (reusa Vulkan + plataforma). Verificación: APK.
 - [ ] **Fase 7** — **iOS** (reusa Metal + plataforma). Verificación: App iOS.
 - [ ] **Migración al RHI completo §3** (cuando la RHI mínima esté estable con Vulkan+D3D12):
       `GCommandGraph` con record multithread, bindless-first, bindings por reflection,
       `GCaps`, especialización de shaders.
+      **Plan de acción detallado → "Plan B" abajo (2026-08-14).**
+
+### Plan de acción — A: Fase 3 / B: RHI completo §3 / C: WebGPU (2026-08-14)
+
+Orden recomendado: **A → B → C** (A es pre-requisito de B; C valida el diseño de B con un
+backend distinto). Decisión clave: el **3er backend es WebGPU, no Metal** — se desarrolla y
+verifica en Windows (Chrome/Edge lo soportan nativo), su modelo (bind groups + render passes)
+espeja §3 (valida GCaps / sincronización Auto / bindless), y su fallback WebGL2 es el backend
+"degradado" que justifica `GCaps`. Metal queda para cuando exista acceso a hardware real
+(no hay Mac; macOS en VM sobre PC no expone Metal — solo framebuffer software; GitHub Actions
+macOS runners solo verifican compilación, sin render).
+
+#### Plan A — Fase 3: `IShaderCompiler` + reflection + hot-reload (pre-requisito)
+
+Reflection es el "diferencial #1" del RHI completo (§3.3): hoy las firmas de bindings se
+escriben a mano en C++ (layout + desc set + binding por pipeline) y hay que mantenerlas en
+sync con el shader. Con `Reflect()` el `GPipeline` deriva su firma del shader mismo.
+
+Pasos:
+1. **libslang estática en el superbuild** — `FetchContent` en `dependencies/CMakeLists.txt` con
+   `SLANG_LIB_TYPE=STATIC`, flag CMake opcional (risco §7: pesada de compilar). **Solo el editor
+   la linkea**; el engine DLL sigue sin depender de Slang (aislamiento §6).
+2. **Interfaz pública `IShaderCompiler`** (`engine/include/LeirEngine/RHI/` o `Shaders/`):
+   `ShaderTarget` (SPIR-V / DXIL / MSL / WGSL / GLSL-450 / GLSL-ES), `CompileResult`,
+   `ShaderReflection` (bindings, push/root constants, buffer layout, stage). Ningún nombre
+   `slang` en headers públicos (§6).
+3. **Implementación en el editor** (`editor/src/Shaders/`): `SlangShaderCompiler` usando
+   `IGlobalSession` → `ISession` → `createModuleFromSource` / `createEntryPoint` /
+   `getLayout()` para reflection. Wrapper C++ sobre la C API de Slang.
+4. **Exporter multi-formato**: dado el `.slang`, compilar a SPIR-V (Vulkan), DXIL (D3D12),
+   MSL (Metal), WGSL (WebGPU), GLSL-450 (debug) — y GLSL-ES vía **SPIRV-Cross** (hallazgo del
+   spike §4.1: Slang no emite GLSL ES 3.00 directo). Verificación: los 6 shaders actuales
+   compilan a los 5+1 targets (la tabla 30/30 del spike §4.1 pasa a generarse en runtime).
+5. **Hot-reload**: file watcher sobre `engine/shaders/*.slang`; al cambiar → recompilar en
+   runtime → recrear pipelines. Verificación: editar un shader y ver el cambio en vivo.
+6. **Verificación**: export por plataforma + hot-reload funcionando; regresión: render Vulkan
+   idéntico (validation layers limpias); CI valida SPIR-V/WGSL (DXIL solo exporter Windows, §7).
+
+**Estado Plan A (2026-08-14):** implementado y verificado (todo 6/6 en los 5 targets). Pasos 1-5
+hechos, verificación de export completa. Desviaciones/hallazgos con datos:
+
+- **libslang del SDK en vez de estática por FetchContent** (paso 1 modificado): se usa la
+  precompilada del Vulkan SDK (`$VULKAN_SDK/Include/slang` + `Lib/slang.lib` + 5 DLLs de
+  `Bin/slang*.dll` copiadas junto al exe). Razón documentada en `editor/CMakeLists.txt`: un build
+  por fuente arrastra el compilador + LLVM (lento/frágil); la del SDK es version-exacta (2026.13.1)
+  con el `slangc` que compila los shaders. Solo editor; engine sin Slang (§6).
+- **`slang_createGlobalSession` (C API simple) NO habilita GLSL**: zeroea el `SlangGlobalSessionDesc`
+  → `enableGLSL=false` → el módulo `glsl` nunca se carga → `error[E38201]: 'glsl' module not
+  available`. Fix: `SlangGlobalSessionDesc desc = {}; desc.apiVersion = SLANG_API_VERSION;
+  desc.enableGLSL = true; slang_createGlobalSession2(&desc, &session)`.
+- **`loadModuleFromSource` (módulos en memoria) rompe la validación de capabilities**:
+  cualquier `cbuffer` global exige `Std140DataLayout`, que es *unavailable* en DXIL/Metal/WGSL →
+  `error[E36107]` en `getEntryPointCode` (y `slangc` compilaba el mismo `.slang` OK). No era
+  `[[vk::binding]]`, ni matrix layout, ni versión de lenguaje, ni profile (bisección con un harness
+  C++ contra `slang.lib`). Fix: cargar el módulo desde el **file system** (`ISession::loadModule`
+  con la ruta del archivo) en vez de `loadModuleFromSource`. `CompileFromSource` (API pública
+  in-memory) hace stage a un `.slang` temporal y pasa por el mismo camino de archivo. Verificado:
+  SPIR-V/DXIL/Metal/WGSL/GLSL-450 → **6/6** cada uno (30 archivos en `shaders_export/`).
+- TODO_UI_EVENT_FLOOD RULE respetado: los logs de export son `[debug]`/`[info]` acotados por acción,
+  nunca por frame.
+
+#### Plan B — Migración al RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
+
+Construir sobre la RHI mínima (Vulkan+D3D12 estables y paritarios) y la reflection del Plan A.
+Scope: **sin frame graph total** (§8); barreras auto + modo `Explicit` (§3.4). Cada paso con
+verificación de paridad Vulkan↔D3D12.
+
+Pasos (en orden, cada uno verificado antes del siguiente):
+1. **`GCaps`** (§3.6): struct de capacidades por backend (max textures/UBOs/samplers por table,
+   bindless, MRT, instancing, compute, sRGB, formatos RT). Rellenar Vulkan y D3D12; exponer vía
+   `RDDevice`. Verificación: `Println` de caps por backend; degradación por `if (caps.x)`, no `#ifdef`.
+2. **Bindings por reflection** (§3.3): `GPipeline` obtiene su firma de `IShaderCompiler::Reflect`;
+   `GBindTable` se valida contra esa firma (runtime debug / load release). Eliminar los layouts
+   escritos a mano y la clase de errores "Root Signature doesn't match Pixel Shader". Verificación:
+   renders idénticos con validación en runtime; un binding mal puesto falla en debug.
+3. **Bindless-first** (§3.5): descriptor indexing (Vulkan `VK_EXT_descriptor_indexing` / D3D12
+   heap SRV grande) + `GBindTable` con arrays; límite por `GCaps`, no por diseño. **Paga la deuda
+   documentada** ("Limitaciones conocidas del backend D3D12" #1: slots SRV/sampler nunca liberados)
+   — nada se aloca/libera por frame; se indexa directo en el shader. Verificación: resize del
+   viewport RT en D3D12 sin crecimiento de heap SRV (se elimina el leak por resize).
+4. **`GCommandGraph`** (§3.2): `RenderPassRecord` + `DrawRecord`/`CopyRecord`/`ComputeRecord`
+   registrados por frame; el backend traduce a comandos nativos y **genera transiciones de estado
+   por last-use tracking** (reemplaza los `TransitionImageLayout`/`CmdBarrier` manuales).
+5. **Record multithread** (§3.2): el grafo se construye desde hilos worker en paralelo; el backend
+   serializa al ejecutar. Verificación: benchmark de frame time vs hilo único.
+6. **`GPassTemplate`** (§3.1): render pass persistente/reutilizable (attachments, load/store/clear,
+   scissor/viewport); `RenderTexture`/offscreen lo reusan sin re-encodear por frame.
+7. **Especialización de shaders** (§3.7): generics de Slang expuestos en `GPipeline`; compilar
+   variantes a pedido.
+8. **Verificación final**: paridad de render Vulkan↔D3D12 con screenshots pixel-diff; validation
+   layers / debug layer limpias; teardown limpio (benchmark cierre 162-186 ms se mantiene); sin WER.
+
+#### Plan C — Backend WebGPU + WebGL2 (3er backend)
+
+Validación real del diseño §3 (GCaps, sincronización Auto, bindless) + apertura a Web. Se
+desarrolla en Windows (Chrome/Edge 113+ nativos) — sin Mac.
+
+Pasos:
+1. **Capa de plataforma** (Fase 5 lo exige): abstraer GLFW detrás de `PlatformWindow`/
+   `IPlatform` (window, input, event loop, vsync). `CoreApplication`/`InputManager` migran a la
+   capa. Verificación: desktop (Vulkan/D3D12) sigue funcionando sin cambios de comportamiento.
+2. **Emscripten en el superbuild**: toolchain + `FetchContent`/preset dedicado; target
+   `leir_engine.js`/`.wasm`. Verificación: build web del engine + editor demo arranca en Chrome.
+3. **Backend WebGPU** (`WebGPUBackend` sobre la RHI): wgpu-native o Dawn C API; shaders WGSL vía
+   Slang (spike F0: 30/30 OK). Implementa la misma interfaz `RenderBackend`; modelo de sync
+   **Auto** (WebGPU esconde las barreras).
+4. **WebGL2 fallback** (§2.6): SPIRV-Cross (SPIR-V → GLSL ES 3.00), `GCaps` degradado (sin
+   compute, sin bindless, sin MRT), tables clásicas. Verificación: mismo build corre con WebGPU
+   o WebGL2 según `navigator.gpu`/fallback.
+5. **Verificación**: `leir_engine.js` corre en Chrome/Edge local con WebGPU y con WebGL2 forzado;
+   render del demo idéntico al desktop (a escala); CI: build Emscripten en Linux runner.
+6. **Cierre del diseño §3**: con WebGPU (Auto, bindless, GCaps) + WebGL2 (degradado) + Vulkan/D3D12
+   (Explicit, manual) el modelo completo queda validado en 4 backends reales.
 
 ## 6. Aislamiento / desacople total
 

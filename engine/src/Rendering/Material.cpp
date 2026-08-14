@@ -131,6 +131,25 @@ void Material::CreatePipeline(RHI::RHIRenderPass renderPass)
         { m_UBOSetLayout, m_DescriptorSetLayout },
         { pushRange });
 
+    BuildPipeline(renderPass);
+}
+
+void Material::ReloadShaders(RHI::RHIRenderPass renderPass)
+{
+    // Keep m_PipelineLayout / m_UBOSetLayout / m_DescriptorSetLayout: a shader
+    // reload is assumed to keep the same bindings (Plan A), so the UBO/sampler
+    // descriptor sets stay valid. Only the pipeline (built from the fresh
+    // shader stages) is recreated.
+    if (m_Pipeline.IsValid()) {
+        m_Device->DestroyPipeline(m_Pipeline);
+        m_Pipeline = RHI::RHIPipeline{};
+    }
+    BuildPipeline(renderPass);
+    XConsole::Println("Material pipeline reloaded");
+}
+
+void Material::BuildPipeline(RHI::RHIRenderPass renderPass)
+{
     auto binding = Vertex::GetBindingDescription();
     auto attrs = Vertex::GetAttributeDescriptions();
     // D3D12 input-layout semantic names (ignored by the Vulkan backend). Must

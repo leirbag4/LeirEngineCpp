@@ -36,12 +36,18 @@ public:
     // Recreate pipeline when device is lost
     void RecreatePipeline(RHI::RHIRenderPass renderPass);
 
+    // Shader hot-reload: recreates only the graphics pipeline from the shader's
+    // current stages. Descriptor/pipeline layouts are kept (bindings are
+    // assumed unchanged by a reload — see TODO_RHI_SLANG.md Plan A).
+    void ReloadShaders(RHI::RHIRenderPass renderPass);
+
 private:
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();
     void CreateDescriptorSet();
     void UpdateDescriptorSet();
     void CreatePipeline(RHI::RHIRenderPass renderPass);
+    void BuildPipeline(RHI::RHIRenderPass renderPass);
 
     RHI::RenderBackend* m_Device;
     std::shared_ptr<Shader> m_Shader;

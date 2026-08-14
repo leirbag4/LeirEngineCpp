@@ -151,6 +151,17 @@ void RenderPipeline::CreateSpriteResources()
     m_Sprite.pipelineLayout = m_Device->CreatePipelineLayout(
         { m_Sprite.descSetLayout }, { pushRange });
 
+    CreateSpritePipeline();
+
+    // Create a 1x1 white fallback texture for sprites without a texture
+    Image fallbackImage(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    m_Sprite.fallbackTexture = new Texture2D(m_Device, fallbackImage);
+
+    XConsole::Println("Sprite pipeline created");
+}
+
+void RenderPipeline::CreateSpritePipeline()
+{
     // Load sprite shaders
     auto vertCode = Shader::ReadFile(
         std::string(LEIR_SHADER_DIR) + "/Sprite.vert" + m_Device->GetShaderFileExtension());
@@ -186,12 +197,16 @@ void RenderPipeline::CreateSpriteResources()
 
     m_Device->DestroyShaderModule(vertMod);
     m_Device->DestroyShaderModule(fragMod);
+}
 
-    // Create a 1x1 white fallback texture for sprites without a texture
-    Image fallbackImage(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-    m_Sprite.fallbackTexture = new Texture2D(m_Device, fallbackImage);
-
-    XConsole::Println("Sprite pipeline created");
+void RenderPipeline::ReloadSpritePipeline()
+{
+    if (!m_Sprite.pipeline.IsValid())
+        return;
+    m_Device->DestroyPipeline(m_Sprite.pipeline);
+    m_Sprite.pipeline = RHI::RHIPipeline{};
+    CreateSpritePipeline();
+    XConsole::Println("Sprite pipeline reloaded");
 }
 
 void RenderPipeline::DestroySpriteResources()

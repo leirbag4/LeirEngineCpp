@@ -65,6 +65,26 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
     pushRange.size = sizeof(Vector2);
     m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
 
+    CreatePipeline();
+
+    // White fallback texture for untextured quads
+    Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    m_FallbackTex = new Texture2D(m_Device, whiteImg);
+
+    m_MaxVertices = 65536;
+    uint32_t vbSize = m_MaxVertices * sizeof(UIVertex);
+    for (int f = 0; f < 2; ++f) {
+        m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
+            RHI::BufferUsage::Vertex,
+            RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
+            m_VertexMemories[f]);
+    }
+
+    XConsole::Println("UIRenderer created");
+}
+
+void UIRenderer::CreatePipeline()
+{
     auto vertCode = Shader::ReadFile(
         std::string(LEIR_SHADER_DIR) + "/UI.vert" + m_Device->GetShaderFileExtension());
     auto fragCode = Shader::ReadFile(
@@ -117,21 +137,16 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
 
     m_Device->DestroyShaderModule(vertMod);
     m_Device->DestroyShaderModule(fragMod);
+}
 
-    // White fallback texture for untextured quads
-    Image whiteImg(1, 1, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-    m_FallbackTex = new Texture2D(m_Device, whiteImg);
-
-    m_MaxVertices = 65536;
-    uint32_t vbSize = m_MaxVertices * sizeof(UIVertex);
-    for (int f = 0; f < 2; ++f) {
-        m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
-            RHI::BufferUsage::Vertex,
-            RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
-            m_VertexMemories[f]);
-    }
-
-    XConsole::Println("UIRenderer created");
+void UIRenderer::ReloadShaders()
+{
+    if (!m_Pipeline.IsValid())
+        return;
+    m_Device->DestroyPipeline(m_Pipeline);
+    m_Pipeline = RHI::RHIPipeline{};
+    CreatePipeline();
+    XConsole::Println("UI pipeline reloaded");
 }
 
 UIRenderer::~UIRenderer()
