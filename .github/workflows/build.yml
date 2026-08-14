@@ -108,4 +108,4 @@ jobs:
               export LD_LIBRARY_PATH="$BUILD_DIR/engine:$LD_LIBRARY_PATH"
               ;;
           esac
-          ctest --output-on-failure --test-dir "$BUILD_DIR"
+          ctest --output-on-failure --test-dir "$BUILD_DIR" --timeout 120
