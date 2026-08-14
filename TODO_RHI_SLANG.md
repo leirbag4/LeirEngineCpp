@@ -549,6 +549,17 @@ hechos, verificación de export completa. Desviaciones/hallazgos con datos:
   - Faltaba **`enable_testing()`** en el root `CMakeLists.txt` → `ctest` nunca registró ni corrió
     ningún test ("No tests were found"). `PhysicsTest` y `SlangExportTest` ahora corren de verdad.
   - `TempSlangFilePath()` (CompileFromSource) ahora usa `TEMP`→`TMPDIR`→`TMP`→`.` (antes solo `TEMP`).
+  - **CI Windows pasa a compilar con MSVC (`cl`)** (2026-08-14): el runner de GitHub Actions no
+    configura `cl.exe`, así que el preset `windows-ci-debug` (Ninja) caía en el MinGW de la imagen
+    (`C:/mingw64`); los exes MinGW **se cuelgan silenciosamente antes de `main()`** al ejecutarlos
+    (los tests nunca corrieron: ctest no encontraba tests por falta de `enable_testing()`, y al
+    arreglarlo ambos tests —incluso PhysicsTest, sin Slang— colgaban sin imprimir nada). Fix:
+    paso `ilammy/msvc-dev-cmd@v1` + `-DCMAKE_CXX_COMPILER=cl` → CI Windows = preset local
+    `windows-debug` (MSVC). Verificado: CI verde en 3 plataformas (Windows MSVC: PhysicsTest +
+    SlangExportTest; DXIL compila con slangc). `ctest --timeout 120` como guard contra hangs.
+  - DXIL es target **solo-Windows**: requiere el compilador externo `dxc` (dxcompiler), que solo
+    existe en el Vulkan SDK de Windows → `AllTargets()` lo omite en no-Windows (el smoke test
+    espera 5 targets en Windows, 4 en macOS/Linux).
 
 #### Plan B — Migración al RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
 
