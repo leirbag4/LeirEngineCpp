@@ -100,6 +100,16 @@ jobs:
           case "${{ matrix.os }}" in
             windows-latest)
               export PATH="$BUILD_DIR/engine:$PATH"
+              # MinGW-built exes need the MinGW runtime DLLs (libstdc++-6.dll,
+              # libgcc_s_seh-1.dll, libwinpthread-1.dll). CMake finds the
+              # compiler by scanning known MinGW roots, so C:\mingw64\bin is
+              # NOT guaranteed to be on the runner PATH — without it the exes
+              # block on a missing-DLL dialog (silent hang, no output).
+              CXX_BIN="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "$BUILD_DIR/CMakeCache.txt" | head -1 | cut -d= -f2- | xargs dirname)"
+              if [ -n "$CXX_BIN" ]; then
+                export PATH="$CXX_BIN:$PATH"
+              fi
+              echo "test PATH gcc: $(command -v gcc || echo NOT_ON_PATH) | CXX_BIN=$CXX_BIN"
               ;;
             macos-latest)
               export DYLD_LIBRARY_PATH="$BUILD_DIR/engine:$DYLD_LIBRARY_PATH"
