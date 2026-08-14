@@ -13,6 +13,11 @@ option(LEIR_BUILD_TESTS "Build unit tests" OFF)
 option(LEIR_BUILD_EXAMPLES "Build example projects" ON)
 option(LEIR_BUILD_DOCS "Build Doxygen documentation" OFF)
 
+# Tests
+if(LEIR_BUILD_TESTS)
+    enable_testing()
+endif()
+
 # Dependencies
 add_subdirectory(dependencies)
 

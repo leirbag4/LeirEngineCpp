@@ -22,8 +22,13 @@ namespace {
 // temp .slang file and goes through the same file-based path.
 std::string TempSlangFilePath(const std::string& moduleName)
 {
+    // TEMP (Windows) / TMPDIR (macOS/Linux) fall back to TMP then ".".
     const char* base = getenv("TEMP");
-    std::string dir = base ? base : ".";
+    if (!base || !*base)
+        base = getenv("TMPDIR");
+    if (!base || !*base)
+        base = getenv("TMP");
+    std::string dir = base && *base ? base : ".";
     static int counter = 0;
     return dir + "/leir_slang_" + moduleName + "_" + std::to_string(++counter) + ".slang";
 }

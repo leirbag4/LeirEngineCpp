@@ -64,6 +64,17 @@ if(WIN32 AND MSVC)
 endif()
 
 # Shader compilation (Slang)
+# The shader dirs are compile-time constants the engine needs on every platform
+# regardless of whether slangc is installed (CI macOS/Linux runners don't ship
+# slangc — only the Vulkan SDK's Windows install provides it).
+set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")
+target_compile_definitions(LeirEngine PUBLIC
+    LEIR_SHADER_DIR="${SHADER_OUTPUT_DIR}"
+    # .slang sources (editor shader tooling reads them for export / hot-reload)
+    LEIR_SHADER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+)
+
 find_program(SLANGC slangc)
 if(SLANGC)
     set(SHADER_SOURCES
@@ -74,8 +85,6 @@ if(SLANGC)
         shaders/UI.vert.slang
         shaders/UI.frag.slang
     )
-    set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-    file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")
     foreach(SHADER ${SHADER_SOURCES})
         get_filename_component(SHADER_NAME ${SHADER} NAME)
         # Base output name: strip the trailing .slang (Sprite.vert.slang -> Sprite.vert)
@@ -114,10 +123,6 @@ if(SLANGC)
     endforeach()
     add_custom_target(LeirShaders ALL DEPENDS ${SHADER_SPVS})
     add_dependencies(LeirEngine LeirShaders)
-    target_compile_definitions(LeirEngine PUBLIC LEIR_SHADER_DIR="${SHADER_OUTPUT_DIR}")
-    # .slang sources (editor shader tooling reads them for export / hot-reload)
-    target_compile_definitions(LeirEngine PUBLIC
-        LEIR_SHADER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
     if(WIN32 AND MSVC)
         add_custom_target(LeirShadersDXIL ALL DEPENDS ${SHADER_DXILS})
         add_dependencies(LeirShadersDXIL LeirShaders)

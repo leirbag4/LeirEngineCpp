@@ -530,6 +530,25 @@ hechos, verificación de export completa. Desviaciones/hallazgos con datos:
   SPIR-V/DXIL/Metal/WGSL/GLSL-450 → **6/6** cada uno (30 archivos en `shaders_export/`).
 - TODO_UI_EVENT_FLOOD RULE respetado: los logs de export son `[debug]`/`[info]` acotados por acción,
   nunca por frame.
+- **Vendoring de libslang — `editor/vendor/slang/` v2026.14.1** (2026-08-14, CI verde en 3
+  plataformas): las prebuilt del release de [shader-slang](https://github.com/shader-slang/slang)
+  quedan commiteadas en el repo (naming moderno `slang-compiler`/`slang-rt`, sin el proxy
+  deprecado `slang.dll`; ver `editor/vendor/slang/README.md`). El tooling del editor deja de
+  depender de `$VULKAN_SDK` y su gate se abre a todas las plataformas (antes
+  `WIN32 AND MSVC AND DEFINED ENV{VULKAN_SDK}`). CMake compartido `cmake/SlangTooling.cmake`
+  (`leir_setup_slang_target`, usado por editor y tests): include vendored + link por OS
+  (Windows `slang-compiler.lib`, Linux `.so.0.2026.14.1`, macOS `.0.2026.14.1.dylib`) + copia
+  POST_BUILD de las DLL/.so/.dylib + `BUILD_RPATH` (`$ORIGIN` Linux / `@loader_path` macOS).
+  Smoke test CTest **`SlangExportTest`** (`tests/SlangExportTest.cpp`): corre el export 6/6 × 5
+  targets en CI — valida link + carga dinámica (dlopen/dyld) + codegen en las 3 plataformas.
+  Fixes conexos (CI estaba rojo desde `3dfc232`, invisible porque varios commits usaban
+  `[skip ci]`):
+  - `LEIR_SHADER_DIR` y `LEIR_SHADER_SOURCE_DIR` ahora se definen **siempre** en el engine
+    (antes dentro de `if(SLANGC)` → macOS/Linux sin `slangc` fallaban con "undeclared identifier
+    LEIR_SHADER_DIR"); el compile de shaders sigue gated a `slangc` (best-effort).
+  - Faltaba **`enable_testing()`** en el root `CMakeLists.txt` → `ctest` nunca registró ni corrió
+    ningún test ("No tests were found"). `PhysicsTest` y `SlangExportTest` ahora corren de verdad.
+  - `TempSlangFilePath()` (CompileFromSource) ahora usa `TEMP`→`TMPDIR`→`TMP`→`.` (antes solo `TEMP`).
 
 #### Plan B — Migración al RHI completo §3 (GCommandGraph, bindless, reflection, GCaps)
 

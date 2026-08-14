@@ -15,17 +15,15 @@ add_executable(LeirEngineEditor
 
 # ---- Shader tooling (Plan A, TODO_RHI_SLANG.md §5) ----
 # IShaderCompiler implementation + multi-format exporter + shader hot-reload.
-# Editor-only dev tools: they link libslang, so they are only built when the
-# Slang libraries from the Vulkan SDK are available (Windows + MSVC). The
-# engine DLL itself stays slang-free (isolation §6).
-if(WIN32 AND MSVC AND DEFINED ENV{VULKAN_SDK})
-    target_sources(LeirEngineEditor PRIVATE
-        src/Shaders/SlangShaderCompiler.cpp
-        src/Shaders/ShaderExporter.cpp
-        src/Shaders/ShaderHotReloader.cpp
-    )
-    target_compile_definitions(LeirEngineEditor PRIVATE LEIR_EDITOR_SLANG=1)
-endif()
+# Editor-only dev tools: they link libslang, vendored under vendor/slang/
+# (v2026.14.1, shader-slang release — see vendor/slang/README.md). Available on
+# every platform; the engine DLL itself stays slang-free (isolation §6).
+target_sources(LeirEngineEditor PRIVATE
+    src/Shaders/SlangShaderCompiler.cpp
+    src/Shaders/ShaderExporter.cpp
+    src/Shaders/ShaderHotReloader.cpp
+)
+target_compile_definitions(LeirEngineEditor PRIVATE LEIR_EDITOR_SLANG=1)
 
 target_include_directories(LeirEngineEditor
     PRIVATE
@@ -52,26 +50,11 @@ if(WIN32)
 endif()
 
 # ---- Slang compiler (editor shader tooling) ----
-# Uses the libslang bundled with the Vulkan SDK ($VULKAN_SDK/Include/slang,
-# $VULKAN_SDK/Lib/slang.lib, $VULKAN_SDK/Bin/slang*.dll) — the exact version
-# (2026.13.1) that ships with the SDK, so it matches the `slangc` that compiles
-# the engine shaders at build time. Deliberate deviation from the original Plan
-# A ("static libslang via FetchContent"): a source build pulls the whole Slang
-# compiler + LLVM and is slow/fragile; the SDK prebuilt is version-exact with
-# the spike and avoids the heavy build. See TODO_RHI_SLANG.md §5 Plan A.
-if(WIN32 AND MSVC AND DEFINED ENV{VULKAN_SDK})
-    target_include_directories(LeirEngineEditor PRIVATE "$ENV{VULKAN_SDK}/Include/slang")
-    target_link_libraries(LeirEngineEditor PRIVATE "$ENV{VULKAN_SDK}/Lib/slang.lib")
-    # Copy the Slang runtime DLLs next to the editor exe ($VULKAN_SDK/Bin is not
-    # guaranteed to be on PATH when the editor is launched).
-    foreach(SLANG_DLL IN ITEMS slang.dll slang-compiler.dll slang-rt.dll slang-glslang.dll slang-glsl-module.dll)
-        add_custom_command(TARGET LeirEngineEditor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$ENV{VULKAN_SDK}/Bin/${SLANG_DLL}"
-                "$<TARGET_FILE_DIR:LeirEngineEditor>/${SLANG_DLL}"
-        )
-    endforeach()
-endif()
+# Vendored libslang (v2026.14.1) under vendor/slang/ — per-platform link + the
+# runtime libs copied next to the exe. Shared with the SlangExportTest smoke
+# test via cmake/SlangTooling.cmake (see that file + vendor/slang/README.md).
+include("${CMAKE_SOURCE_DIR}/cmake/SlangTooling.cmake")
+leir_setup_slang_target(LeirEngineEditor)
 
 add_custom_command(TARGET LeirEngineEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
