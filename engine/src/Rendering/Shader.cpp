@@ -1,5 +1,6 @@
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/RHI/RenderBackend.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 
 #include "LeirEngine/Core/Log.h"
 #include <fstream>
@@ -36,6 +37,12 @@ void Shader::Load()
         info.entryPoint = "main";
         m_StageInfos.push_back(info);
     }
+
+    m_Reflection = LoadShaderReflectionFromSidecars({ m_VertexPath, m_FragmentPath });
+    if (!m_Reflection.bindings.empty())
+        XConsole::Debug("[Reflection] {} + {}: {} bindings, {} push ranges",
+            m_VertexPath, m_FragmentPath,
+            m_Reflection.bindings.size(), m_Reflection.pushConstants.size());
 }
 
 void Shader::Reload()

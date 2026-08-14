@@ -1,6 +1,7 @@
 #include "LeirEngine/Rendering/Material.h"
 #include "LeirEngine/RHI/RenderBackend.h"
 #include "LeirEngine/Rendering/Shader.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 #include "LeirEngine/Rendering/Texture2D.h"
 #include "LeirEngine/Rendering/Mesh.h"
 #include "LeirEngine/Rendering/RenderPipeline.h"
@@ -14,7 +15,7 @@ Material::Material(RHI::RenderBackend* device, std::shared_ptr<Shader> shader)
     , m_Shader(std::move(shader))
 {
     CreateDescriptorPool();
-    CreateDescriptorSetLayout();
+    CreateSetLayouts();
     CreateDescriptorSet();
 }
 
@@ -24,10 +25,10 @@ Material::~Material()
         m_Device->DestroyPipeline(m_Pipeline);
     if (m_PipelineLayout.IsValid())
         m_Device->DestroyPipelineLayout(m_PipelineLayout);
-    if (m_DescriptorSetLayout.IsValid())
-        m_Device->DestroyDescriptorSetLayout(m_DescriptorSetLayout);
-    if (m_UBOSetLayout.IsValid())
-        m_Device->DestroyDescriptorSetLayout(m_UBOSetLayout);
+    for (auto& entry : m_SetLayouts) {
+        if (entry.layout.IsValid())
+            m_Device->DestroyDescriptorSetLayout(entry.layout);
+    }
     if (m_DescriptorPool.IsValid())
         m_Device->DestroyDescriptorPool(m_DescriptorPool);
 }
@@ -69,12 +70,9 @@ void Material::RecreatePipeline(RHI::RHIRenderPass renderPass)
         m_Device->DestroyPipelineLayout(m_PipelineLayout);
         m_PipelineLayout = RHI::RHIPipelineLayout{};
     }
-    // CreatePipeline() re-allocates m_UBOSetLayout; free the previous one so a
-    // repeated RecreatePipeline doesn't leak a descriptor set layout.
-    if (m_UBOSetLayout.IsValid()) {
-        m_Device->DestroyDescriptorSetLayout(m_UBOSetLayout);
-        m_UBOSetLayout = RHI::RHIDescriptorSetLayout{};
-    }
+    // m_SetLayouts is created once in the ctor and reused: CreatePipeline()
+    // rebuilds only the pipeline layout (which references the same set
+    // layouts), so a repeated RecreatePipeline leaks nothing.
     CreatePipeline(renderPass);
 }
 
@@ -86,15 +84,34 @@ void Material::CreateDescriptorPool()
     m_DescriptorPool = m_Device->CreateDescriptorPool(poolBindings, 1);
 }
 
-void Material::CreateDescriptorSetLayout()
+void Material::CreateSetLayouts()
 {
-    RHI::RHIDescriptorBinding samplerBinding{};
-    samplerBinding.binding = 0;
-    samplerBinding.type = RHI::DescriptorType::CombinedImageSampler;
-    samplerBinding.count = 1;
-    samplerBinding.stage = RHI::ShaderStage::Fragment;
+    if (m_Shader && m_Shader->HasReflection()) {
+        // Derived from the shader's reflection sidecar (Plan B, Fase 2): the
+        // pipeline layout then always matches the shader signature by
+        // construction. Ascending set order: [set 0 (UBO), set 1 (sampler)].
+        m_SetLayouts = CreateSetLayoutsFromReflection(m_Device, m_Shader->GetReflection());
+    } else {
+        // Legacy fallback (no sidecar present: engine running without a
+        // shader compiler). Mirrors the pre-reflection hand-written layout.
+        m_SetLayouts.clear();
+        RHI::RHIDescriptorBinding ubo{};
+        ubo.binding = 0;
+        ubo.type = RHI::DescriptorType::UniformBuffer;
+        ubo.count = 1;
+        ubo.stage = RHI::ShaderStage::Vertex;
+        m_SetLayouts.push_back({ 0, m_Device->CreateDescriptorSetLayout({ ubo }) }); // set 0
 
-    m_DescriptorSetLayout = m_Device->CreateDescriptorSetLayout({ samplerBinding });
+        RHI::RHIDescriptorBinding sampler{};
+        sampler.binding = 0;
+        sampler.type = RHI::DescriptorType::CombinedImageSampler;
+        sampler.count = 1;
+        sampler.stage = RHI::ShaderStage::Fragment;
+        m_SetLayouts.push_back({ 1, m_Device->CreateDescriptorSetLayout({ sampler }) }); // set 1
+    }
+
+    m_UBOSetLayout = m_SetLayouts.size() > 0 ? m_SetLayouts[0].layout : RHI::RHIDescriptorSetLayout{};
+    m_DescriptorSetLayout = m_SetLayouts.size() > 1 ? m_SetLayouts[1].layout : RHI::RHIDescriptorSetLayout{};
 }
 
 void Material::CreateDescriptorSet()
@@ -118,18 +135,23 @@ void Material::UpdateDescriptorSet()
 
 void Material::CreatePipeline(RHI::RHIRenderPass renderPass)
 {
-    RHI::RHIPushConstantRange pushRange{};
-    pushRange.stage = RHI::ShaderStageMask::VertexFragment;
-    pushRange.offset = 0;
-    pushRange.size = (uint32_t)sizeof(PushConstants);
+    if (m_Shader && m_Shader->HasReflection()) {
+        // Pipeline layout derived from the reflection sidecar: the descriptor
+        // set layouts (one per set) + push ranges come straight from the
+        // shader signature, so layout/shader mismatches are impossible.
+        m_PipelineLayout = CreatePipelineLayoutFromReflection(
+            m_Device, m_Shader->GetReflection(), m_SetLayouts);
+    } else {
+        RHI::RHIPushConstantRange pushRange{};
+        pushRange.stage = RHI::ShaderStageMask::VertexFragment;
+        pushRange.offset = 0;
+        pushRange.size = (uint32_t)sizeof(PushConstants);
 
-    m_UBOSetLayout = m_Device->CreateDescriptorSetLayout({
-        { 0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex }
-    });
-
-    m_PipelineLayout = m_Device->CreatePipelineLayout(
-        { m_UBOSetLayout, m_DescriptorSetLayout },
-        { pushRange });
+        std::vector<RHI::RHIDescriptorSetLayout> layouts;
+        for (const auto& entry : m_SetLayouts)
+            layouts.push_back(entry.layout);
+        m_PipelineLayout = m_Device->CreatePipelineLayout(layouts, { pushRange });
+    }
 
     BuildPipeline(renderPass);
 }

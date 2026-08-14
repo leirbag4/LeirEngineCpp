@@ -1,4 +1,5 @@
 #include "ShaderHotReloader.h"
+#include "ShaderExporter.h"
 
 #include <LeirEngine/Core/Log.h>
 
@@ -87,7 +88,7 @@ void ShaderHotReloader::Update(Leir::RHI::ShaderTarget target)
         entry.lastMtimeSeconds = seconds;
         entry.lastSize = size;
 
-        auto result = m_Compiler->Compile(entry.source, target, entry.stage, /*reflect=*/false);
+        auto result = m_Compiler->Compile(entry.source, target, entry.stage, /*reflect=*/true);
         if (!result.ok) {
             Leir::XConsole::PrintError("[HotReload] {} FAILED: {}", entry.source, result.error);
             continue;
@@ -107,6 +108,13 @@ void ShaderHotReloader::Update(Leir::RHI::ShaderTarget target)
         }
         std::fwrite(result.bytecode.data(), 1, result.bytecode.size(), fp);
         std::fclose(fp);
+
+        // Regenerate the reflection sidecar alongside the bytecode so pipeline
+        // layouts keep matching the shader signature after a reload.
+        const std::string base = entry.source.substr(entry.source.find_last_of("/\\") + 1);
+        const std::string name = base.size() > 6 ? base.substr(0, base.size() - 6) : base;
+        ShaderExporter::WriteReflectionSidecar(name, result.reflection, entry.stage,
+            kShaderOutputDir);
 
         Leir::XConsole::Println("[HotReload] {} -> {} ({} bytes)",
             entry.source, entry.output, result.bytecode.size());

@@ -19,6 +19,7 @@ add_library(LeirEngine SHARED
     src/Rendering/VulkanDevice.cpp
     src/RHI/VulkanBackend.cpp
     src/Rendering/Shader.cpp
+    src/Rendering/ShaderLayout.cpp
 
     src/Rendering/Image.cpp
     src/Rendering/Texture2D.cpp
@@ -149,8 +150,8 @@ target_link_libraries(LeirEngine
     PUBLIC
         glfw
         glm
-    PRIVATE
         nlohmann_json::nlohmann_json
+    PRIVATE
         cereal::cereal
 )
 

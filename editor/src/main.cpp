@@ -163,6 +163,22 @@ protected:
             caps.bindless, caps.instancing, caps.compute, caps.storageBuffers, caps.sRGB,
             caps.wireframe, caps.anisotropicFiltering);
 
+#ifdef LEIR_EDITOR_SLANG
+        // ---- Shader compiler (Plan A) ----
+        // Created before the Shader/Material so the reflection sidecars are
+        // written to LEIR_SHADER_DIR first: pipeline layouts are then derived
+        // from the shader signature (Plan B, Fase 2). The engine itself never
+        // links Slang; this is editor-only dev tooling.
+        m_ShaderCompiler = std::make_unique<Leir::RHI::SlangShaderCompiler>();
+        if (m_ShaderCompiler->IsAvailable()) {
+            Leir::XConsole::Println("Shader compiler ready: {} (libslang)",
+                m_ShaderCompiler->GetVersion());
+            auto sidecarLines = ShaderExporter::WriteRuntimeSidecars(m_ShaderCompiler.get());
+            for (const auto& line : sidecarLines)
+                Leir::XConsole::Println("{}", line);
+        }
+#endif
+
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
             m_Backend.get(),
@@ -425,14 +441,11 @@ protected:
         });
 
 #ifdef LEIR_EDITOR_SLANG
-        // ---- Shader tooling (Plan A) ----
-        // libslang-backed compiler + hot-reload. The engine itself never links
-        // Slang; this is editor-only dev tooling.
-        m_ShaderCompiler = std::make_unique<Leir::RHI::SlangShaderCompiler>();
-        if (m_ShaderCompiler->IsAvailable()) {
-            Leir::XConsole::Println("Shader compiler ready: {} (libslang)",
-                m_ShaderCompiler->GetVersion());
-
+        // ---- Shader hot-reload + export wiring (Plan A) ----
+        // m_ShaderCompiler was created earlier in OnInit (before the Shader,
+        // so the reflection sidecars already exist); here we only wire up the
+        // per-frame poller and the DebugPanel buttons.
+        if (m_ShaderCompiler && m_ShaderCompiler->IsAvailable()) {
             m_HotReloader = std::make_unique<ShaderHotReloader>();
             m_HotReloader->SetCompiler(m_ShaderCompiler.get());
             m_HotReloader->SetOnReload([this]() {

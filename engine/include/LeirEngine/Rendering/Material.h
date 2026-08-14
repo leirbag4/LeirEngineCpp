@@ -3,10 +3,12 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector4.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 #include "LeirEngine/RHI/RHI.h"
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Leir {
 
@@ -43,7 +45,7 @@ public:
 
 private:
     void CreateDescriptorPool();
-    void CreateDescriptorSetLayout();
+    void CreateSetLayouts();
     void CreateDescriptorSet();
     void UpdateDescriptorSet();
     void CreatePipeline(RHI::RHIRenderPass renderPass);
@@ -54,8 +56,9 @@ private:
     Vector4 m_Color{1.0f, 1.0f, 1.0f, 1.0f};
 
     RHI::RHIDescriptorPool m_DescriptorPool;
-    RHI::RHIDescriptorSetLayout m_DescriptorSetLayout;
-    RHI::RHIDescriptorSetLayout m_UBOSetLayout;
+    std::vector<RHISetLayoutEntry> m_SetLayouts; // ascending set order
+    RHI::RHIDescriptorSetLayout m_DescriptorSetLayout;      // set 1 (sampler)
+    RHI::RHIDescriptorSetLayout m_UBOSetLayout;             // set 0 (UBO)
     RHI::RHIDescriptorSet m_DescriptorSet;
 
     RHI::RHIPipelineLayout m_PipelineLayout;

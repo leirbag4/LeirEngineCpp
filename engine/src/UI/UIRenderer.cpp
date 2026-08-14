@@ -13,6 +13,7 @@
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/RenderTexture.h"
 #include "LeirEngine/Rendering/Shader.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 #include "LeirEngine/Rendering/Texture2D.h"
 #include "LeirEngine/Rendering/Image.h"
 #include "LeirEngine/Core/Settings.h"
@@ -47,23 +48,35 @@ void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, R
 UIRenderer::UIRenderer(RHI::RenderBackend* device)
     : m_Device(device)
 {
-    // Descriptor set layout (binding 0: combined image sampler)
-    m_DescSetLayout = m_Device->CreateDescriptorSetLayout({
-        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
-    });
+    // Descriptor set + pipeline layouts derived from the UI shader reflection
+    // sidecars (Plan B, Fase 2). Falls back to the hand-written layout when
+    // the sidecars are missing (engine running without a shader compiler).
+    const std::string vertPath = std::string(LEIR_SHADER_DIR) + "/UI.vert" + m_Device->GetShaderFileExtension();
+    const std::string fragPath = std::string(LEIR_SHADER_DIR) + "/UI.frag" + m_Device->GetShaderFileExtension();
+    const RHI::ShaderReflection uiReflection = LoadShaderReflectionFromSidecars({ vertPath, fragPath });
+    if (!uiReflection.bindings.empty()) {
+        m_SetLayouts = CreateSetLayoutsFromReflection(m_Device, uiReflection);
+        if (!m_SetLayouts.empty())
+            m_DescSetLayout = m_SetLayouts[0].layout; // set 0: combined image sampler
+        m_PipelineLayout = CreatePipelineLayoutFromReflection(m_Device, uiReflection, m_SetLayouts);
+    } else {
+        m_DescSetLayout = m_Device->CreateDescriptorSetLayout({
+            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
+        });
+        m_SetLayouts = { { 0, m_DescSetLayout } };
+
+        RHI::RHIPushConstantRange pushRange{};
+        pushRange.stage = RHI::ShaderStageMask::Vertex;
+        pushRange.offset = 0;
+        pushRange.size = sizeof(Vector2);
+        m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
+    }
 
     // Pool: up to 64 textures
     std::vector<RHI::RHIDescriptorBinding> poolBindings = {
         { 0, RHI::DescriptorType::CombinedImageSampler, 64, RHI::ShaderStage::Fragment }
     };
     m_DescPool = m_Device->CreateDescriptorPool(poolBindings, 64);
-
-    // Pipeline layout
-    RHI::RHIPushConstantRange pushRange{};
-    pushRange.stage = RHI::ShaderStageMask::Vertex;
-    pushRange.offset = 0;
-    pushRange.size = sizeof(Vector2);
-    m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
 
     CreatePipeline();
 
@@ -153,7 +166,10 @@ UIRenderer::~UIRenderer()
 {
     if (m_Pipeline.IsValid()) m_Device->DestroyPipeline(m_Pipeline);
     if (m_PipelineLayout.IsValid()) m_Device->DestroyPipelineLayout(m_PipelineLayout);
-    if (m_DescSetLayout.IsValid()) m_Device->DestroyDescriptorSetLayout(m_DescSetLayout);
+    for (auto& entry : m_SetLayouts) {
+        if (entry.layout.IsValid())
+            m_Device->DestroyDescriptorSetLayout(entry.layout);
+    }
     if (m_DescPool.IsValid()) m_Device->DestroyDescriptorPool(m_DescPool);
     for (int f = 0; f < 2; ++f) {
         if (m_VertexBuffers[f].IsValid()) m_Device->DestroyBuffer(m_VertexBuffers[f]);

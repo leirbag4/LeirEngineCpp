@@ -131,25 +131,39 @@ void RenderPipeline::CreateSpriteResources()
     m_Device->DestroyBuffer(idxStagingBuf);
     m_Device->DestroyMemory(idxStagingMem);
 
-    // Descriptor set layout (set=0, binding=0: combined image sampler)
-    m_Sprite.descSetLayout = m_Device->CreateDescriptorSetLayout({
-        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
-    });
+    // Descriptor set + pipeline layouts derived from the Sprite shader
+    // reflection sidecars (Plan B, Fase 2). Falls back to the hand-written
+    // layout when the sidecars are missing (engine running without a compiler).
+    const std::string vertPath = std::string(LEIR_SHADER_DIR) + "/Sprite.vert" + m_Device->GetShaderFileExtension();
+    const std::string fragPath = std::string(LEIR_SHADER_DIR) + "/Sprite.frag" + m_Device->GetShaderFileExtension();
+    const RHI::ShaderReflection spriteReflection = LoadShaderReflectionFromSidecars({ vertPath, fragPath });
+    if (!spriteReflection.bindings.empty()) {
+        m_Sprite.setLayouts = CreateSetLayoutsFromReflection(m_Device, spriteReflection);
+        if (!m_Sprite.setLayouts.empty())
+            m_Sprite.descSetLayout = m_Sprite.setLayouts[0].layout; // set 0: sampler
+        m_Sprite.pipelineLayout = CreatePipelineLayoutFromReflection(
+            m_Device, spriteReflection, m_Sprite.setLayouts);
+    } else {
+        // Descriptor set layout (set=0, binding=0: combined image sampler)
+        m_Sprite.descSetLayout = m_Device->CreateDescriptorSetLayout({
+            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
+        });
+        m_Sprite.setLayouts = { { 0, m_Sprite.descSetLayout } };
+
+        RHI::RHIPushConstantRange pushRange{};
+        pushRange.stage = RHI::ShaderStageMask::VertexFragment;
+        pushRange.offset = 0;
+        pushRange.size = (uint32_t)sizeof(SpritePushConstants);
+
+        m_Sprite.pipelineLayout = m_Device->CreatePipelineLayout(
+            { m_Sprite.descSetLayout }, { pushRange });
+    }
 
     // Descriptor pool for sampler (256 max sets for texture caching)
     std::vector<RHI::RHIDescriptorBinding> poolBindings = {
         { 0, RHI::DescriptorType::CombinedImageSampler, 256, RHI::ShaderStage::Fragment }
     };
     m_Sprite.descPool = m_Device->CreateDescriptorPool(poolBindings, 256);
-
-    // Pipeline layout
-    RHI::RHIPushConstantRange pushRange{};
-    pushRange.stage = RHI::ShaderStageMask::VertexFragment;
-    pushRange.offset = 0;
-    pushRange.size = (uint32_t)sizeof(SpritePushConstants);
-
-    m_Sprite.pipelineLayout = m_Device->CreatePipelineLayout(
-        { m_Sprite.descSetLayout }, { pushRange });
 
     CreateSpritePipeline();
 
@@ -213,7 +227,10 @@ void RenderPipeline::DestroySpriteResources()
 {
     if (m_Sprite.pipeline.IsValid()) m_Device->DestroyPipeline(m_Sprite.pipeline);
     if (m_Sprite.pipelineLayout.IsValid()) m_Device->DestroyPipelineLayout(m_Sprite.pipelineLayout);
-    if (m_Sprite.descSetLayout.IsValid()) m_Device->DestroyDescriptorSetLayout(m_Sprite.descSetLayout);
+    for (auto& entry : m_Sprite.setLayouts) {
+        if (entry.layout.IsValid())
+            m_Device->DestroyDescriptorSetLayout(entry.layout);
+    }
     if (m_Sprite.descPool.IsValid()) m_Device->DestroyDescriptorPool(m_Sprite.descPool);
     if (m_Sprite.vertexBuffer.IsValid()) m_Device->DestroyBuffer(m_Sprite.vertexBuffer);
     if (m_Sprite.vertexMemory.IsValid()) m_Device->DestroyMemory(m_Sprite.vertexMemory);

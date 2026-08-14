@@ -4,6 +4,7 @@
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector4.h"
 #include "LeirEngine/Math/Matrix4x4.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 #include "LeirEngine/RHI/RHI.h"
 #include <array>
 #include <memory>
@@ -89,6 +90,7 @@ private:
         RHI::RHIPipelineLayout pipelineLayout;
         RHI::RHIPipeline pipeline;
         RHI::RHIDescriptorSetLayout descSetLayout;
+        std::vector<RHISetLayoutEntry> setLayouts; // derived from reflection (owned)
         RHI::RHIDescriptorPool descPool;
         RHI::RHIBuffer vertexBuffer;
         RHI::RHIDeviceMemory vertexMemory;

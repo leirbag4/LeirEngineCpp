@@ -2,6 +2,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
+#include "LeirEngine/Rendering/ShaderLayout.h"
 #include "LeirEngine/RHI/RHI.h"
 #include <unordered_map>
 #include <vector>
@@ -66,6 +67,7 @@ private:
     RHI::RHIPipelineLayout m_PipelineLayout;
     RHI::RHIPipeline m_Pipeline;
     RHI::RHIDescriptorSetLayout m_DescSetLayout;
+    std::vector<RHISetLayoutEntry> m_SetLayouts; // derived from reflection (owned)
     RHI::RHIDescriptorPool m_DescPool;
     RHI::RHIBuffer m_VertexBuffers[2];
     RHI::RHIDeviceMemory m_VertexMemories[2];

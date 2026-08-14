@@ -580,9 +580,30 @@ Pasos (en orden, cada uno verificado antes del siguiente):
    `GBindTable` se valida contra esa firma (runtime debug / load release). Eliminar los layouts
    escritos a mano y la clase de errores "Root Signature doesn't match Pixel Shader". Verificación:
    renders idénticos con validación en runtime; un binding mal puesto falla en debug.
-   → **Decisión 2026-08-14**: firma por **sidecar offline** (el exporter emite los bindings por
+   ✅ **Hecho 2026-08-14 (Fase 2)**: firma por **sidecar offline** (el exporter emite los bindings por
    shader; el engine carga el sidecar en runtime). Engine queda 100% slang-free (§6) y el flujo es
    idéntico para SPIR-V y DXIL (parsear DXIL en runtime exigiría linkear dxcompiler/LLVM al DLL).
+   Formato canónico `<name>.reflect.json` = `{stage, bindings:[{name,set,binding,type,count,stage}],
+   pushConstants:[{stage,offset,size}]}`. Nuevo `ShaderLayout.h/.cpp` en el engine:
+   `LoadShaderReflectionFromSidecars`, `CreateSetLayoutsFromReflection` (ascendente por set),
+   `CreatePipelineLayoutFromReflection` (valida set a set + **fusiona push ranges solapados por
+   offset+size con stage combinado** — requerido por Vulkan), `ValidateSetLayoutAgainstReflection`.
+   Migrados a layouts derivados: `Material` (set0 UBO + set1 sampler), `UIRenderer` (set0 sampler,
+   push 8B vertex), `RenderPipeline::Sprite` (set0 sampler, push 96B). Fallback legacy cuando falta
+   el sidecar (engine standalone). El editor genera los sidecars en `LEIR_SHADER_DIR` antes de crear
+   el `Shader` (`ShaderExporter::WriteRuntimeSidecars`, compilador creado antes en `OnInit`);
+   `ShaderExporter::ExportAll` los emite también en el export root; hot-reload los regenera.
+   **Hallazgos arreglados durante la implementación**: (1) la reflexión de Slang para SPIR-V reporta
+   los recursos como `DescriptorTableSlot`(9)/`Mixed`(1), NO `ConstantBuffer`/`PushConstantBuffer` —
+   la clasificación correcta es por `BindingRange` del `TypeLayoutReflection`
+   (`getBindingRangeType` → `BindingType::PushConstant`/`ConstantBuffer`/`CombinedTextureSampler`);
+   (2) el tamaño del push constant viene de `leaf->getElementTypeLayout()->getSize()` (bytes), no de
+   `getSize(PushConstantBuffer)` (=1, sin sentido) — patrón canónico de `slang-reflection-json`/docs.
+   **Verificado**: ctest 2/2; editor Vulkan y D3D12 limpios (0 VUIDs/errores, antes un aluvión de
+   `vkCreateDescriptorSetLayout`/push-range/mismatch); paridad pixel-diff vs Fase 1 (Vulkan 0.39%,
+   D3D12 0.25% = ruido cursor/FPS) y cross-backend 1.33% ≈ baseline 1.4%; sidecars 6/6 y
+   `SlangExportTest` valida 6 `.reflect.json` por ejecución. Nota: `nlohmann_json` pasó a **PUBLIC**
+   en `engine/CMakeLists.txt` (header-only; lo necesita el editor para serializar sidecars).
 3. **Bindless-first** (§3.5): descriptor indexing (Vulkan `VK_EXT_descriptor_indexing` / D3D12
    heap SRV grande) + `GBindTable` con arrays; límite por `GCaps`, no por diseño. **Paga la deuda
    documentada** ("Limitaciones conocidas del backend D3D12" #1: slots SRV/sampler nunca liberados)

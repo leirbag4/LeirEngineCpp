@@ -14,6 +14,18 @@ public:
     // target summarizing the result (or per-shader on failure).
     static std::vector<std::string> ExportAll(Leir::RHI::IShaderCompiler* compiler);
 
+    // Compile every engine shader to SPIR-V (reflect=true) and write the
+    // canonical reflection sidecar next to the runtime bytecode
+    // (LEIR_SHADER_DIR/<name>.reflect.json) so the engine derives its pipeline
+    // layouts from the shader signature (Plan B, Fase 2). Best-effort.
+    static std::vector<std::string> WriteRuntimeSidecars(Leir::RHI::IShaderCompiler* compiler);
+
+    // Serialize one stage's reflection to <outDir>/<name>.reflect.json in the
+    // canonical format parsed by Leir::LoadShaderReflectionFromSidecars.
+    static bool WriteReflectionSidecar(const std::string& name,
+        const Leir::RHI::ShaderReflection& reflection, Leir::RHI::ShaderStage stage,
+        const std::string& outDir);
+
     // Human-readable label for a target, e.g. "SPIR-V" / "DXIL" / "Metal" ...
     static const char* TargetLabel(Leir::RHI::ShaderTarget target);
 

@@ -86,16 +86,18 @@ ShaderStageMask StageMask(ShaderStage stage)
                                         : ShaderStageMask::Fragment;
 }
 
-// Map a Slang parameter category to our DescriptorType. Best effort: the RHI
+// Map a Slang binding range type to our DescriptorType. Best effort: the RHI
 // currently only knows CombinedImageSampler + UniformBuffer.
-DescriptorType ToDescriptorType(slang::ParameterCategory category)
+DescriptorType ToDescriptorType(slang::BindingType type)
 {
-    switch (category) {
-        case slang::ParameterCategory::ConstantBuffer:
+    switch (type) {
+        case slang::BindingType::ConstantBuffer:
+        case slang::BindingType::ParameterBlock:
             return DescriptorType::UniformBuffer;
-        case slang::ParameterCategory::ShaderResource:
-        case slang::ParameterCategory::UnorderedAccess:
-        case slang::ParameterCategory::SamplerState:
+        case slang::BindingType::Texture:
+        case slang::BindingType::CombinedTextureSampler:
+        case slang::BindingType::Sampler:
+        case slang::BindingType::MutableTexture:
         default:
             return DescriptorType::CombinedImageSampler;
     }
@@ -264,27 +266,44 @@ CompileResult SlangShaderCompiler::CompileModule(
                 if (!param)
                     continue;
 
-                const slang::ParameterCategory category = param->getCategory();
-                if (category == slang::ParameterCategory::PushConstantBuffer) {
-                    ShaderPushConstantRange range;
-                    range.stage = StageMask(stage);
-                    range.offset = (uint32_t)param->getOffset(
-                        slang::ParameterCategory::PushConstantBuffer);
-                    range.size = (uint32_t)param->getTypeLayout()->getSize(
-                        slang::ParameterCategory::PushConstantBuffer);
-                    reflection.pushConstants.push_back(range);
-                    continue;
-                }
+                // Walk the parameter's binding ranges: the binding type tells us
+                // whether this is a descriptor (texture/sampler/cbuffer) or a
+                // push constant block, independent of the target's parameter
+                // category naming (DescriptorTableSlot/Mixed on SPIR-V).
+                slang::TypeLayoutReflection* typeLayout = param->getTypeLayout();
+                const unsigned rangeCount =
+                    (unsigned)typeLayout->getBindingRangeCount();
+                for (unsigned r = 0; r < rangeCount; ++r) {
+                    const slang::BindingType bt = typeLayout->getBindingRangeType(r);
+                    const uint32_t set = param->getBindingSpace();
+                    const uint32_t binding = param->getBindingIndex();
+                    const uint32_t count2 =
+                        (uint32_t)typeLayout->getBindingRangeBindingCount(r);
 
-                ShaderBinding binding;
-                if (param->getName())
-                    binding.name = param->getName();
-                binding.set = param->getBindingSpace();
-                binding.binding = param->getBindingIndex();
-                binding.type = ToDescriptorType(category);
-                binding.count = 1;
-                binding.stage = stage;
-                reflection.bindings.push_back(binding);
+                    slang::TypeLayoutReflection* leaf =
+                        typeLayout->getBindingRangeLeafTypeLayout(r);
+                    slang::TypeLayoutReflection* element =
+                        leaf ? leaf->getElementTypeLayout() : nullptr;
+
+                    if (bt == slang::BindingType::PushConstant) {
+                        ShaderPushConstantRange range;
+                        range.stage = StageMask(stage);
+                        range.offset = (uint32_t)param->getOffset();
+                        range.size = element ? (uint32_t)element->getSize() : 0;
+                        reflection.pushConstants.push_back(range);
+                        continue;
+                    }
+
+                    ShaderBinding b;
+                    if (param->getName())
+                        b.name = param->getName();
+                    b.set = set;
+                    b.binding = binding;
+                    b.type = ToDescriptorType(bt);
+                    b.count = count2;
+                    b.stage = stage;
+                    reflection.bindings.push_back(b);
+                }
             }
             result.reflection = std::move(reflection);
         }

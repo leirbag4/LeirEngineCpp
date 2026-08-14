@@ -5,6 +5,7 @@
 #include "SlangShaderCompiler.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 // CI smoke test: run the vendored Slang compiler through the editor's
@@ -45,6 +46,23 @@ int main()
             fullTargets, kExpectedTargets, anyFailure ? "yes" : "no");
         return 1;
     }
-    std::printf("SlangExportTest: OK\n");
+
+    // ExportAll must also emit one reflection sidecar per shader (the SpirV
+    // pass writes <name>.reflect.json next to the bytecode) — the engine
+    // derives its pipeline layouts from these at runtime (Plan B, Fase 2).
+    int sidecars = 0;
+    std::error_code ec;
+    const std::string sidecarDir = std::string(LEIR_SHADER_EXPORT_DIR) + "/spirv";
+    for (const auto& entry : std::filesystem::directory_iterator(sidecarDir, ec)) {
+        const std::string name = entry.path().filename().string();
+        if (name.size() > 13 && name.compare(name.size() - 13, 13, ".reflect.json") == 0)
+            ++sidecars;
+    }
+    if (ec || sidecars != 6) {
+        std::fprintf(stderr, "SlangExportTest: FAILED (reflection sidecars=%d/6)\n", sidecars);
+        return 1;
+    }
+
+    std::printf("SlangExportTest: OK (%d reflection sidecars)\n", sidecars);
     return 0;
 }
