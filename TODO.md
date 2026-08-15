@@ -1,8 +1,12 @@
 # LeirEngine — TODO List
 
-> **Estado actual:** Core, Renderer (Vulkan), Physics (Jolt), UI system propio y Editor base están
-> implementados. Pendiente: Audio (SoLoud), Serialización & Assets, Animaciones, Documentación,
-> build WSL/Linux y MoltenVK. Detalle de lo ya hecho en cada fase abajo.
+> **Estado actual:** Core, Renderer (RHI multi-backend: Vulkan + D3D12 + WebGPU), Physics (Jolt),
+> UI system propio y Editor base están implementados. Pendiente: Audio (SoLoud), Serialización &
+> Assets, Animaciones, Documentación, build WSL/Linux y MoltenVK. Detalle de lo ya hecho en cada
+> fase abajo. El renderer pasó de un backend Vulkan monolítico a una **RHI multi-backend**
+> (`RenderBackend` → `VulkanBackend` / `D3D12Backend` / `WebGPUBackend`) con comandos por-frame
+> (`GCommandGraph`), texturas **bindless** y layouts derivados de **reflection sidecars** — ver
+> `TODO_RHI_SLANG.md`.
 
 ## Fase 0 — Setup Inicial
 - [x] Crear estructura de directorios del proyecto
@@ -43,6 +47,8 @@
 - [x] `Camera` component (view/projection, frustum culling)
 - [x] `Light` component (directional, point, spot)
 - [x] Sprite 2D overlay system (pipeline, SpriteRenderer, SpriteSheet, push constants con uvRect)
+- [x] **RHI multi-backend** (`RenderBackend`): `VulkanBackend` + `D3D12Backend` + `WebGPUBackend` (wgpu-native v29, backend DX12 forzado en Windows) — render parity entre los 3, selección via `Settings.graphics.backend` ("vulkan"/"d3d12"/"webgpu") + `BackendFactory::Create`. Ver `TODO_RHI_SLANG.md` (Plan B fases 1-4 + Fase 5 WebGPU)
+- [ ] Web export (Emscripten): el mismo `WebGPUBackend.cpp` compila contra `webgpu.h` de Emscripten (canvas vs HWND, aislado por `#ifdef`) — ver `TODO_RHI_SLANG.md` "Fase 6"
 - [ ] MoltenVK integration para macOS/iOS
 - [x] Limpiar recursos en teardown: `VUID-vkDestroyDevice-device-05137` (recursos no destruidos antes de `vkDestroyDevice`). Verificado: 2 corridas limpias con validation layers (dock ops + resize de ventana/swapchain, cerrar app → sin VUID). Fixes: `Material::RecreatePipeline` destruye el `m_UBOSetLayout` viejo antes de recrear (fuga latente de `VkDescriptorSetLayout`); el editor ahora libera todos los subtrees de contenido del dock (`DeleteUiSubtree`) en `OnShutdown` (antes `hierarchy`/`inspector`/paneles debug quedaban huérfanos y nunca se borraban).
 

@@ -173,14 +173,17 @@ public:
 // Factory: create the backend for a window.
 class LEIR_API BackendFactory {
 public:
-    // Creates the backend named by `backend` ("vulkan" / "d3d12"; empty string
-    // = the compile-time LEIR_BACKEND default). Returns nullptr on failure.
+    // Creates the backend named by `backend` ("vulkan" / "d3d12" / "webgpu";
+    // empty string = the compile-time LEIR_BACKEND default). Returns nullptr
+    // on failure.
     static RenderBackend* Create(const std::string& backend,
         void* window, int width, int height, bool vsync, const std::string& appName);
     // Creates a specific backend.
     static RenderBackend* CreateVulkan(void* window, int width, int height,
         bool vsync, const std::string& appName);
     static RenderBackend* CreateD3D12(void* window, int width, int height,
+        bool vsync, const std::string& appName);
+    static RenderBackend* CreateWebGPU(void* window, int width, int height,
         bool vsync, const std::string& appName);
     static void Destroy(RenderBackend* backend);
 };

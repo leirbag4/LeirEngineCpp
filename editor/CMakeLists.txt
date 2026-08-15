@@ -64,3 +64,16 @@ add_custom_command(TARGET LeirEngineEditor POST_BUILD
         "${CMAKE_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:LeirEngineEditor>/assets"
 )
+
+# wgpu_native.dll (Fase 5, WebGPU backend) — loaded dynamically at runtime via
+# LoadLibrary, so it must sit next to the exe. Windows/MSVC only (same gate as
+# the backend source).
+if(WIN32 AND MSVC)
+    include(FetchContent)
+    FetchContent_GetProperties(wgpu)
+    add_custom_command(TARGET LeirEngineEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${wgpu_SOURCE_DIR}/lib/wgpu_native.dll"
+            "$<TARGET_FILE_DIR:LeirEngineEditor>"
+    )
+endif()

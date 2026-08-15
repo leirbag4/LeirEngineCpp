@@ -5,7 +5,7 @@ Documento de decisión y plan. Fecha: 2026-08-10.
 ## 1. Decisión y contexto
 
 - **Objetivo**: editor en Windows/macOS/Linux; runtime del motor en Windows, macOS, Linux,
-  Android, iOS y Web (WebGPU, con fallback WebGL2).
+  Android, iOS y Web (**WebGPU-only**, sin fallback WebGL2 — decisión 2026-08-15, ver §2.6).
 - **Shaders**: **Slang** como fuente única. Slang es un **superconjunto de HLSL**. Los shaders se
   escriben en un **subconjunto HLSL-vanilla** (HLSL es el lenguaje de la industria 3D; GLSL quedó
   obsoleto), usando **solo** las adiciones de Slang imprescindibles para la compilación
@@ -128,35 +128,36 @@ createGlobalSession()                       // UNA vez, al abrir el editor (~30-
 | Vulkan | SPIR-V | ✅ soportado | Windows/Linux/Android |
 | D3D12 | DXIL (`sm_6_0` — el driver Intel UHD soporta hasta 6.5; `sm_6_6` falla en PSO creation, ver Fase 2b) | ✅ soportado | Windows |
 | Metal | MSL | ⚠️ experimental | macOS/iOS |
-| WebGPU | WGSL | ⚠️ WIP | Web |
-| WebGL2 | GLSL ES 3.00 (`#version 300 es`) | ⚠️ limitado | Web fallback |
+| WebGPU | WGSL | ⚠️ WIP | Web (único target web) |
 
-- Para WebGL2, el exporter pide a Slang el target **GLSL** con profile compatible ES 3.00
-  (los 6 shaders actuales son triviales; Slang emite `in`/`out`, `texture()`, output declarado).
-- Nota oficial de Slang: el target GLSL "no espera paridad de features con otros backends"
-  → riesgo documentado (Sección 7).
+- Nota oficial de Slang: el target GLSL "no espera paridad de features con otros backends".
+  **Irrelevante desde 2026-08-15**: WebGL2 quedó fuera de alcance (WebGPU-only).
 
 ### 2.4 Exporter por plataforma
 El editor exporta para cada plataforma **solo** su formato:
 - Windows → SPIR-V (Vulkan) y/o DXIL (D3D12), según backend elegible
 - macOS/iOS → MSL
 - Linux/Android → SPIR-V
-- Web → WGSL + GLSL ES 3.00 (para el fallback WebGL2)
+- Web → **WGSL** (único formato web)
 
 ### 2.5 Runtime (cero conocimiento de Slang)
 `Shader` carga el binario correspondiente al backend activo. El runtime ni siquiera incluye el
 nombre `slang` en una ruta de include.
 
-### 2.6 Fallback Web → WebGL2
-- Detección en el loader web: `navigator.gpu` + `requestAdapter()` OK → backend WebGPU; si falla
-  (Linux flag-gated en Chrome/Firefox, Firefox Linux/Android, WebViews móviles, GPU blocklist de
-  driver) → backend **WebGL2**.
-- WebGL2 usa shaders GLSL ES 3.00 generados por el exporter con el target GLSL de Slang.
-- El motor degrada features según `GCaps` (sin compute, sin bindless, sin MRT...). Mismo RHI,
-  distinto backend.
-- Contexto verificado 2026-08: WebGPU es baseline en Chrome/Edge 113+, Firefox 141+, Safari 26
-  (macOS Tahoe 26 / iOS 26), pero Linux sigue flag-gated y hay long-tail de dispositivos → el
-  fallback sigue siendo necesario.
+### 2.6 Web → WebGPU-only (decisión 2026-08-15)
+- **Sin fallback WebGL2**. Motivos: (1) WebGPU es cross-browser desde enero 2026 (Chrome/Edge
+  113+, Firefox 141+ Windows / 145+ macOS ARM, Safari 26 macOS/iOS/iPadOS/visionOS); cobertura
+  global ~83% desktop / ~70-71% mobile (caniuse), creciendo (Firefox Linux/Android llega a fin
+  de 2026). (2) Nuestro motor es **bindless-first** desde la Fase 3 — estructuralmente
+  WebGPU-aligned y anti-WebGL2 (WebGL2 no tiene descriptor indexing ni push constants; Slang no
+  emite GLSL ES 3.00 directo → SPIRV-Cross obligatorio). Un fallback WebGL2 costaría un segundo
+  path de shaders + un path degradado de texturas para una cola que se encoge mes a mes.
+- La cola restante (~10-18%: Firefox Linux/Android, iPhones pre-A12, WebViews sociales/
+  enterprise con políticas) se cubre con **detección de capacidad + mensaje "browser no
+  soportado"**, no con un segundo backend.
+- En el loader web: `navigator.gpu` + `requestAdapter()` OK → WebGPU; si no, mensaje claro.
+- Mismo RHI, backend WebGPU; `GCaps` expresa límites reales de WebGPU (sin push constants,
+  tabla bindless acotada por `maxSampledTexturesPerShaderStage`, etc.).
 
 ## 3. RHI propia — diseño completo
 
@@ -234,11 +235,10 @@ nombre `slang` en una ruta de include.
 
 | Backend | Plataformas | Shader | Estado |
 |---|---|---|---|
-| **Vulkan** | Windows, Linux, Android | SPIR-V | v1 (migrar el actual) |
-| **D3D12** | Windows | DXIL | v2 |
-| **Metal** | macOS, iOS | MSL | v3 (MoltenVK queda como fallback) |
-| **WebGPU** | Web (Emscripten) | WGSL | v4 |
-| **WebGL2** | Web (fallback) | GLSL ES 3.00 | v4 (degradado) |
+| **Vulkan** | Windows, Linux, Android | SPIR-V | ✅ hecho (RHI) |
+| **D3D12** | Windows | DXIL | ✅ hecho (RHI) |
+| **WebGPU** | Web (Emscripten) y nativo (wgpu-native) | WGSL | Fase 5 (2026-08-15) |
+| **Metal** | macOS, iOS | MSL | pospuesto (sin hardware real) |
 | (futuro) OpenGL ES / D3D11 | legacy | — | opcional |
 
 Editor: backend del host (Windows: Vulkan o D3D12 elegible por `LEIR_BACKEND`).
@@ -276,9 +276,9 @@ target. **30/30 compilaciones OK** entre los 5 targets viables:
 1. **GLSL ES 3.00 NO soportado directamente por Slang** — no existe profile ni
    capability `glsl_es`/`glsl_300_es` (los profiles GLSL van solo de 130 a 460
    desktop). El doc §2.3 asumía pedir "GLSL con profile ES 3.00" — **incorrecto**.
-   Para WebGL2 (fallback) hay que usar **SPIRV-Cross** (SPIR-V → GLSL ES 3.00) o
-   escribir shaders WebGL2 a mano. El escape hatch SPIRV-Cross ya estaba previsto
-   en §7; ahora es el **camino obligatorio** para WebGL2.
+   Habría que usar **SPIRV-Cross** (SPIR-V → GLSL ES 3.00) o escribir shaders
+   WebGL2 a mano. **Irrelevante desde 2026-08-15**: WebGL2 quedó fuera de alcance
+   (WebGPU-only).
 2. **Warnings de Metal benignos**: cada shader emite `warning[E40100]: entry point
    'main' has been renamed to 'main_0'` — Slang renombra el entry point para no
    colisionar con `main()` del host MSL. Es normal; no es un error.
@@ -292,7 +292,9 @@ target. **30/30 compilaciones OK** entre los 5 targets viables:
 
 Conclusión: los 6 shaders actuales son **100% migrables a Slang** con render
 idéntico en Vulkan (SPIR-V verificado), y los targets DXIL/Metal/WGSL/GLSL-450
-compilan sin cambios. El único gap es WebGL2 (GLSL ES), que requerirá SPIRV-Cross.
+compilan sin cambios. **2026-08-15**: para WebGPU el WGSL necesita trabajo de
+emisión (bindless → `binding_array` + push → UBO con binding explícito, ver
+"Fase 5 (WebGPU)"). WebGL2 (GLSL ES) descartado.
 
 ## 5. Fases
 
@@ -466,28 +468,36 @@ GLM pura y front-face **CCW en todos los backends**.
       Implementado con **libslang dinámica** del SDK (no la `SLANG_LIB_TYPE=STATIC` original —
       desviación documentada en el "Estado Plan A" abajo).
       **Plan de acción detallado → "Plan A" abajo (2026-08-14).**
-- [ ] **Fase 4** — Backend **Metal** (+ MoltenVK fallback). Verificación: macOS.
-      **Pospuesto hasta después de WebGPU** (ver decisión en el Plan C: no hay Mac; CI solo
-      compila, no renderiza; VM con macOS no da Metal real).
-- [ ] **Fase 5** — **WebGPU + WebGL2** + Emscripten + capa de plataforma (sacar GLFW).
-      Verificación: `leir_engine.js`, fallback funcionando.
-      **Plan de acción detallado → "Plan C" abajo (2026-08-14).**
+- [ ] **Fase 5** — **Backend WebGPU nativo** (wgpu-native) en el editor como backend de primera
+      clase (igual que Vulkan/D3D12), y después export web con Emscripten.
+      **Decisión 2026-08-15 (reemplaza el Plan C anterior)**: WebGPU-only, sin fallback WebGL2
+      (WebGPU es cross-browser desde enero 2026: Chrome/Edge 113+, Firefox 141+, Safari 26; la
+      cola restante ~10-18% — Firefox Linux/Android, iPhones pre-A12, WebViews sociales — se
+      cubre con un mensaje de "browser no soportado", no con un segundo backend). Orden:
+      primero WebGPU **nativo en el editor** (wgpu-native sobre `webgpu.h`, superficie HWND vía
+      GLFW, verificación con nuestro harness de parity en Windows) y después el build Emscripten
+      (`leir_engine.js`/`.wasm`, demo mínimo, CI compile-only).
+      **Plan de acción detallado → "Fase 5 (WebGPU)" abajo (2026-08-15).**
 - [ ] **Fase 6** — **Android** (reusa Vulkan + plataforma). Verificación: APK.
 - [ ] **Fase 7** — **iOS** (reusa Metal + plataforma). Verificación: App iOS.
+      (**Metal backend**: pospuesto — no hay Mac con hardware real; CI solo compila, no renderiza.
+      WebGPU nativo vía wgpu-native ya cubre el modelo Metal-like sobre Vulkan/D3D12 en Windows.)
 - [ ] **Migración al RHI completo §3** (cuando la RHI mínima esté estable con Vulkan+D3D12):
       `GCommandGraph` con record multithread, bindless-first, bindings por reflection,
       `GCaps`, especialización de shaders.
       **Plan de acción detallado → "Plan B" abajo (2026-08-14).**
 
-### Plan de acción — A: Fase 3 / B: RHI completo §3 / C: WebGPU (2026-08-14)
+### Plan de acción — A: Fase 3 / B: RHI completo §3 / Fase 5: WebGPU (2026-08-14 → 2026-08-15)
 
-Orden recomendado: **A → B → C** (A es pre-requisito de B; C valida el diseño de B con un
+Orden recomendado: **A → B → Fase 5** (A es pre-requisito de B; Fase 5 valida el diseño B con un
 backend distinto). Decisión clave: el **3er backend es WebGPU, no Metal** — se desarrolla y
-verifica en Windows (Chrome/Edge lo soportan nativo), su modelo (bind groups + render passes)
-espeja §3 (valida GCaps / sincronización Auto / bindless), y su fallback WebGL2 es el backend
-"degradado" que justifica `GCaps`. Metal queda para cuando exista acceso a hardware real
-(no hay Mac; macOS en VM sobre PC no expone Metal — solo framebuffer software; GitHub Actions
-macOS runners solo verifican compilación, sin render).
+verifica en Windows (wgpu-native corre sobre Vulkan/D3D12 nativo), su modelo (bind groups +
+render passes) espeja §3 (valida GCaps / sincronización Auto / bindless). Metal queda para
+cuando exista acceso a hardware real (no hay Mac; macOS en VM sobre PC no expone Metal — solo
+framebuffer software; GitHub Actions macOS runners solo verifican compilación, sin render).
+**WebGPU-only** (sin fallback WebGL2): decisión 2026-08-15 — WebGPU es cross-browser desde
+enero 2026 y la cola restante se cubre con mensaje de browser no soportado, no con un segundo
+backend (ver §2.6 y "Fase 5 (WebGPU)" abajo).
 
 #### Plan A — Fase 3: `IShaderCompiler` + reflection + hot-reload (pre-requisito)
 
@@ -716,27 +726,71 @@ Pasos (en orden, cada uno verificado antes del siguiente):
 8. **Verificación final**: paridad de render Vulkan↔D3D12 con screenshots pixel-diff; validation
    layers / debug layer limpias; teardown limpio (benchmark cierre 162-186 ms se mantiene); sin WER.
 
-#### Plan C — Backend WebGPU + WebGL2 (3er backend)
+#### Fase 5 — Backend WebGPU (3er backend, WebGPU-only)
 
-Validación real del diseño §3 (GCaps, sincronización Auto, bindless) + apertura a Web. Se
-desarrolla en Windows (Chrome/Edge 113+ nativos) — sin Mac.
+Validación real del diseño §3 (GCaps, sincronización Auto, bindless) + apertura a Web. Orden
+revisado 2026-08-15: **primero WebGPU nativo en el editor** (verificable con nuestro harness
+de parity en Windows), después export Emscripten. Sin WebGL2.
+
+**Hallazgos técnicos 2026-08-15 (WGSL exportado hoy)**: (1) el bindless `Sampler2D textures[]`
+se colapsa a un solo `texture_2d` en WGSL (Slang no emite array) → hay que emitir
+`binding_array<texture_2d<f32>, N>` (o array dimensionado) con `[[vk::binding]]` explícito para
+que el índice dinámico sobreviva. (2) WebGPU no tiene push constants; Slang ya los baja a
+`var<uniform>` pero **sin `@group/@binding`** → hay que asignarles binding explícito y enlazar
+un UBO chico por frame. (3) ~~NDC de WebGPU es y-down como Vulkan (config de viewport
+   per-backend)~~ — **corregido en implementación**: el `WebGPUBackend` usa viewport **positivo
+   (Y-up, estilo D3D12)** y wgpu-native traduce el flip al backend subyacente; con eso sale la
+   paridad 1.59% vs Vulkan sin ningún flip propio. (4) **wgpu-hal Vulkan NO anuncia
+   `TEXTURE_BINDING_ARRAY`** en Intel Gen9 (UHD 620): el gate en `adapter.rs` exige los 6
+   sub-features de descriptor indexing incl. non-uniform indexing (Gen11+) → hubo que **forzar
+   DX12** via `WGPUInstanceExtras.backends` (DX12 tier 3 sí tiene binding arrays + non-uniform).
+   sync Auto (WebGPU esconde barreras) → el executor del `GCommandGraph` es casi no-op.
 
 Pasos:
-1. **Capa de plataforma** (Fase 5 lo exige): abstraer GLFW detrás de `PlatformWindow`/
-   `IPlatform` (window, input, event loop, vsync). `CoreApplication`/`InputManager` migran a la
-   capa. Verificación: desktop (Vulkan/D3D12) sigue funcionando sin cambios de comportamiento.
-2. **Emscripten en el superbuild**: toolchain + `FetchContent`/preset dedicado; target
-   `leir_engine.js`/`.wasm`. Verificación: build web del engine + editor demo arranca en Chrome.
-3. **Backend WebGPU** (`WebGPUBackend` sobre la RHI): wgpu-native o Dawn C API; shaders WGSL vía
-   Slang (spike F0: 30/30 OK). Implementa la misma interfaz `RenderBackend`; modelo de sync
-   **Auto** (WebGPU esconde las barreras).
-4. **WebGL2 fallback** (§2.6): SPIRV-Cross (SPIR-V → GLSL ES 3.00), `GCaps` degradado (sin
-   compute, sin bindless, sin MRT), tables clásicas. Verificación: mismo build corre con WebGPU
-   o WebGL2 según `navigator.gpu`/fallback.
-5. **Verificación**: `leir_engine.js` corre en Chrome/Edge local con WebGPU y con WebGL2 forzado;
-   render del demo idéntico al desktop (a escala); CI: build Emscripten en Linux runner.
-6. **Cierre del diseño §3**: con WebGPU (Auto, bindless, GCaps) + WebGL2 (degradado) + Vulkan/D3D12
-   (Explicit, manual) el modelo completo queda validado en 4 backends reales.
+1. **wgpu-native en el superbuild** (FetchContent de release prebuilt, no build Rust): link
+   `webgpu.h` + `wgpu.dll`/`.so` al engine. Sobre Windows usa Vulkan/D3D12 por debajo.
+2. **`WebGPUBackend` nativo** (misma interfaz `RenderBackend`): superficie Win32 HWND vía GLFW
+   (`glfwGetWin32Window`, mismo patrón que `VulkanBackend`), swapchain, pass templates,
+   `CmdExecuteGraph` (sync Auto), tabla bindless (bind group con textura-array), UBO del "push",
+   `GCaps`. `BackendFactory::Create("webgpu", ...)` + `Settings.graphics.backend`.
+3. **Shaders WGSL**: bindless → `binding_array` con binding fijo; push → UBO con
+   `@group/@binding` explícito (atributos/`__target_switch` en los 6 shaders). Regenerar
+   sidecars/reflection para WGSL; `ShaderLayout` valida el nuevo binding.
+4. **Verificación nativa**: editor con backend webgpu en Windows, parity vs Vulkan (harness de
+   pixel-diff), logs de wgpu limpios, close limpio, ctest 2/2, docs + commit + CI + tag.
+   **ESTADO 2026-08-15 (COMPLETO)**: `WebGPUBackend.cpp` inicializa y renderiza por completo
+   sobre wgpu-native **v29** con backend **DX12 forzado**. DXIL v29a (wggpu) ya no necesita
+   `SHADER_F32`, y todos los errores de validación se resolvieron en secuencia:
+   (1) `TEXTURE_BINDING_ARRAY` no soportado → DX12 vía `WGPUInstanceExtras.backends`.
+   (2) bind group: **1 entry por binding** con `WGPUBindGroupEntryExtras` (arrays
+   `textureViews`/`samplers`), no N entries sueltas. (3) tamaños de array del layout en la chain
+   `WGPUBindGroupLayoutEntryExtras.count` (el campo plano `bindingArraySize` se ignora).
+   (4) `WGPUDeviceDescriptor.requiredLimits` es `WGPULimits const*` directo (v29 no tiene
+   `WGPURequiredLimits`), con `WGPU_LIMITS_INIT` (nunca `{}` → alignment 0) + chain
+   `WGPUNativeLimits`: `maxBindingArrayElementsPerShaderStage=32`,
+   `maxBindingArraySamplerElementsPerShaderStage=16`,
+   `maxNonSamplerBindings=WGPU_LIMIT_U32_UNDEFINED` (0 → heap DX12 de 0 descriptores → device
+   lost). (5) 2 features nativos: `TextureBindingArray` +
+   `SampledTextureAndStorageBufferArrayNonUniformIndexing` (naga lo exige porque UI.frag indexa
+   con varying). (6) entry points `vs_main`/`ps_main` (no `main`). (7) `color.depthSlice =
+   WGPU_DEPTH_SLICE_UNDEFINED` en los 3 color attachments (v29 lo movió al attachment de color).
+   (8) **masking del viewport RT**: wgpu prohíbe una textura que es color target presente en un
+   bind group ligado en el mismo pass → `CmdBeginRenderPass` enmascara los slots bindless que son
+   attachments (dummy view) y `CmdEndRenderPass` restaura + rebuild del bind group.
+   (9) clamp del scissor contra `passW/passH` (wgpu valida estrictamente: UI 992 > target 991
+   por el ceil de DPI). **Verificado (2026-08-15)**: render completo (escena + UI + sprites),
+   **parity vs Vulkan 1.59%** (≈ baseline 1.4% = overlay/FPS/cursor), ctest 2/2, STDERR vacío
+   (sin uncaptured errors wgpu), close limpio. Adapter debe vivir toda la vida del backend
+   (`wgpuSurfaceGetCapabilities` panica si se suelta); `wgpuInstanceWaitAny` **panica** (init
+   bloqueante = spin `InstanceProcessEvents`); `WaitIdle` = `DevicePoll(device, true, nullptr)`
+   cargado dinámicamente (ordinal 93, fuera del header).
+5. **(Fase 6, posterior) Export web**: Emscripten en el superbuild → `leir_engine.js`/`.wasm`
+   (el mismo `WebGPUBackend.cpp` compila contra `webgpu.h` de Emscripten → `navigator.gpu`;
+   difiere solo la creación de superficie: canvas selector vs HWND, aislada por `#ifdef`).
+   Demo mínimo (cube + cámara + UI, sin física/audio). Detección de capacidad + mensaje
+   "browser no soportado". CI: build Emscripten en runner Linux (compile-only).
+6. **Cierre del diseño §3**: con WebGPU (Auto, bindless, GCaps) + Vulkan/D3D12 (Explicit, manual)
+   el modelo queda validado en 3 backends reales.
 
 ## 6. Aislamiento / desacople total
 
@@ -751,12 +805,13 @@ Pasos:
 
 | Riesgo | Mitigación |
 |---|---|
-| MSL / WGSL / GLSL experimentales en Slang | Spike F0; escape hatch SPIRV-Cross (→MSL) / Tint·naga (→WGSL) |
+| MSL / WGSL experimentales en Slang | Spike F0; escape hatch Tint·naga (→WGSL) / MoltenVK (→MSL) |
 | libslang pesada de compilar | Flag CMake opcional; solo el editor la linkea (estática, sin DLLs de distribución); CI usa slangc |
 | DXIL/validador en CI Linux | DXIL solo en exporter Windows; CI Linux valida SPIR-V/WGSL |
-| GLSL sin paridad de features | WebGL2 es el backend degradado (features limitadas por diseño vía GCaps). **Spike 2026-08-12**: Slang no emite GLSL ES 3.00 directo (sin profile) → WebGL2 usa SPIRV-Cross (SPIR-V → GLSL ES), ya previsto |
+| WGSL bindless/push en Slang (2026-08-15) | `Sampler2D textures[]` se colapsa a un solo texture en WGSL; push constants bajan a `var<uniform>` sin binding → emitir `binding_array` con `[[vk::binding]]` y UBO con `@group/@binding` explícito en los 6 shaders (ver "Fase 5 (WebGPU)") |
+| wgpu-Vulkan sin `TEXTURE_BINDING_ARRAY` en Intel Gen9 (2026-08-15) | wgpu-hal exige los 6 sub-features de descriptor indexing (incl. non-uniform) para el array → en GPU sin non-uniform index se **fuerza DX12** (`WGPUInstanceExtras.backends`); Web en el navegador (Fase 6) no es afectado (WebGPU tier-3 de la plataforma lo provee) |
+| wgpu-native (adquisición) | FetchContent de **release prebuilt** (sin build Rust); verificar DLL de runtime en PATH al ejecutar el editor |
 | Complejidad RHI | Enfoque incremental (decisión 2026-08-12): RHI **mínima** primero (backend Vulkan + D3D12 desktop, regresión cero), luego se migra al RHI completo §3 (GCommandGraph/bindless/reflection/GCaps) cuando esté estable. Scope v1: sin frame graph total, barreras auto + modo Explicit |
-| Bindless limitado en WebGL2 | GCaps por backend; WebGL2 usa tables clásicas |
 
 ## 8. NO hacemos (v1)
 

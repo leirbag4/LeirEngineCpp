@@ -1,6 +1,7 @@
 #include "LeirEngine/RHI/VulkanBackend.h"
 #if defined(_WIN32) && defined(_MSC_VER)
 #include "LeirEngine/RHI/D3D12Backend.h"
+#include "LeirEngine/RHI/WebGPUBackend.h"
 #endif
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
@@ -1143,6 +1144,8 @@ RenderBackend* BackendFactory::Create(const std::string& backend,
     void* window, int width, int height, bool vsync, const std::string& appName) {
     if (backend == "d3d12")
         return CreateD3D12(window, width, height, vsync, appName);
+    if (backend == "webgpu")
+        return CreateWebGPU(window, width, height, vsync, appName);
     if (backend == "vulkan")
         return CreateVulkan(window, width, height, vsync, appName);
 #if LEIR_BACKEND == LEIR_BACKEND_D3D12
@@ -1163,6 +1166,17 @@ RenderBackend* BackendFactory::CreateD3D12(void* window, int width, int height,
     return new D3D12Backend(window, width, height, vsync, appName);
 #else
     // D3D12 backend requires MSVC (MinGW CI builds Vulkan only).
+    (void)window; (void)width; (void)height; (void)vsync; (void)appName;
+    return nullptr;
+#endif
+}
+
+RenderBackend* BackendFactory::CreateWebGPU(void* window, int width, int height,
+    bool vsync, const std::string& appName) {
+#if defined(_WIN32) && defined(_MSC_VER)
+    return new WebGPUBackend(window, width, height, vsync, appName);
+#else
+    // WebGPU backend requires MSVC (wgpu-native release is Windows/MSVC only).
     (void)window; (void)width; (void)height; (void)vsync; (void)appName;
     return nullptr;
 #endif

@@ -61,7 +61,10 @@ add_library(LeirEngine SHARED
 )
 
 if(WIN32 AND MSVC)
-    target_sources(LeirEngine PRIVATE src/RHI/D3D12Backend.cpp)
+    target_sources(LeirEngine PRIVATE
+        src/RHI/D3D12Backend.cpp
+        src/RHI/WebGPUBackend.cpp
+    )
 endif()
 
 # Shader compilation (Slang)
@@ -133,6 +136,34 @@ else()
     message(WARNING "slangc not found — shaders will not be compiled at build time")
 endif()
 
+# WebGPU WGSL sources (Fase 5): the engine loads them at runtime via
+# GetShaderFileExtension() == ".wgsl" when the WebGPU backend is active, so the
+# raw sources are copied verbatim into LEIR_SHADER_DIR next to the compiled
+# SPIR-V/DXIL files. There is no build-time compile step — wgpu-native compiles
+# WGSL at runtime.
+set(WGSL_SOURCES
+    shaders/Basic.vert.wgsl
+    shaders/Basic.frag.wgsl
+    shaders/Sprite.vert.wgsl
+    shaders/Sprite.frag.wgsl
+    shaders/UI.vert.wgsl
+    shaders/UI.frag.wgsl
+)
+foreach(WGSL ${WGSL_SOURCES})
+    get_filename_component(WGSL_NAME ${WGSL} NAME)
+    set(WGSL_COPY "${SHADER_OUTPUT_DIR}/${WGSL_NAME}")
+    add_custom_command(
+        OUTPUT ${WGSL_COPY}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${WGSL}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/${WGSL} ${WGSL_COPY}
+        COMMENT "Copying ${WGSL_NAME}"
+    )
+    list(APPEND WGSL_OUTPUTS ${WGSL_COPY})
+endforeach()
+add_custom_target(LeirShadersWGSL ALL DEPENDS ${WGSL_OUTPUTS})
+add_dependencies(LeirEngine LeirShadersWGSL)
+
 # stb headers are fetched via FetchContent; bring them into scope
 include(FetchContent)
 FetchContent_GetProperties(stb)
@@ -157,6 +188,9 @@ target_link_libraries(LeirEngine
 
 if(WIN32 AND MSVC)
     target_link_libraries(LeirEngine PRIVATE d3d12 dxgi)
+    # wgpu-native header (Fase 5) — webgpu.h only; the DLL is loaded at runtime.
+    FetchContent_GetProperties(wgpu)
+    target_include_directories(LeirEngine PRIVATE ${wgpu_SOURCE_DIR}/include)
 endif()
 
 # Vulkan

@@ -65,3 +65,22 @@ FetchContent_Declare(cereal
 )
 
 FetchContent_MakeAvailable(glfw glm stb jolt soloud nlohmann_json cereal)
+
+# wgpu-native — WebGPU backend (Fase 5, see TODO_RHI_SLANG.md).
+# Prebuilt release asset, used header-only: the engine loads wgpu_native.dll at
+# runtime (WGPU_SKIP_DECLARATIONS + LoadLibrary/GetProcAddress), so only the
+# webgpu.h header is needed at build time. The DLL is copied next to the exes
+# by the editor/example targets. Windows/MSVC only (the WebGPUBackend.cpp source
+# is compiled under the same gate).
+if(WIN32 AND MSVC)
+    set(WGPU_RELEASE_URL
+        "https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.1.1/wgpu-windows-x86_64-msvc-release.zip")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+        set(WGPU_EXTRACT_TIMESTAMP DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    endif()
+    FetchContent_Declare(wgpu
+        URL ${WGPU_RELEASE_URL}
+        ${WGPU_EXTRACT_TIMESTAMP}
+    )
+    FetchContent_MakeAvailable(wgpu)
+endif()
