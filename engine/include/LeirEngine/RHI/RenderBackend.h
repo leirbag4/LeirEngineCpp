@@ -2,6 +2,7 @@
 
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/RHI/RHI.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 
 #include <cstdint>
 #include <vector>
@@ -137,6 +138,11 @@ public:
     virtual void DestroyFramebuffer(RHIFramebuffer framebuffer) = 0;
 
     // ---- Command recording ----
+    // Execute a recorded GCommandGraph on the given command buffer. The backend
+    // translates the records to native commands, inserting image-layout
+    // transitions automatically via last-use tracking (see GCommandGraph.h).
+    virtual void CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) = 0;
+
     virtual void CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
         RHIFramebuffer framebuffer) = 0;
     virtual void CmdEndRenderPass(RHICommandBuffer cmd) = 0;

@@ -47,14 +47,14 @@ void Material::SetVec3(const std::string& name, const Vector3& value)
     (void)value;
 }
 
-void Material::Bind(RHI::RHICommandBuffer cmd, RHI::RHIPipelineLayout layout) const
+void Material::Bind(RHI::GCommandGraph& graph, RHI::RHIPipelineLayout layout) const
 {
     (void)layout;
-    m_Device->CmdBindPipeline(cmd, m_Pipeline);
+    graph.BindPipeline(m_Pipeline);
     // Set 1 is the bindless texture table (the backend's global bindless set).
     // All materials share it; the per-draw texture is selected via the
     // textureIndex push constant (see RenderPipeline::RenderMeshRenderer).
-    m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 1,
+    graph.BindDescriptorSets(m_PipelineLayout, 1,
         { m_Device->GetBindlessDescriptorSet() });
 }
 

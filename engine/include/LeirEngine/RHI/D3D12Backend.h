@@ -122,6 +122,8 @@ public:
         RHIFramebuffer framebuffer) override;
     void CmdEndRenderPass(RHICommandBuffer cmd) override;
 
+    void CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) override;
+
     void CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) override;
     void CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout layout,
         uint32_t firstSet, const std::vector<RHIDescriptorSet>& sets) override;

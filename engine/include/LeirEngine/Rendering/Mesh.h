@@ -3,6 +3,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector2.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 
 #include <vector>
@@ -29,8 +30,8 @@ public:
          const std::vector<uint32_t>& indices);
     ~Mesh();
 
-    void Bind(RHI::RHICommandBuffer cmd) const;
-    void Draw(RHI::RHICommandBuffer cmd) const;
+    void Bind(RHI::GCommandGraph& graph) const;
+    void Draw(RHI::GCommandGraph& graph) const;
 
     size_t GetVertexCount() const { return m_Vertices.size(); }
     size_t GetIndexCount() const { return m_Indices.size(); }

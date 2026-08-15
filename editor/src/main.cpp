@@ -584,19 +584,27 @@ protected:
         auto cmd = m_Backend->GetCurrentCommandBuffer();
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
 
-        // 1. Render 3D scene + sprites to offscreen RenderTexture
+        // 1. Scene graph: render 3D scene + sprites to the offscreen
+        //    RenderTexture. The graph owns the render pass; the backend
+        //    transitions the RT attachments automatically in CmdExecuteGraph.
         if (m_ViewportRT && scene) {
             Leir::RHI::RHIClearValue clearColor;
             clearColor.color = {0.15f, 0.15f, 0.2f, 1.0f};
-            m_ViewportRT->BeginRender(cmd, clearColor, 1.0f);
-            m_RenderPipeline->Render(cmd, scene);
-            m_ViewportRT->EndRender(cmd);
+            m_SceneGraph.Clear();
+            m_ViewportRT->BeginRender(m_SceneGraph, clearColor, 1.0f);
+            m_RenderPipeline->Render(m_SceneGraph, scene);
+            m_ViewportRT->EndRender(m_SceneGraph);
+            m_Backend->CmdExecuteGraph(cmd, m_SceneGraph);
         }
 
-        // 2. Render UI to swapchain overlay directly
+        // 2. UI graph: draws into the native swapchain overlay pass (begun by
+        //    BeginSwapchainOverlay) — no pass records, just draw records.
         m_Backend->BeginSwapchainOverlay();
-        if (m_UIRenderer && m_Canvas)
-            m_UIRenderer->Render(cmd, m_Canvas.get());
+        if (m_UIRenderer && m_Canvas) {
+            m_UIGraph.Clear();
+            m_UIRenderer->Render(m_UIGraph, m_Canvas.get());
+            m_Backend->CmdExecuteGraph(cmd, m_UIGraph);
+        }
         m_Backend->EndFrame();
     }
 
@@ -746,6 +754,13 @@ private:
 
     std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
+
+    // Per-frame command graphs (see GCommandGraph): the scene graph owns the
+    // RenderTexture pass; the UI graph records draws into the swapchain
+    // overlay pass. Both are executed by the backend each frame.
+    Leir::RHI::GCommandGraph m_SceneGraph;
+    Leir::RHI::GCommandGraph m_UIGraph;
+
     std::shared_ptr<Leir::Shader> m_Shader;
     std::shared_ptr<Leir::Mesh> m_Mesh;
     std::shared_ptr<Leir::Material> m_Material;

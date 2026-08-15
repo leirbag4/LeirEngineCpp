@@ -97,15 +97,15 @@ Mesh::~Mesh()
     m_Device->DestroyMemory(m_IndexMemory);
 }
 
-void Mesh::Bind(RHI::RHICommandBuffer cmd) const
+void Mesh::Bind(RHI::GCommandGraph& graph) const
 {
-    m_Device->CmdBindVertexBuffer(cmd, m_VertexBuffer);
-    m_Device->CmdBindIndexBuffer(cmd, m_IndexBuffer);
+    graph.BindVertexBuffer(m_VertexBuffer);
+    graph.BindIndexBuffer(m_IndexBuffer);
 }
 
-void Mesh::Draw(RHI::RHICommandBuffer cmd) const
+void Mesh::Draw(RHI::GCommandGraph& graph) const
 {
-    m_Device->CmdDrawIndexed(cmd, (uint32_t)m_Indices.size(), 1, 0);
+    graph.DrawIndexed((uint32_t)m_Indices.size(), 1, 0);
 }
 
 namespace Primitives {

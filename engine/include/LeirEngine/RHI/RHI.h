@@ -287,6 +287,10 @@ struct RHIPassTemplateDesc {
 struct RHIDescriptorImageInfo {
     RHIImageView imageView;
     RHISampler sampler;
+    // The underlying image. The backend keeps a bindless index -> image map so
+    // GCommandGraph execution can resolve which image a draw samples and track
+    // its layout (last-use transitions).
+    RHIImage image;
     bool valid = false;
 };
 

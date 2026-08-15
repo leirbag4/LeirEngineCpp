@@ -188,7 +188,11 @@ protected:
         if (m_Backend && m_Backend->BeginFrame(false)) {
             auto cmd = m_Backend->GetCurrentCommandBuffer();
             auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-            m_RenderPipeline->Render(cmd, scene);
+            // Pass-less graph: records draws into the swapchain 3D render pass
+            // started by BeginFrame(false).
+            m_SceneGraph.Clear();
+            m_RenderPipeline->Render(m_SceneGraph, scene);
+            m_Backend->CmdExecuteGraph(cmd, m_SceneGraph);
             m_Backend->EndFrame();
         }
     }
@@ -207,6 +211,10 @@ protected:
 private:
     std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
+
+    // Per-frame command graph (see GCommandGraph): records draws into the
+    // swapchain render pass; executed by the backend in OnRender.
+    Leir::RHI::GCommandGraph m_SceneGraph;
     std::shared_ptr<Leir::Shader> m_Shader;
     std::shared_ptr<Leir::Mesh> m_BoxMesh;
     std::shared_ptr<Leir::Material> m_GroundMat;

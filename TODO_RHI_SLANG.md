@@ -186,7 +186,16 @@ nombre `slang` en una ruta de include.
 - El backend lo traduce a sus comandos nativos y **genera las transiciones de estado
   automáticamente por last-use tracking**.
 - **Record multithread**: el grafo se construye desde hilos worker en paralelo; el backend
-  serializa al ejecutar.
+  serializa al ejecutar (paso 5 de Plan B, pendiente).
+- ✅ **Implementado (2026-08-14, paso 4 de Plan B)**: `GCommandGraph` header-only en
+  `engine/include/LeirEngine/RHI/GCommandGraph.h` + `RenderBackend::CmdExecuteGraph` +
+  ejecutores en `VulkanBackend.cpp`/`D3D12Backend.cpp`. Dos grafos por frame en el editor
+  (el grafo de escena posee el pass del `RenderTexture`; el de UI es pass-less dentro del
+  overlay nativo de swapchain). Las transiciones manuales (`CmdTransitionImageLayout`/
+  `CmdBarrier`) desaparecieron de `RenderTexture`, `RenderPipeline`, `Mesh`, `Material` y
+  `UIRenderer`; el executor las genera por last-use tracking: attachments en pass-begin,
+  marca ShaderReadOnly tras el pass, y texturas sampleadas antes de cada draw (set
+  `sampledTextures` por draw). Detalles en el paso 4 de "Plan B".
 
 ### 3.3 Bindings derivados por reflection (diferencial #1)
 - `GPipeline` obtiene su firma (textures, buffers, samplers, push/root constants, constant
@@ -660,6 +669,36 @@ Pasos (en orden, cada uno verificado antes del siguiente):
 4. **`GCommandGraph`** (§3.2): `RenderPassRecord` + `DrawRecord`/`CopyRecord`/`ComputeRecord`
    registrados por frame; el backend traduce a comandos nativos y **genera transiciones de estado
    por last-use tracking** (reemplaza los `TransitionImageLayout`/`CmdBarrier` manuales).
+   ✅ **Hecho 2026-08-14 (Fase 4)**: `GCommandGraph` header-only (`GRecordType::BeginRenderPass/
+   EndRenderPass/Draw`; `GRenderPassRecord` con `GAttachment{image,isDepth}`; `GDrawRecord` con
+   bindings, push, viewport/scissor, buffers e `sampledTextures`). API de grabado stateful con
+   `m_Current` que snapshotea en cada Draw/DrawIndexed (el estado repetido solo aparece en el
+   primer record; el estado nativo persiste entre records, igual que modo inmediato).
+   **Backends**: `RenderBackend::CmdExecuteGraph(cmd, graph)`. **Vulkan**: `bindlessImages`
+   (índice→VkImage) + `imageLayouts` (VkImage→layout) + `GetLayout`; registros/updates siembran
+   las texturas como ShaderReadOnly (una-shot upload las deja ahí); el executor transiciona
+   attachments en pass-begin, marca ShaderReadOnly tras el pass y sampleadas antes de cada draw.
+   **D3D12**: `bindlessImages` (índice→ImageRec*) poblado en `UpdateBindlessTexture`, reusa
+   `CmdTransitionImageLayout` con el `state` real del recurso (no seed), y hace transición
+   **explícita** color→PIXEL_SHADER_RESOURCE en EndRenderPass (D3D12 no tiene final-layout).
+   **Migrados**: `RenderTexture` (Begin/EndRender graban el pass; se eliminaron los
+   `CmdTransitionImageLayout` manuales), `RenderPipeline` (Render/RenderOverlay/RenderSprite/
+   RenderMeshRenderer), `Mesh` (Bind/Draw), `Material` (Bind), `UIRenderer` (Render/Flush/
+   ApplyScissor). Cada draw registra `SetSampledTextures` con los índices bindless que samplea.
+   **Call sites**: editor con `m_SceneGraph` + `m_UIGraph` (diseño (a): el grafo de escena posee
+   el pass del RT; el de UI es pass-less dentro del overlay nativo — `VulkanDevice` casi sin
+   cambios); `PhysicsDemo` con un grafo pass-less dentro de `BeginFrame(false)`.
+   **Bug encontrado y arreglado durante la verificación**: VUID `vkCmdDraw-None-09600` (una textura
+   sampleada en SHADER_READ_ONLY pero con layout actual UNDEFINED) — la imagen de color del
+   `RenderTexture` recién creada/redimensionada está realmente UNDEFINED, pero la registración
+   sembraba el tracker como ShaderReadOnly → el executor emitía una barrera SRO→ColorAttachment con
+   `oldLayout` falso que la sync validation rechazaba. Fix: en `BeginRenderPass`, los attachments de
+   color se transicionan **siempre desde UNDEFINED** (la pass los borra con loadOp=CLEAR, así que el
+   discard es seguro y UNDEFINED es siempre un `oldLayout` legal); los de profundidad UNDEFINED se
+   dejan al render pass (initialLayout UNDEFINED).
+   **Verificado (2026-08-14)**: ctest 2/2; editor Vulkan y D3D12 limpios (0 VUIDs / 0 errores debug
+   layer, stderr vacío) con close limpio; `PhysicsDemo` limpio (grafo pass-less); paridad cross-backend
+   1.0% ≈ baseline 1.4%.
 5. **Record multithread** (§3.2): el grafo se construye desde hilos worker en paralelo; el backend
    serializa al ejecutar. Verificación: benchmark de frame time vs hilo único.
 6. **`GPassTemplate`** (§3.1): render pass persistente/reutilizable (attachments, load/store/clear,

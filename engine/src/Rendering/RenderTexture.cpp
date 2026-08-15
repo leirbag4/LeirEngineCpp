@@ -140,31 +140,26 @@ void RenderTexture::DestroyResources()
     m_ColorMemory = RHI::RHIDeviceMemory{};
 }
 
-void RenderTexture::BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearValue& clearColor, float depthClear)
+void RenderTexture::BeginRender(RHI::GCommandGraph& graph, const RHI::RHIClearValue& clearColor, float depthClear)
 {
     // Rebuild the persistent template only when the requested clears change
     // (steady state: no per-frame re-encode of the render-pass state).
     if (clearColor.color != m_BakedClearColor.color || depthClear != m_BakedDepthClear)
         BuildPassTemplate(clearColor, depthClear);
 
-    // Transition the color image to COLOR_ATTACHMENT_OPTIMAL before the render
-    // pass. The render pass initialLayout is COLOR_ATTACHMENT_OPTIMAL, but the
-    // previous frame's EndRender left it in SHADER_READ_ONLY — a mismatch the
-    // validation layer rejects (VUID-vkCmdDraw-None-09600) and that reads back
-    // garbage (magenta viewport). Restored from the pre-RHI implementation.
-    m_Device->CmdTransitionImageLayout(cmd, m_ColorImage, RHI::Format::B8G8R8A8_SRGB,
-        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment, RHI::Aspect::Color);
-
-    m_Device->CmdBeginRenderPass(cmd, m_PassTemplate, m_Framebuffer);
+    // The backend's CmdExecuteGraph transitions the attachments (color ->
+    // COLOR_ATTACHMENT, depth -> DEPTH_STENCIL) via last-use tracking before
+    // beginning the pass, so no manual transition is recorded here.
+    graph.BeginRenderPass(m_PassTemplate, m_Framebuffer,
+        { { m_ColorImage, false }, { m_DepthImage, true } });
 }
 
-void RenderTexture::EndRender(RHI::RHICommandBuffer cmd)
+void RenderTexture::EndRender(RHI::GCommandGraph& graph)
 {
-    m_Device->CmdEndRenderPass(cmd);
-
-    // Sync so the sampled read (UI viewport) sees the rendered content.
-    m_Device->CmdTransitionImageLayout(cmd, m_ColorImage, RHI::Format::B8G8R8A8_SRGB,
-        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly, RHI::Aspect::Color);
+    // The executor transitions the color attachment to SHADER_READ_ONLY after
+    // the pass (Vulkan: via the render pass final layout; D3D12: explicit
+    // barrier), so the sampled UI viewport reads see the rendered content.
+    graph.EndRenderPass();
 }
 
 RHI::RHIDescriptorImageInfo RenderTexture::GetDescriptorInfo() const
@@ -172,6 +167,7 @@ RHI::RHIDescriptorImageInfo RenderTexture::GetDescriptorInfo() const
     RHI::RHIDescriptorImageInfo info;
     info.imageView = m_ColorImageView;
     info.sampler = m_Sampler;
+    info.image = m_ColorImage;
     info.valid = true;
     return info;
 }

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <unordered_map>
 
 #include "LeirEngine/Core/Log.h"
 
@@ -252,6 +253,18 @@ struct VulkanBackend::Impl {
     VkDescriptorSetLayout bindlessLayout = VK_NULL_HANDLE;
     VkDescriptorPool bindlessPool = VK_NULL_HANDLE;
     VkDescriptorSet bindlessSet = VK_NULL_HANDLE;
+
+    // GCommandGraph last-use tracking: bindless index -> image, and each
+    // tracked image's current layout. Registered textures start as
+    // SHADER_READ_ONLY (upload transitions them there); the graph executor
+    // updates the map as it transitions attachments and sampled images.
+    std::unordered_map<uint32_t, VkImage> bindlessImages;
+    std::unordered_map<VkImage, ImageLayout> imageLayouts;
+
+    ImageLayout GetLayout(VkImage image) {
+        auto it = imageLayouts.find(image);
+        return it != imageLayouts.end() ? it->second : ImageLayout::Undefined;
+    }
 
     void InitBindless() {
         if (!caps.bindless) return;
@@ -544,6 +557,14 @@ uint32_t VulkanBackend::RegisterBindlessTexture(const RHIDescriptorImageInfo& in
 void VulkanBackend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorImageInfo& info) {
     auto& impl = *m_Impl;
     if (!impl.bindlessSet) return;
+    if (info.valid && info.image.IsValid()) {
+        VkImage img = reinterpret_cast<VkImage>(info.image.handle);
+        impl.bindlessImages[index] = img;
+        // Textures are uploaded/transitioned to SHADER_READ_ONLY before
+        // registration (one-shot TransitionImageLayout); the executor relies on
+        // this as the image's starting layout for last-use tracking.
+        impl.imageLayouts[img] = ImageLayout::ShaderReadOnly;
+    }
     RHIDescriptorWrite w;
     w.dstSet = GetBindlessDescriptorSet();
     w.dstBinding = 0;
@@ -557,6 +578,11 @@ void VulkanBackend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorIma
 void VulkanBackend::UnregisterBindlessTexture(uint32_t index) {
     auto& impl = *m_Impl;
     if (!impl.bindlessSet || index >= impl.bindlessCount) return;
+    auto it = impl.bindlessImages.find(index);
+    if (it != impl.bindlessImages.end()) {
+        impl.imageLayouts.erase(it->second);
+        impl.bindlessImages.erase(it);
+    }
     impl.bindlessFree.push_back(index);
 }
 
@@ -997,6 +1023,12 @@ void VulkanBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
         barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } else if (oldLayout == ImageLayout::ShaderReadOnly &&
+               newLayout == ImageLayout::ColorAttachment) {
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (oldLayout == ImageLayout::ColorAttachment &&
                newLayout == ImageLayout::ShaderReadOnly) {
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -1013,6 +1045,96 @@ void VulkanBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
     vkCmdPipelineBarrier(reinterpret_cast<VkCommandBuffer>(cmd.handle),
         srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
     (void)format;
+}
+
+void VulkanBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) {
+    auto& impl = *m_Impl;
+    for (const auto& rec : graph.GetRecords()) {
+        switch (rec.type) {
+        case GRecordType::BeginRenderPass: {
+            // Ensure every attachment is in the layout its render pass expects
+            // (COLOR_ATTACHMENT for color, DEPTH_STENCIL for depth) before
+            // beginning it.
+            for (const auto& att : rec.pass.attachments) {
+                VkImage img = reinterpret_cast<VkImage>(att.image.handle);
+                ImageLayout target = att.isDepth ? ImageLayout::DepthStencilAttachment
+                                                 : ImageLayout::ColorAttachment;
+                ImageLayout cur = impl.GetLayout(img);
+                if (!(att.isDepth && cur == ImageLayout::Undefined) && cur != target) {
+                    // Color attachments are always cleared by the pass
+                    // (loadOp=CLEAR), so a transition from UNDEFINED (discard)
+                    // is always safe AND always a legal oldLayout for
+                    // synchronization validation. A fresh or just-resized
+                    // RenderTexture's color image is actually UNDEFINED even
+                    // though registration seeded the tracker as SRO; using the
+                    // truthful UNDEFINED avoids the false-barrier VUID. Depth
+                    // images that are UNDEFINED are left to the render pass
+                    // (initialLayout UNDEFINED).
+                    ImageLayout from = att.isDepth ? cur : ImageLayout::Undefined;
+                    CmdTransitionImageLayout(cmd, att.image, Format::R8G8B8A8_SRGB,
+                        from, target, att.isDepth ? Aspect::Depth : Aspect::Color);
+                }
+                impl.imageLayouts[img] = target;
+            }
+            CmdBeginRenderPass(cmd, rec.pass.passTemplate, rec.pass.framebuffer);
+            break;
+        }
+        case GRecordType::EndRenderPass: {
+            CmdEndRenderPass(cmd);
+            // The Vulkan render pass transitions color attachments to their
+            // final layout (SHADER_READ_ONLY) at the end of the subpass; the
+            // depth attachment stays DEPTH_STENCIL. Just track the result.
+            for (const auto& att : rec.pass.attachments) {
+                VkImage img = reinterpret_cast<VkImage>(att.image.handle);
+                impl.imageLayouts[img] = att.isDepth ? ImageLayout::DepthStencilAttachment
+                                                     : ImageLayout::ShaderReadOnly;
+            }
+            break;
+        }
+        case GRecordType::Draw: {
+            // Last-use tracking: every bindless texture this draw samples must
+            // be in SHADER_READ_ONLY (e.g. the RenderTexture color image after
+            // its render pass). Registering a texture seeds it as
+            // SHADER_READ_ONLY, so plain materials need no barriers.
+            for (uint32_t index : rec.draw.sampledTextures) {
+                auto it = impl.bindlessImages.find(index);
+                if (it == impl.bindlessImages.end()) continue;
+                VkImage img = it->second;
+                ImageLayout cur = impl.GetLayout(img);
+                if (cur != ImageLayout::ShaderReadOnly) {
+                    RHIImage image;
+                    image.handle = reinterpret_cast<Handle>(img);
+                    CmdTransitionImageLayout(cmd, image, Format::R8G8B8A8_SRGB,
+                        cur, ImageLayout::ShaderReadOnly, Aspect::Color);
+                    impl.imageLayouts[img] = ImageLayout::ShaderReadOnly;
+                }
+            }
+
+            if (rec.draw.pipeline.IsValid())
+                CmdBindPipeline(cmd, rec.draw.pipeline);
+            for (const auto& sb : rec.draw.setBindings)
+                CmdBindDescriptorSets(cmd, sb.layout, sb.firstSet, sb.sets);
+            if (rec.draw.vertexBuffer.IsValid())
+                CmdBindVertexBuffer(cmd, rec.draw.vertexBuffer);
+            if (rec.draw.indexBuffer.IsValid())
+                CmdBindIndexBuffer(cmd, rec.draw.indexBuffer);
+            if (!rec.draw.pushData.empty())
+                CmdPushConstants(cmd, rec.draw.layout, rec.draw.pushStage,
+                    rec.draw.pushOffset, (uint32_t)rec.draw.pushData.size(),
+                    rec.draw.pushData.data());
+            if (rec.draw.hasViewport)
+                CmdSetViewport(cmd, rec.draw.viewport);
+            if (rec.draw.hasScissor)
+                CmdSetScissor(cmd, rec.draw.scissor);
+            if (rec.draw.indexed)
+                CmdDrawIndexed(cmd, rec.draw.indexCount,
+                    rec.draw.instanceCount, rec.draw.firstIndex);
+            else
+                CmdDraw(cmd, rec.draw.vertexCount, rec.draw.firstVertex);
+            break;
+        }
+        }
+    }
 }
 
 // ---- Factory ----

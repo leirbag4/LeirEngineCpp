@@ -12,6 +12,7 @@
 #include <functional>
 #include <map>
 #include <stdexcept>
+#include <unordered_map>
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -277,6 +278,12 @@ struct D3D12Backend::Impl {
 
     // Cached bindless descriptor set (the whole heaps as tables).
     DescSetRec* bindlessSetRec = nullptr;
+
+    // GCommandGraph last-use tracking: bindless index -> image. The executor
+    // uses it to resolve which image a draw samples and transition it to
+    // PIXEL_SHADER_RESOURCE when needed (e.g. the RenderTexture color image
+    // after its render pass).
+    std::unordered_map<uint32_t, ImageRec*> bindlessImages;
 
     Impl(void* window, int w, int h, bool vs, const std::string& appName) {
         hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
@@ -1053,6 +1060,8 @@ void D3D12Backend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorImag
     ImageViewRec* view = reinterpret_cast<ImageViewRec*>(info.imageView.handle);
     SamplerRec* samp = reinterpret_cast<SamplerRec*>(info.sampler.handle);
 
+    im.bindlessImages[index] = view->image;
+
     // Rewrite the SRV + sampler at the texture's own bindless slot in place —
     // no new descriptor is allocated, so resizing a render target never grows
     // the heaps (the old single-sampler path leaked an SRV per resize).
@@ -1069,6 +1078,7 @@ void D3D12Backend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorImag
 void D3D12Backend::UnregisterBindlessTexture(uint32_t index) {
     Impl& im = *m_Impl;
     if (index >= Impl::kBindless) return;
+    im.bindlessImages.erase(index);
     im.bindlessFree.push_back(index);
 }
 
@@ -1530,6 +1540,76 @@ void D3D12Backend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image
     b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     im.cmdList->ResourceBarrier(1, &b);
     img->state = after;
+}
+
+void D3D12Backend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) {
+    Impl& im = *m_Impl;
+    for (const auto& rec : graph.GetRecords()) {
+        switch (rec.type) {
+        case GRecordType::BeginRenderPass: {
+            // Ensure attachments are in the target states (RENDER_TARGET for
+            // color, DEPTH_WRITE for depth). ImageRec::state tracks the real
+            // state, so CmdTransitionImageLayout only emits a barrier on change.
+            for (const auto& att : rec.pass.attachments) {
+                if (att.isDepth)
+                    CmdTransitionImageLayout(cmd, att.image, Format::R8G8B8A8_SRGB,
+                        ImageLayout::Undefined, ImageLayout::DepthStencilAttachment, Aspect::Depth);
+                else
+                    CmdTransitionImageLayout(cmd, att.image, Format::R8G8B8A8_SRGB,
+                        ImageLayout::Undefined, ImageLayout::ColorAttachment, Aspect::Color);
+            }
+            CmdBeginRenderPass(cmd, rec.pass.passTemplate, rec.pass.framebuffer);
+            break;
+        }
+        case GRecordType::EndRenderPass: {
+            CmdEndRenderPass(cmd);
+            // D3D12 has no implicit final-layout transition at the end of a
+            // pass: move color attachments to PIXEL_SHADER_RESOURCE so the
+            // next sampled read (UI viewport) sees the rendered content.
+            for (const auto& att : rec.pass.attachments) {
+                if (att.isDepth) continue;
+                CmdTransitionImageLayout(cmd, att.image, Format::R8G8B8A8_SRGB,
+                    ImageLayout::ShaderReadOnly, ImageLayout::ShaderReadOnly, Aspect::Color);
+            }
+            break;
+        }
+        case GRecordType::Draw: {
+            // Last-use tracking: every bindless texture this draw samples must
+            // be in PIXEL_SHADER_RESOURCE before the draw.
+            for (uint32_t index : rec.draw.sampledTextures) {
+                auto it = im.bindlessImages.find(index);
+                if (it == im.bindlessImages.end()) continue;
+                RHIImage image;
+                image.handle = reinterpret_cast<Handle>(it->second);
+                CmdTransitionImageLayout(cmd, image, Format::R8G8B8A8_SRGB,
+                    ImageLayout::ShaderReadOnly, ImageLayout::ShaderReadOnly, Aspect::Color);
+            }
+
+            if (rec.draw.pipeline.IsValid())
+                CmdBindPipeline(cmd, rec.draw.pipeline);
+            for (const auto& sb : rec.draw.setBindings)
+                CmdBindDescriptorSets(cmd, sb.layout, sb.firstSet, sb.sets);
+            if (rec.draw.vertexBuffer.IsValid())
+                CmdBindVertexBuffer(cmd, rec.draw.vertexBuffer);
+            if (rec.draw.indexBuffer.IsValid())
+                CmdBindIndexBuffer(cmd, rec.draw.indexBuffer);
+            if (!rec.draw.pushData.empty())
+                CmdPushConstants(cmd, rec.draw.layout, rec.draw.pushStage,
+                    rec.draw.pushOffset, (uint32_t)rec.draw.pushData.size(),
+                    rec.draw.pushData.data());
+            if (rec.draw.hasViewport)
+                CmdSetViewport(cmd, rec.draw.viewport);
+            if (rec.draw.hasScissor)
+                CmdSetScissor(cmd, rec.draw.scissor);
+            if (rec.draw.indexed)
+                CmdDrawIndexed(cmd, rec.draw.indexCount,
+                    rec.draw.instanceCount, rec.draw.firstIndex);
+            else
+                CmdDraw(cmd, rec.draw.vertexCount, rec.draw.firstVertex);
+            break;
+        }
+        }
+    }
 }
 
 } // namespace RHI

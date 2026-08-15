@@ -236,7 +236,7 @@ void RenderPipeline::DestroySpriteResources()
     m_Sprite.fallbackTexture = nullptr;
 }
 
-void RenderPipeline::Render(RHI::RHICommandBuffer cmd, Scene* scene)
+void RenderPipeline::Render(RHI::GCommandGraph& graph, Scene* scene)
 {
     if (!scene)
         return;
@@ -300,12 +300,12 @@ void RenderPipeline::Render(RHI::RHICommandBuffer cmd, Scene* scene)
             continue;
 
         push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-        RenderMeshRenderer(cmd, renderer, viewProj,
+        RenderMeshRenderer(graph, renderer, viewProj,
             obj->GetTransform().GetLocalToWorldMatrix(), push);
     }
 }
 
-void RenderPipeline::RenderOverlay(RHI::RHICommandBuffer cmd, Scene* scene)
+void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, Scene* scene)
 {
     if (!scene)
         return;
@@ -340,17 +340,17 @@ void RenderPipeline::RenderOverlay(RHI::RHICommandBuffer cmd, Scene* scene)
     float h = (float)m_Device->GetSwapchainHeight();
     Matrix4x4 ortho = Matrix4x4::Ortho(0.0f, w, h, 0.0f, -1.0f, 1.0f);
 
-    m_Device->CmdBindPipeline(cmd, m_Sprite.pipeline);
-    m_Device->CmdBindVertexBuffer(cmd, m_Sprite.vertexBuffer);
-    m_Device->CmdBindIndexBuffer(cmd, m_Sprite.indexBuffer);
+    graph.BindPipeline(m_Sprite.pipeline);
+    graph.BindVertexBuffer(m_Sprite.vertexBuffer);
+    graph.BindIndexBuffer(m_Sprite.indexBuffer);
 
     for (auto& draw : draws) {
         Matrix4x4 mvp = ortho * draw.world;
-        RenderSprite(cmd, draw.renderer, mvp);
+        RenderSprite(graph, draw.renderer, mvp);
     }
 }
 
-void RenderPipeline::RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* renderer,
+void RenderPipeline::RenderSprite(RHI::GCommandGraph& graph, SpriteRenderer* renderer,
     const Matrix4x4& mvp)
 {
     // Determine texture and UV rect
@@ -367,7 +367,7 @@ void RenderPipeline::RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* ren
 
     // Bindless: bind the global bindless set once (set 0); the texture is
     // selected by textureIndex in the push constants below.
-    m_Device->CmdBindDescriptorSets(cmd, m_Sprite.pipelineLayout, 0,
+    graph.BindDescriptorSets(m_Sprite.pipelineLayout, 0,
         { m_Device->GetBindlessDescriptorSet() });
 
     SpritePushConstants push;
@@ -375,13 +375,15 @@ void RenderPipeline::RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* ren
     push.color = renderer->GetColor();
     push.uvRect = uvRect;
     push.textureIndex = tex->GetBindlessIndex();
-    m_Device->CmdPushConstants(cmd, m_Sprite.pipelineLayout,
+    graph.PushConstants(m_Sprite.pipelineLayout,
         RHI::ShaderStageMask::VertexFragment, 0, sizeof(SpritePushConstants), &push);
 
-    m_Device->CmdDrawIndexed(cmd, m_Sprite.indexCount, 1, 0);
+    // Last-use tracking: this draw samples the sprite texture.
+    graph.SetSampledTextures({ tex->GetBindlessIndex() });
+    graph.DrawIndexed(m_Sprite.indexCount, 1, 0);
 }
 
-void RenderPipeline::RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer* renderer,
+void RenderPipeline::RenderMeshRenderer(RHI::GCommandGraph& graph, MeshRenderer* renderer,
     const Matrix4x4& viewProj, const Matrix4x4& model,
     const PushConstants& push)
 {
@@ -422,18 +424,21 @@ void RenderPipeline::RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer*
     memcpy(data, &viewProj, UBO_SIZE);
     m_Device->UnmapMemory(uboBuf.memory);
 
-    material->Bind(cmd, material->GetPipelineLayout());
+    material->Bind(graph, material->GetPipelineLayout());
 
-    m_Device->CmdBindDescriptorSets(cmd, material->GetPipelineLayout(), 0, { m_UBOSets[frame] });
+    graph.BindDescriptorSets(material->GetPipelineLayout(), 0, { m_UBOSets[frame] });
 
     PushConstants pushWithModel = push;
     pushWithModel.model = model;
     pushWithModel.textureIndex = material->GetTextureIndex();
-    m_Device->CmdPushConstants(cmd, material->GetPipelineLayout(),
+    graph.PushConstants(material->GetPipelineLayout(),
         RHI::ShaderStageMask::VertexFragment, 0, sizeof(PushConstants), &pushWithModel);
 
-    mesh->Bind(cmd);
-    mesh->Draw(cmd);
+    // Last-use tracking: this draw samples the material's texture.
+    graph.SetSampledTextures({ material->GetTextureIndex() });
+
+    mesh->Bind(graph);
+    mesh->Draw(graph);
 }
 
 } // namespace Leir

@@ -221,7 +221,7 @@ void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const 
         m_DebugQuadClips.push_back({0.0f, 0.0f, m_ScreenSize.x, m_ScreenSize.y});
 }
 
-void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
+void UIRenderer::Flush(RHI::GCommandGraph& graph)
 {
     size_t regCount = m_QuadTextures.size();
     size_t vpCount = m_ViewportDraws.size();
@@ -303,13 +303,13 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
     // Logical canvas size maps vertices (in logical units) to NDC.
     Vector2 screenSize = m_ScreenSize;
 
-    m_Device->CmdBindPipeline(cmd, m_Pipeline);
-    m_Device->CmdBindVertexBuffer(cmd, m_VertexBuffers[frame]);
-    m_Device->CmdPushConstants(cmd, m_PipelineLayout, RHI::ShaderStageMask::Vertex, 0, sizeof(Vector2), &screenSize);
+    graph.BindPipeline(m_Pipeline);
+    graph.BindVertexBuffer(m_VertexBuffers[frame]);
+    graph.PushConstants(m_PipelineLayout, RHI::ShaderStageMask::Vertex, 0, sizeof(Vector2), &screenSize);
 
     // Bindless: all quads index the same global bindless set (set 0); the
     // texture is selected per-vertex via UI.frag's NonUniformResourceIndex.
-    m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 0,
+    graph.BindDescriptorSets(m_PipelineLayout, 0,
         { m_Device->GetBindlessDescriptorSet() });
 
     // Batched draw: consecutive quads that share the same texture (bindless
@@ -331,7 +331,9 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
     auto flushBatch = [&]() {
         if (batchCount == 0) return;
         // (count*6 - 2) vertices: count quads minus the trailing degenerate pair.
-        m_Device->CmdDraw(cmd, batchCount * (uint32_t)slotPerQuad - 2, batchStart);
+        // Last-use tracking: this batch samples the batch's texture.
+        graph.SetSampledTextures({ batchTexIndex });
+        graph.Draw(batchCount * (uint32_t)slotPerQuad - 2, batchStart);
         ++m_LastStats.drawCalls;
         batchCount = 0;
     };
@@ -349,7 +351,7 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
             return;
         }
         flushBatch();
-        ApplyScissor(cmd, logicalClip, lastScissor, lastScissorValid);
+        ApplyScissor(graph, logicalClip, lastScissor, lastScissorValid);
         batchTexIndex = texIndex;
         batchScissor = scissor;
         batchStart = quadIdx * (uint32_t)slotPerQuad;
@@ -367,7 +369,7 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
     m_LastStats.batches = m_LastStats.drawCalls;
 }
 
-void UIRenderer::Render(RHI::RHICommandBuffer cmd, UICanvas* canvas)
+void UIRenderer::Render(RHI::GCommandGraph& graph, UICanvas* canvas)
 {
     m_Vertices.clear();
     m_QuadTextures.clear();
@@ -385,7 +387,7 @@ void UIRenderer::Render(RHI::RHICommandBuffer cmd, UICanvas* canvas)
     // Walk tree depth-first. clip = active clip rect (nullptr = full canvas).
     RenderElement(canvas, nullptr, false);
 
-    Flush(cmd);
+    Flush(graph);
 }
 
 void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebug)
@@ -652,7 +654,7 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         RenderElement(child, effClip, isDebug);
 }
 
-void UIRenderer::ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid)
+void UIRenderer::ApplyScissor(RHI::GCommandGraph& graph, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid)
 {
     RHI::RHIRect2D s{};
     const float pw = m_ScreenSize.x * m_ContentScale;
@@ -661,7 +663,7 @@ void UIRenderer::ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalC
 
     if (!valid || s.x != last.x || s.y != last.y ||
         s.width != last.width || s.height != last.height) {
-        m_Device->CmdSetScissor(cmd, s);
+        graph.SetScissor(s);
         last = s;
         valid = true;
     }

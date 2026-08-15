@@ -5,6 +5,7 @@
 #include "LeirEngine/Math/Vector4.h"
 #include "LeirEngine/Math/Matrix4x4.h"
 #include "LeirEngine/Rendering/ShaderLayout.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 #include <array>
 #include <memory>
@@ -68,22 +69,22 @@ public:
     RenderPipeline(RHI::RenderBackend* device);
     ~RenderPipeline();
 
-    void Render(RHI::RHICommandBuffer cmd, Scene* scene);
-    void RenderOverlay(RHI::RHICommandBuffer cmd, Scene* scene);
+    void Render(RHI::GCommandGraph& graph, Scene* scene);
+    void RenderOverlay(RHI::GCommandGraph& graph, Scene* scene);
 
     // Hot-reload: re-read Sprite.vert/Sprite.frag and recreate the sprite
     // pipeline (buffers, descriptor sets and layout stay valid).
     void ReloadSpritePipeline();
 
 private:
-    void RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer* renderer,
+    void RenderMeshRenderer(RHI::GCommandGraph& graph, MeshRenderer* renderer,
         const Matrix4x4& viewProj, const Matrix4x4& model,
         const PushConstants& push);
 
     void CreateSpriteResources();
     void CreateSpritePipeline();
     void DestroySpriteResources();
-    void RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* renderer,
+    void RenderSprite(RHI::GCommandGraph& graph, SpriteRenderer* renderer,
         const Matrix4x4& mvp);
 
     RHI::RenderBackend* m_Device;

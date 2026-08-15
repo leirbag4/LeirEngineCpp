@@ -4,6 +4,7 @@
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Vector4.h"
 #include "LeirEngine/Rendering/ShaderLayout.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 
 #include <memory>
@@ -27,7 +28,7 @@ public:
     void SetFloat(const std::string& name, float value);
     void SetVec3(const std::string& name, const Vector3& value);
 
-    void Bind(RHI::RHICommandBuffer cmd, RHI::RHIPipelineLayout layout) const;
+    void Bind(RHI::GCommandGraph& graph, RHI::RHIPipelineLayout layout) const;
 
     RHI::RHIPipeline GetPipeline() const { return m_Pipeline; }
     RHI::RHIPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }

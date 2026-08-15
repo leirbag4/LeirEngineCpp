@@ -1,5 +1,6 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 
 namespace Leir {
@@ -13,8 +14,11 @@ public:
 
     void Resize(uint32_t width, uint32_t height);
 
-    void BeginRender(RHI::RHICommandBuffer cmd, const RHI::RHIClearValue& clearColor, float depthClear = 1.0f);
-    void EndRender(RHI::RHICommandBuffer cmd);
+    // Records a render-pass begin/end into the graph (attachments + transitions
+    // are handled by the backend's CmdExecuteGraph last-use tracking — the old
+    // manual CmdTransitionImageLayout calls are gone).
+    void BeginRender(RHI::GCommandGraph& graph, const RHI::RHIClearValue& clearColor, float depthClear = 1.0f);
+    void EndRender(RHI::GCommandGraph& graph);
 
     RHI::RHIDescriptorImageInfo GetDescriptorInfo() const;
     // Stable index into the backend's global bindless texture table (updated

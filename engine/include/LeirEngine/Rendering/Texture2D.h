@@ -33,6 +33,7 @@ public:
         RHI::RHIDescriptorImageInfo info;
         info.imageView = m_ImageView;
         info.sampler = m_Sampler;
+        info.image = m_Image;
         info.valid = true;
         return info;
     }

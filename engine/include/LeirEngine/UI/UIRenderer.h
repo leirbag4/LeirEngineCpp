@@ -3,6 +3,7 @@
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
 #include "LeirEngine/Rendering/ShaderLayout.h"
+#include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 #include <unordered_map>
 #include <vector>
@@ -41,7 +42,7 @@ public:
     UIRenderer(RHI::RenderBackend* device);
     ~UIRenderer();
 
-    void Render(RHI::RHICommandBuffer cmd, UICanvas* canvas);
+    void Render(RHI::GCommandGraph& graph, UICanvas* canvas);
 
     // Hot-reload: re-read UI.vert/UI.frag and recreate the UI pipeline.
     void ReloadShaders();
@@ -59,8 +60,8 @@ private:
     void RenderElement(UIElement* elem, const Vector4* clip, bool isDebug);
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
-    void Flush(RHI::RHICommandBuffer cmd);
-    void ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid);
+    void Flush(RHI::GCommandGraph& graph);
+    void ApplyScissor(RHI::GCommandGraph& graph, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid);
 
     RHI::RenderBackend* m_Device;
 
