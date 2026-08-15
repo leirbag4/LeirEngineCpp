@@ -32,6 +32,9 @@ struct LEIR_API PushConstants {
     float pad2 = 0.0f;
     Vector4 color = {1.0f, 1.0f, 1.0f, 1.0f};
     Matrix4x4 model;
+    // Bindless texture index of the material's texture. Must match the shader's
+    // PushConstants layout: offset 128, after model (shader std430 size 144).
+    uint32_t textureIndex = 0;
 };
 
 struct LEIR_API PerMeshUBO {
@@ -55,6 +58,9 @@ struct LEIR_API SpritePushConstants {
     Matrix4x4 mvp;
     Vector4 color;
     Vector4 uvRect; // {u, v, w, h} in UV space
+    // Bindless texture index. Matches the shader's SpritePushConstants layout:
+    // offset 96, after uvRect (shader std430 size 112).
+    uint32_t textureIndex = 0;
 };
 
 class LEIR_API RenderPipeline {
@@ -91,14 +97,12 @@ private:
         RHI::RHIPipeline pipeline;
         RHI::RHIDescriptorSetLayout descSetLayout;
         std::vector<RHISetLayoutEntry> setLayouts; // derived from reflection (owned)
-        RHI::RHIDescriptorPool descPool;
         RHI::RHIBuffer vertexBuffer;
         RHI::RHIDeviceMemory vertexMemory;
         RHI::RHIBuffer indexBuffer;
         RHI::RHIDeviceMemory indexMemory;
         int indexCount = 0;
         Texture2D* fallbackTexture = nullptr;
-        std::unordered_map<Texture2D*, RHI::RHIDescriptorSet> descSetCache;
     } m_Sprite;
 };
 

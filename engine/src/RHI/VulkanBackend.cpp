@@ -5,6 +5,7 @@
 #include "LeirEngine/Rendering/VulkanDevice.h"
 
 #include <vulkan/vulkan.h>
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -42,6 +43,7 @@ VkFormat ToVk(Format f) {
         case Format::R8G8B8A8_SRGB:       return VK_FORMAT_R8G8B8A8_SRGB;
         case Format::B8G8R8A8_SRGB:       return VK_FORMAT_B8G8R8A8_SRGB;
         case Format::D32_SFLOAT:          return VK_FORMAT_D32_SFLOAT;
+        case Format::R32_SFLOAT:          return VK_FORMAT_R32_SFLOAT;
     }
     return VK_FORMAT_UNDEFINED;
 }
@@ -239,6 +241,85 @@ struct VulkanBackend::Impl {
         caps.sRGB = true;
         caps.wireframe = features.fillModeNonSolid;
         caps.anisotropicFiltering = features.samplerAnisotropy;
+
+        InitBindless();
+    }
+
+    // ---- Bindless texture table (descriptor indexing) ----
+    uint32_t bindlessCount = 0;
+    uint32_t bindlessNext = 0;
+    std::vector<uint32_t> bindlessFree;
+    VkDescriptorSetLayout bindlessLayout = VK_NULL_HANDLE;
+    VkDescriptorPool bindlessPool = VK_NULL_HANDLE;
+    VkDescriptorSet bindlessSet = VK_NULL_HANDLE;
+
+    void InitBindless() {
+        if (!caps.bindless) return;
+        bindlessCount = caps.maxTexturesPerTable;
+        bool uab = device.IsDescriptorIndexingUpdateAfterBind();
+        if (uab) {
+            // The non-update-after-bind limits are too small for a bindless
+            // table (samplers=64 / resources=200 on this iGPU) and fail set
+            // layout / pipeline creation. Use the update-after-bind limits.
+            VkPhysicalDeviceProperties2 props2{};
+            props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            VkPhysicalDeviceDescriptorIndexingProperties dip{};
+            dip.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+            props2.pNext = &dip;
+            vkGetPhysicalDeviceProperties2(device.GetPhysicalDevice(), &props2);
+            uint32_t img = dip.maxPerStageDescriptorUpdateAfterBindSampledImages;
+            uint32_t sam = dip.maxPerStageDescriptorUpdateAfterBindSamplers;
+            bindlessCount = std::min({
+                img, sam, dip.maxPerStageUpdateAfterBindResources,
+                dip.maxDescriptorSetUpdateAfterBindSampledImages,
+                dip.maxDescriptorSetUpdateAfterBindSamplers
+            });
+        }
+        if (bindlessCount == 0) return;
+
+        XConsole::Println("Vulkan bindless table: {} textures ({})",
+            bindlessCount, uab ? "update-after-bind" : "static limits");
+
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = 0;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        b.descriptorCount = bindlessCount;
+        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindlessLayout = device.CreateBindlessDescriptorSetLayout({b});
+
+        VkDescriptorPoolSize ps{};
+        ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        ps.descriptorCount = bindlessCount;
+        VkDescriptorPoolCreateFlags poolFlags = 0;
+        if (uab) poolFlags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        bindlessPool = device.CreateDescriptorPool({ps}, 1, poolFlags);
+
+        VkDescriptorSetLayout layouts[] = { bindlessLayout };
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool = bindlessPool;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts = layouts;
+        if (vkAllocateDescriptorSets(device.GetDevice(), &ai, &bindlessSet) != VK_SUCCESS)
+            XConsole::PrintError("VulkanBackend: failed to allocate bindless descriptor set");
+    }
+
+    uint32_t NextBindlessIndex() {
+        if (!bindlessFree.empty()) {
+            uint32_t i = bindlessFree.back();
+            bindlessFree.pop_back();
+            return i;
+        }
+        if (bindlessNext < bindlessCount) return bindlessNext++;
+        XConsole::PrintError("VulkanBackend: bindless texture table full ({})", bindlessCount);
+        return 0;
+    }
+
+    ~Impl() {
+        if (bindlessPool)
+            vkDestroyDescriptorPool(device.GetDevice(), bindlessPool, nullptr);
+        if (bindlessLayout)
+            vkDestroyDescriptorSetLayout(device.GetDevice(), bindlessLayout, nullptr);
     }
 };
 
@@ -356,11 +437,21 @@ void VulkanBackend::DestroyPipelineLayout(RHIPipelineLayout layout) {
 
 RHIDescriptorSetLayout VulkanBackend::CreateDescriptorSetLayout(
     const std::vector<RHIDescriptorBinding>& bindings) {
+    bool anyBindless = false;
     std::vector<VkDescriptorSetLayoutBinding> vkBindings;
     vkBindings.reserve(bindings.size());
-    for (const auto& b : bindings) vkBindings.push_back(ToVk(b));
+    for (const auto& b : bindings) {
+        vkBindings.push_back(ToVk(b));
+        if (b.bindless) {
+            anyBindless = true;
+            vkBindings.back().descriptorCount = m_Impl->bindlessCount;
+        }
+    }
     RHIDescriptorSetLayout out;
-    out.handle = reinterpret_cast<uint64_t>(m_Impl->device.CreateDescriptorSetLayout(vkBindings));
+    if (anyBindless)
+        out.handle = reinterpret_cast<uint64_t>(m_Impl->device.CreateBindlessDescriptorSetLayout(vkBindings));
+    else
+        out.handle = reinterpret_cast<uint64_t>(m_Impl->device.CreateDescriptorSetLayout(vkBindings));
     return out;
 }
 void VulkanBackend::DestroyDescriptorSetLayout(RHIDescriptorSetLayout layout) {
@@ -414,6 +505,7 @@ void VulkanBackend::WriteDescriptorSets(const std::vector<RHIDescriptorWrite>& w
         vw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         vw.dstSet = reinterpret_cast<VkDescriptorSet>(w.dstSet.handle);
         vw.dstBinding = w.dstBinding;
+        vw.dstArrayElement = w.dstArrayElement;
         vw.descriptorCount = w.count;
         vw.descriptorType = ToVk(w.type);
         if (w.type == DescriptorType::CombinedImageSampler && w.imageInfo.valid) {
@@ -437,6 +529,44 @@ void VulkanBackend::WriteDescriptorSets(const std::vector<RHIDescriptorWrite>& w
         vkUpdateDescriptorSets(m_Impl->device.GetDevice(),
             (uint32_t)vkWrites.size(), vkWrites.data(), 0, nullptr);
 }
+
+uint32_t VulkanBackend::RegisterBindlessTexture(const RHIDescriptorImageInfo& info) {
+    auto& impl = *m_Impl;
+    if (!impl.bindlessSet) {
+        XConsole::PrintError("VulkanBackend: bindless not supported");
+        return 0;
+    }
+    uint32_t index = impl.NextBindlessIndex();
+    UpdateBindlessTexture(index, info);
+    return index;
+}
+
+void VulkanBackend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorImageInfo& info) {
+    auto& impl = *m_Impl;
+    if (!impl.bindlessSet) return;
+    RHIDescriptorWrite w;
+    w.dstSet = GetBindlessDescriptorSet();
+    w.dstBinding = 0;
+    w.dstArrayElement = index;
+    w.count = 1;
+    w.type = DescriptorType::CombinedImageSampler;
+    w.imageInfo = info;
+    WriteDescriptorSets({w});
+}
+
+void VulkanBackend::UnregisterBindlessTexture(uint32_t index) {
+    auto& impl = *m_Impl;
+    if (!impl.bindlessSet || index >= impl.bindlessCount) return;
+    impl.bindlessFree.push_back(index);
+}
+
+RHIDescriptorSet VulkanBackend::GetBindlessDescriptorSet() const {
+    RHIDescriptorSet out;
+    out.handle = reinterpret_cast<uint64_t>(m_Impl->bindlessSet);
+    return out;
+}
+
+uint32_t VulkanBackend::GetBindlessMaxTextures() const { return m_Impl->bindlessCount; }
 
 RHIBuffer VulkanBackend::CreateBuffer(uint32_t size, BufferUsage usage,
     MemoryProperty properties, RHIDeviceMemory& memory) {

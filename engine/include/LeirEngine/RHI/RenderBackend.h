@@ -74,6 +74,23 @@ public:
         RHIDescriptorPool pool, RHIDescriptorSetLayout layout) = 0;
     virtual void WriteDescriptorSets(const std::vector<RHIDescriptorWrite>& writes) = 0;
 
+    // ---- Bindless texture registry (descriptor indexing) ----
+    //
+    // Textures are registered into a single backend-owned global bindless
+    // table and referenced from shaders by a stable index. Registering gives
+    // back that index; UpdateBindlessTexture rewrites the descriptor in place
+    // (same index, e.g. after a resize) without growing any heap; unregistering
+    // frees the index for reuse. Indices are valid until unregistered.
+    // Requires caps.bindless.
+    virtual uint32_t RegisterBindlessTexture(const RHIDescriptorImageInfo& info) = 0;
+    virtual void UpdateBindlessTexture(uint32_t index, const RHIDescriptorImageInfo& info) = 0;
+    virtual void UnregisterBindlessTexture(uint32_t index) = 0;
+    // The descriptor set the engine binds for the bindless table at the set
+    // number the shader declares the runtime array in.
+    virtual RHIDescriptorSet GetBindlessDescriptorSet() const = 0;
+    // Max number of simultaneously-registered bindless textures.
+    virtual uint32_t GetBindlessMaxTextures() const = 0;
+
     virtual RHIBuffer CreateBuffer(uint32_t size, BufferUsage usage,
         MemoryProperty properties, RHIDeviceMemory& memory) = 0;
     virtual void DestroyBuffer(RHIBuffer buffer) = 0;

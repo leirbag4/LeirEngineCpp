@@ -54,6 +54,11 @@ void Texture2D::CreateFromData(const unsigned char* pixels, uint32_t width, uint
 
     m_ImageView = m_Device->CreateImageView(m_Image, RHI::Format::R8G8B8A8_SRGB, RHI::Aspect::Color);
     m_Sampler = m_Device->CreateSampler(filter, addressMode);
+
+    // Register into the backend's global bindless table: the texture is then
+    // referenced from shaders by m_BindlessIndex (no per-texture descriptor
+    // set allocation).
+    m_BindlessIndex = m_Device->RegisterBindlessTexture(GetDescriptorInfo());
 }
 
 Texture2D::Texture2D(RHI::RenderBackend* device, const std::string& path)
@@ -95,6 +100,7 @@ Texture2D::Texture2D(RHI::RenderBackend* device, Image& image, RHI::Filter filte
 
 Texture2D::~Texture2D()
 {
+    m_Device->UnregisterBindlessTexture(m_BindlessIndex);
     m_Device->DestroySampler(m_Sampler);
     m_Device->DestroyImageView(m_ImageView);
     m_Device->DestroyImage(m_Image);

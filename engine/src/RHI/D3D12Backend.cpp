@@ -56,6 +56,7 @@ DXGI_FORMAT ToDxgi(Format f) {
         case Format::R8G8B8A8_SRGB:       return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         case Format::B8G8R8A8_SRGB:       return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
         case Format::D32_SFLOAT:          return DXGI_FORMAT_D32_FLOAT;
+        case Format::R32_SFLOAT:          return DXGI_FORMAT_R32_FLOAT;
     }
     return DXGI_FORMAT_UNKNOWN;
 }
@@ -121,6 +122,10 @@ struct ImageViewRec {
 
 struct SamplerRec {
     D3D12_GPU_DESCRIPTOR_HANDLE gpu = {};
+    // Sampler characteristics. With bindless each texture's sampler is re-created
+    // at its own heap slot from this desc (the cached gpu handle above is only
+    // used by the legacy single-sampler WriteDescriptorSets path).
+    D3D12_SAMPLER_DESC desc{};
 };
 
 struct ShaderRec {
@@ -130,6 +135,7 @@ struct ShaderRec {
 struct DescSetLayoutRec {
     DescriptorType type = DescriptorType::CombinedImageSampler;
     ShaderStage stage = ShaderStage::Fragment;
+    bool bindless = false;
 };
 
 struct DescPoolRec {};
@@ -235,6 +241,25 @@ struct D3D12Backend::Impl {
 
     std::map<std::pair<int, int>, UINT> samplerCache; // (filter,address) -> slot
 
+    // Bindless texture table (descriptor indexing, TODO_RHI_SLANG.md §3.5):
+    // each registered texture owns one SRV (slot i) + one sampler (slot i),
+    // referenced from shaders as a stable index. Bounded by the sampler heap
+    // (D3D12 caps at 2048 shader-visible samplers).
+    static const UINT kBindless = 2048;
+    uint32_t bindlessNext = 0;
+    std::vector<uint32_t> bindlessFree;
+
+    uint32_t NextBindlessIndex() {
+        if (!bindlessFree.empty()) {
+            uint32_t i = bindlessFree.back();
+            bindlessFree.pop_back();
+            return i;
+        }
+        if (bindlessNext < kBindless) return bindlessNext++;
+        XConsole::PrintError("D3D12: bindless texture table full ({})", (unsigned)kBindless);
+        return 0;
+    }
+
     // Swapchain
     static const UINT kBackBuffers = 3;
     ComPtr<ID3D12Resource> backBuffers[kBackBuffers];
@@ -249,6 +274,9 @@ struct D3D12Backend::Impl {
     // Current pipeline (for vertex-buffer stride in CmdBindVertexBuffer)
     PipelineRec* currentPipeline = nullptr;
     ComPtr<ID3D12RootSignature> currentRootSig;
+
+    // Cached bindless descriptor set (the whole heaps as tables).
+    DescSetRec* bindlessSetRec = nullptr;
 
     Impl(void* window, int w, int h, bool vs, const std::string& appName) {
         hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
@@ -333,6 +361,7 @@ struct D3D12Backend::Impl {
 
     ~Impl() {
         WaitIdle();
+        delete bindlessSetRec;
         for (auto& ev : fenceEvents) if (ev) CloseHandle(ev);
         if (copyEvent) CloseHandle(copyEvent);
         if (waitEvent) CloseHandle(waitEvent);
@@ -479,10 +508,10 @@ struct D3D12Backend::Impl {
         srvFree.assign(4096, false);
 
         hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-        hd.NumDescriptors = 64;
+        hd.NumDescriptors = kBindless; // one slot per bindless texture index
         hd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         device->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&samplerHeap));
-        samplerFree.assign(64, false);
+        samplerFree.assign(kBindless, false);
     }
 
     void CreateCopyHelper() {
@@ -734,7 +763,7 @@ RHIPipeline D3D12Backend::CreateGraphicsPipeline(const RHIPipelineDesc& desc) {
         D3D12_INPUT_ELEMENT_DESC el{};
         el.SemanticName = a.semantic && *a.semantic ? a.semantic
             : (a.location == 0 ? "POSITION" : (a.location == 1 ? "TEXCOORD" : "COLOR"));
-        el.SemanticIndex = 0;
+        el.SemanticIndex = a.semanticIndex;
         el.Format = ToDxgi(a.format);
         el.InputSlot = a.binding;
         el.AlignedByteOffset = a.offset;
@@ -816,6 +845,46 @@ RHIPipelineLayout D3D12Backend::CreatePipelineLayout(
             p.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
             rec->setParams.push_back({ SetKind::UniformBuffer, (UINT)params.size(), 0 });
             params.push_back(p);
+        } else if (lr->bindless) {
+            // Bindless texture set: the shader declares unbounded arrays that
+            // the backend backs with the whole descriptor heaps as tables —
+            // SRV array at t0,space1, sampler array at s0,space2 (stable,
+            // independent of the vk set number; see TODO_RHI_SLANG.md §4.1).
+            D3D12_DESCRIPTOR_RANGE srvRange{};
+            srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            srvRange.NumDescriptors = Impl::kBindless;
+            srvRange.BaseShaderRegister = 0;
+            srvRange.RegisterSpace = 1;
+            srvRange.OffsetInDescriptorsFromTableStart = 0;
+            ranges.push_back(srvRange);
+            D3D12_DESCRIPTOR_RANGE* srvPtr = &ranges.back();
+
+            D3D12_DESCRIPTOR_RANGE samRange{};
+            samRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+            samRange.NumDescriptors = Impl::kBindless;
+            samRange.BaseShaderRegister = 0;
+            samRange.RegisterSpace = 2;
+            samRange.OffsetInDescriptorsFromTableStart = 0;
+            ranges.push_back(samRange);
+            D3D12_DESCRIPTOR_RANGE* samPtr = &ranges.back();
+
+            D3D12_ROOT_PARAMETER psrv{};
+            psrv.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            psrv.DescriptorTable.NumDescriptorRanges = 1;
+            psrv.DescriptorTable.pDescriptorRanges = srvPtr;
+            psrv.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            UINT srvIdx = (UINT)params.size();
+            params.push_back(psrv);
+
+            D3D12_ROOT_PARAMETER psam{};
+            psam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            psam.DescriptorTable.NumDescriptorRanges = 1;
+            psam.DescriptorTable.pDescriptorRanges = samPtr;
+            psam.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            UINT samIdx = (UINT)params.size();
+            params.push_back(psam);
+
+            rec->setParams.push_back({ SetKind::Sampler, srvIdx, samIdx });
         } else {
             D3D12_DESCRIPTOR_RANGE srvRange{};
             srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -902,6 +971,8 @@ RHIDescriptorSetLayout D3D12Backend::CreateDescriptorSetLayout(
     if (!bindings.empty()) {
         rec->type = bindings[0].type;
         rec->stage = bindings[0].stage;
+        for (const auto& b : bindings)
+            if (b.bindless) rec->bindless = true;
     }
     RHIDescriptorSetLayout out;
     out.handle = reinterpret_cast<uint64_t>(rec);
@@ -962,6 +1033,61 @@ void D3D12Backend::WriteDescriptorSets(const std::vector<RHIDescriptorWrite>& wr
         }
     }
 }
+
+uint32_t D3D12Backend::RegisterBindlessTexture(const RHIDescriptorImageInfo& info) {
+    Impl& im = *m_Impl;
+    if (!im.caps.bindless) {
+        XConsole::PrintError("D3D12: bindless not supported");
+        return 0;
+    }
+    uint32_t index = im.NextBindlessIndex();
+    UpdateBindlessTexture(index, info);
+    return index;
+}
+
+void D3D12Backend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorImageInfo& info) {
+    Impl& im = *m_Impl;
+    if (index >= Impl::kBindless) return;
+    if (!info.valid || info.imageView.handle == 0 || info.sampler.handle == 0) return;
+
+    ImageViewRec* view = reinterpret_cast<ImageViewRec*>(info.imageView.handle);
+    SamplerRec* samp = reinterpret_cast<SamplerRec*>(info.sampler.handle);
+
+    // Rewrite the SRV + sampler at the texture's own bindless slot in place —
+    // no new descriptor is allocated, so resizing a render target never grows
+    // the heaps (the old single-sampler path leaked an SRV per resize).
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+    srv.Format = view->format;
+    srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv.Texture2D.MipLevels = 1;
+    srv.Texture2D.MostDetailedMip = 0;
+    im.device->CreateShaderResourceView(view->image->res.Get(), &srv, im.SrvCpu(index));
+    im.device->CreateSampler(&samp->desc, im.SamplerCpu(index));
+}
+
+void D3D12Backend::UnregisterBindlessTexture(uint32_t index) {
+    Impl& im = *m_Impl;
+    if (index >= Impl::kBindless) return;
+    im.bindlessFree.push_back(index);
+}
+
+RHIDescriptorSet D3D12Backend::GetBindlessDescriptorSet() const {
+    // The whole shader-visible heaps act as the bindless table: SRV table at
+    // offset 0 (space1), sampler table at offset 0 (space2).
+    Impl& im = *m_Impl;
+    if (!im.bindlessSetRec) {
+        im.bindlessSetRec = new DescSetRec();
+        im.bindlessSetRec->kind = SetKind::Sampler;
+        im.bindlessSetRec->srvGpu = im.SrvGpu(0);
+        im.bindlessSetRec->samplerGpu = im.SamplerGpu(0);
+    }
+    RHIDescriptorSet out;
+    out.handle = reinterpret_cast<uint64_t>(im.bindlessSetRec);
+    return out;
+}
+
+uint32_t D3D12Backend::GetBindlessMaxTextures() const { return Impl::kBindless; }
 
 RHIBuffer D3D12Backend::CreateBuffer(uint32_t size, BufferUsage usage,
     MemoryProperty properties, RHIDeviceMemory& memory) {
@@ -1128,18 +1254,6 @@ void D3D12Backend::DestroyImageView(RHIImageView imageView) {
 }
 
 RHISampler D3D12Backend::CreateSampler(Filter filter, SamplerAddressMode addressMode) {
-    Impl& im = *m_Impl;
-    auto key = std::make_pair((int)filter, (int)addressMode);
-    auto it = im.samplerCache.find(key);
-    if (it != im.samplerCache.end()) {
-        SamplerRec* rec = new SamplerRec();
-        rec->gpu = im.SamplerGpu(it->second);
-        RHISampler out;
-        out.handle = reinterpret_cast<uint64_t>(rec);
-        return out;
-    }
-
-    UINT slot = im.AllocSampler();
     D3D12_SAMPLER_DESC sd{};
     sd.Filter = filter == Filter::Nearest ? D3D12_FILTER_MIN_MAG_MIP_POINT
                                           : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -1148,11 +1262,12 @@ RHISampler D3D12Backend::CreateSampler(Filter filter, SamplerAddressMode address
     sd.AddressV = sd.AddressU;
     sd.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     sd.MaxLOD = D3D12_FLOAT32_MAX;
-    im.device->CreateSampler(&sd, im.SamplerCpu(slot));
-    im.samplerCache[key] = slot;
 
+    // No heap slot is allocated here: bindless registration re-creates the
+    // sampler from `desc` at each texture's own bindless index (the old
+    // per-(filter,address) cache slots are no longer referenced).
     SamplerRec* rec = new SamplerRec();
-    rec->gpu = im.SamplerGpu(slot);
+    rec->desc = sd;
     RHISampler out;
     out.handle = reinterpret_cast<uint64_t>(rec);
     return out;

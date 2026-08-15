@@ -137,9 +137,23 @@ std::vector<RHISetLayoutEntry> CreateSetLayoutsFromReflection(
     if (reflection.bindings.empty())
         return out;
 
+    // Shader signature -> set layout binding. An unbounded runtime array
+    // (count == UINT32_MAX) becomes a bindless binding bounded by the
+    // backend's bindless table size.
+    auto toBinding = [device](const RHI::ShaderBinding& b) {
+        const bool bindless = b.count == UINT32_MAX;
+        RHI::RHIDescriptorBinding out;
+        out.binding = b.binding;
+        out.type = b.type;
+        out.count = bindless ? device->GetBindlessMaxTextures() : b.count;
+        out.stage = b.stage;
+        out.bindless = bindless;
+        return out;
+    };
+
     std::map<uint32_t, std::vector<RHI::RHIDescriptorBinding>> bySet;
     for (const auto& b : reflection.bindings)
-        bySet[b.set].push_back({ b.binding, b.type, b.count, b.stage });
+        bySet[b.set].push_back(toBinding(b));
 
     // std::map iterates sets ascending -> positional set order for the backends.
     for (auto& [set, bindings] : bySet) {
@@ -167,13 +181,25 @@ RHI::RHIPipelineLayout CreatePipelineLayoutFromReflection(
     for (const auto& e : setLayouts)
         bySet[e.set] = e.layout;
 
+    auto toBinding = [device](const RHI::ShaderBinding& b) {
+        const bool bindless = b.count == UINT32_MAX;
+        RHI::RHIDescriptorBinding out;
+        out.binding = b.binding;
+        out.type = b.type;
+        out.count = bindless ? device->GetBindlessMaxTextures() : b.count;
+        out.stage = b.stage;
+        out.bindless = bindless;
+        return out;
+    };
+
     std::map<uint32_t, std::vector<RHI::RHIDescriptorBinding>> sigBindings;
     for (const auto& b : reflection.bindings)
-        sigBindings[b.set].push_back({ b.binding, b.type, b.count, b.stage });
+        sigBindings[b.set].push_back(toBinding(b));
 
     std::vector<RHI::RHIDescriptorSetLayout> layouts;
     for (const auto& [set, layout] : bySet) {
-        ValidateSetLayoutAgainstReflection(reflection, set, sigBindings[set]);
+        ValidateSetLayoutAgainstReflection(reflection, set, sigBindings[set],
+            device->GetBindlessMaxTextures());
         layouts.push_back(layout);
     }
 
@@ -197,7 +223,8 @@ RHI::RHIPipelineLayout CreatePipelineLayoutFromReflection(
 
 bool ValidateSetLayoutAgainstReflection(
     const RHI::ShaderReflection& reflection, uint32_t set,
-    const std::vector<RHI::RHIDescriptorBinding>& bindings)
+    const std::vector<RHI::RHIDescriptorBinding>& bindings,
+    uint32_t bindlessCount)
 {
     std::vector<const RHI::ShaderBinding*> expected;
     for (const auto& b : reflection.bindings)
@@ -214,8 +241,11 @@ bool ValidateSetLayoutAgainstReflection(
     for (size_t i = 0; i < expected.size(); ++i) {
         const RHI::ShaderBinding& e = *expected[i];
         const RHI::RHIDescriptorBinding& b = bindings[i];
+        const bool bindless = e.count == UINT32_MAX;
         if (e.binding != b.binding || e.type != b.type ||
-            e.count != b.count || e.stage != b.stage) {
+            e.stage != b.stage || b.bindless != bindless ||
+            (!bindless && e.count != b.count) ||
+            (bindless && b.count != bindlessCount)) {
             XConsole::PrintWarning("[Reflection] set {} binding {} mismatch (layout vs shader signature)",
                 set, b.binding);
             ok = false;

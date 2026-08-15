@@ -56,6 +56,7 @@ enum class Format : uint8_t {
     R8G8B8A8_SRGB = 3,
     B8G8R8A8_SRGB = 4,
     D32_SFLOAT = 5,
+    R32_SFLOAT = 6,
 };
 
 enum class Topology : uint8_t {
@@ -207,16 +208,25 @@ struct RHIVertexAttribute {
     uint32_t binding = 0;
     Format format = Format::R32G32B32_SFLOAT;
     uint32_t offset = 0;
-    // D3D12 input-layout semantic name (e.g. "POSITION"). Ignored by the
-    // Vulkan backend; must match the semantic name the shader expects.
+    // D3D12 input-layout semantic name + index (e.g. semantic "TEXCOORD" with
+    // semanticIndex 1 matches the shader's `: TEXCOORD1`). Ignored by the
+    // Vulkan backend; must match the semantic the shader expects.
     const char* semantic = "";
+    uint32_t semanticIndex = 0;
 };
 
 struct RHIDescriptorBinding {
     uint32_t binding = 0;
     DescriptorType type = DescriptorType::CombinedImageSampler;
+    // Number of descriptors in the array. When `bindless` is true this is the
+    // bound (maximum) array size the shader may index; use UINT32_MAX for an
+    // unbounded runtime array (backend replaces it with its bindless bound).
     uint32_t count = 1;
     ShaderStage stage = ShaderStage::Fragment;
+    // Bindless / descriptor-indexing binding: a runtime-sized array that the
+    // backend binds as its global bindless table (Vulkan PARTIALLY_BOUND +
+    // runtime descriptor array; D3D12 unbounded descriptor-table range).
+    bool bindless = false;
 };
 
 struct RHIPushConstantRange {
@@ -290,6 +300,9 @@ struct RHIDescriptorBufferInfo {
 struct RHIDescriptorWrite {
     RHIDescriptorSet dstSet;
     uint32_t dstBinding = 0;
+    // Index of the first array element to write (Vulkan only; D3D12 bindless
+    // writes go through the dedicated bindless registration API).
+    uint32_t dstArrayElement = 0;
     uint32_t count = 1;
     DescriptorType type = DescriptorType::CombinedImageSampler;
     RHIDescriptorImageInfo imageInfo;

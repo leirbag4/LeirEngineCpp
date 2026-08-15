@@ -17,7 +17,9 @@ public:
     void EndRender(RHI::RHICommandBuffer cmd);
 
     RHI::RHIDescriptorImageInfo GetDescriptorInfo() const;
-    RHI::RHIDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
+    // Stable index into the backend's global bindless texture table (updated
+    // in place on Resize, so the descriptor heaps never grow).
+    uint32_t GetBindlessIndex() const { return m_BindlessIndex; }
     uint32_t GetWidth() const { return m_Width; }
     uint32_t GetHeight() const { return m_Height; }
     RHI::RHIFramebuffer GetFramebuffer() const { return m_Framebuffer; }
@@ -30,9 +32,6 @@ private:
     void CreateSampler();
     void CreateResources();
     void DestroyResources();
-    void CreateDescriptorResources();
-    void UpdateDescriptor();
-    void DestroyDescriptorResources();
 
     // Builds the persistent pass template (clears + full-rect viewport/scissor).
     // Rebuilt on Resize and when the requested clears change.
@@ -57,9 +56,7 @@ private:
     RHI::RHIFramebuffer m_Framebuffer;
     RHI::RHISampler m_Sampler;
 
-    RHI::RHIDescriptorSetLayout m_DescSetLayout;
-    RHI::RHIDescriptorPool m_DescPool;
-    RHI::RHIDescriptorSet m_DescriptorSet;
+    uint32_t m_BindlessIndex = 0;
 };
 
 } // namespace Leir

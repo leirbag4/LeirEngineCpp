@@ -8,10 +8,13 @@ struct VSOutput {
     float4 position : SV_Position;
 };
 
+// textureIndex is consumed by the fragment stage; declared here so both stages
+// produce the same push-constant layout (std430 size 112).
 struct SpritePushConstants {
     float4x4 mvp;
     float4 color;
     float4 uvRect;
+    uint textureIndex;
 };
 
 [[vk::push_constant]]

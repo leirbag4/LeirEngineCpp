@@ -204,6 +204,9 @@ nombre `slang` en una ruta de include.
 - Resource indexing como modelo primario (descriptor indexing Vulkan/D3D12, argument buffers
   Metal, bindless de WebGPU).
 - `GBindTable` soporta tables con array de recursos; el límite lo da `GCaps`, nunca el diseño.
+- ✅ **Implementado (2026-08-14, paso 3 de Plan B)**: tabla bindless por backend (Vulkan
+  descriptor indexing + update-after-bind → 1M texturas; D3D12 heaps SRV/sampler con tabla
+  space1/space2). Detalles en el paso 3 de "Plan B".
 
 ### 3.6 `GCaps` rico
 - Campos: max textures/UBOs/samplers por table, bindless soportado, MRT, instancing, compute,
@@ -390,23 +393,18 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
 
 > **DECISIÓN (registrada)**: los dos ítems de abajo se **documentan como limitación** y se resuelven
 > de raíz en el **RHI completo (§3)**, no en la RHI mínima. NO arreglarlos ahora.
+>
+> **RESUELTO (2026-08-14, Fase 3 bindless)**: el ítem #1 se eliminó de raíz con la migración
+> bindless-first (paso 3 de "Plan B"). Ya no hay `WriteDescriptorSets` de imagen en runtime — las
+> texturas se registran en la tabla bindless y el resize del viewport RT reescribe el slot en
+> `SrvCpu(index)`/`SamplerCpu(index)` **in-place**, sin alocar nada. Quedan vigentes #2 y #3.
 
-1. **Slots de descriptores SRV/sampler que nunca se liberan.** El backend aloca un slot del
+1. **Slots de descriptores SRV/sampler que nunca se liberan.** ~~El backend aloca un slot del
    `srvHeap` (4096) por cada `WriteDescriptorSets` de imagen (`AllocSrv()`, `D3D12Backend.cpp:912`)
    y un slot de `samplerHeap` (64) por cada sampler único (`AllocSampler()`, cacheado), pero **nunca
-   los devuelve**: la interfaz `RenderBackend` no tiene `DestroyDescriptorSet`, y `DestroyImageView`
-   solo libera slots RTV/DSV (`D3D12Backend.cpp:1089-1094`). Consecuencia: cada (re)creación del
-   descriptor del viewport RT (cada resize) gotea **1 slot SRV**; el sampler gotea solo con
-   combinaciones filtro/address nuevas (acotado). El heap SRV es 4096 → no se agota en una sesión
-   normal (solo con cientos de resizes en un mismo run); en el reinicio se recrea desde cero.
-   **Por qué no se arregla ahora**: la solución "correcta" (free list en `DestroyDescriptorSet`)
-   exige tocar la interfaz RHI + ambos backends + todos los owners; el leak es lento y no afecta
-   render ni teardown. **En el RHI completo esto desaparece**: los motores profesionales (Unity,
-   Unreal, Godot; guías Microsoft/Khronos) NO dejan descriptores huérfanos — usan **pools con free
-   list**, **ring buffers por frame** (descriptores efímeros, reset del ring al fin del frame), o
-   **bindless** (heap gigante + índices directos en el shader, nada se libera). El diseño §3 ya
-   apunta a **bindless-first + bindings por reflection** (ver checkbox Fase "Migración al RHI
-   completo"), así que la deuda se paga ahí.
+   los devuelve**~~. **ELIMINADO (Fase 3 bindless, 2026-08-14)**: el camino `AllocSrv`/`AllocSampler`/
+   `samplerCache`/`srvSlot` quedó muerto; el único `WriteDescriptorSets` restante es el UBO (CBV,
+   no aloca slots). El heap SRV ya no crece con los resizes del viewport RT.
 2. **`cmdList4` sin uso** (residuo del intento descartado de root sampler): declarado en
    `D3D12Backend.cpp:196` y creado por `QueryInterface` en `CreateFrameObjects` (`:423`), nunca se
    usa. Se puede eliminar en cualquier limpieza menor.
@@ -605,10 +603,60 @@ Pasos (en orden, cada uno verificado antes del siguiente):
    `SlangExportTest` valida 6 `.reflect.json` por ejecución. Nota: `nlohmann_json` pasó a **PUBLIC**
    en `engine/CMakeLists.txt` (header-only; lo necesita el editor para serializar sidecars).
 3. **Bindless-first** (§3.5): descriptor indexing (Vulkan `VK_EXT_descriptor_indexing` / D3D12
-   heap SRV grande) + `GBindTable` con arrays; límite por `GCaps`, no por diseño. **Paga la deuda
-   documentada** ("Limitaciones conocidas del backend D3D12" #1: slots SRV/sampler nunca liberados)
-   — nada se aloca/libera por frame; se indexa directo en el shader. Verificación: resize del
-   viewport RT en D3D12 sin crecimiento de heap SRV (se elimina el leak por resize).
+    heap SRV grande) + `GBindTable` con arrays; límite por `GCaps`, no por diseño. **Paga la deuda
+    documentada** ("Limitaciones conocidas del backend D3D12" #1: slots SRV/sampler nunca liberados)
+    — nada se aloca/libera por frame; se indexa directo en el shader. Verificación: resize del
+    viewport RT en D3D12 sin crecimiento de heap SRV (se elimina el leak por resize).
+    ✅ **Hecho 2026-08-14 (Fase 3)**: una **tabla bindless por backend** reemplaza los sets
+    single-sampler por textura. `RHI.h`: `RHIDescriptorBinding.bindless` (arrays runtime;
+    `count=UINT32_MAX` = unbounded, el backend lo sustituye por su bound), `RHIDescriptorWrite.
+    dstArrayElement`, `Format::R32_SFLOAT`, `RHIVertexAttribute.semanticIndex`. `RenderBackend`:
+    5 métodos — `RegisterBindlessTexture`/`UpdateBindlessTexture`/`UnregisterBindlessTexture`
+    (free-list de índices)/`GetBindlessDescriptorSet`/`GetBindlessMaxTextures`.
+    **Vulkan**: features descriptor indexing con **update-after-bind** (imprescindible: el iGPU
+    Intel UHD tiene `maxPerStageDescriptorSamplers=64` y `maxPerStageResources=200`, y un binding
+    bindless de 200 CIS violaba `VUID-VkPipelineLayoutCreateInfo-descriptorType-03016` y
+    `VUID-VkGraphicsPipelineCreateInfo-layout-01688`). El layout usa PARTIALLY_BOUND per-binding +
+    `VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT` y el pool `VK_DESCRIPTOR_POOL_
+    CREATE_UPDATE_AFTER_BIND_BIT`; la tabla se dimensiona con los límites update-after-bind →
+    **1.048.576 texturas**. Gotchas del header SDK 1.4.357: el set-level
+    `VK_DESCRIPTOR_SET_LAYOUT_CREATE_PARTIALLY_BOUND_BIT` fue **eliminado** (ahora es per-binding
+    via `VkDescriptorSetLayoutBindingFlagsCreateInfo`), el feature genérico
+    `descriptorBindingUpdateAfterBind` fue eliminado (usar `descriptorBindingSampledImageUpdate
+    AfterBind`) y `maxPerStageDescriptorUpdateAfterBindResources` se llama
+    `maxPerStageUpdateAfterBindResources`.
+    **D3D12**: heaps shader-visible SRV (4096) + sampler (64 → **2048**, `kBindless`); root
+    signature bindless = tabla SRV `space1` + tabla sampler `space2` (ambas `NumDescriptors=
+    kBindless`, pixel) — DXIL divide `Sampler2D textures[]` en `t0,space1unbounded` +
+    `s0,space2unbounded`. `CreateSampler` ya no aloca slot (guarda el `D3D12_SAMPLER_DESC`),
+    `UpdateBindlessTexture` reescribe SRV+sampler **in-place** en el slot del índice → **el resize
+    del viewport RT ya no crece ningún heap**. El camino legacy `AllocSrv`/`AllocSampler`/
+    `samplerCache`/`srvSlot` quedó muerto (el único `WriteDescriptorSets` restante es el UBO).
+    **Shaders** (6): `Basic.vert/frag` y `Sprite.vert/frag` ganan `uint textureIndex` al final del
+    push (mismos offsets en C++: 128/96; std430 144/112, ambos stages declaran el struct idéntico
+    → range único) y una `Sampler2D textures[]` bindless (`[[vk::binding(0,1)]]` Basic /
+    `[[vk::binding(0,0)]]` Sprite), indexada `textures[push.textureIndex]` (uniform por draw → sin
+    NonUniform). `UI.vert` gana el atributo loc3 `float fragTexIndex : TEXCOORD1` (`UIVertex.
+    textureIndex`, formato `R32_SFLOAT`, semantic TEXCOORD index 1); `UI.frag` usa
+    `textures[NonUniformResourceIndex((uint)input.fragTexIndex)]` — un draw mezcla varias
+    texturas — pero **solo para los targets que lo soportan**: `NonUniformResourceIndex` no
+    compila en WGSL/Metal/GLSL (import falla), por lo que se emite vía `__target_switch`
+    (`case hlsl: case spirv:` lo usan; `default:` indexa directo). Se verifica empíricamente que
+    el índice DXIL del `textureIndex` es DWORD 32 (Basic) / DWORD 24 (Sprite), alineado con los
+    structs C++.
+    **Engine**: `Texture2D` (se registra en `CreateFromData`, se des-registra en el dtor,
+    `GetBindlessIndex`), `RenderTexture` (registro en ctor, `UpdateBindlessTexture` in-place en
+    `Resize`, des-registro en dtor — eliminados `m_DescSetLayout/m_DescPool/m_DescriptorSet`),
+    `Material` (sin pool/set; `Bind` enlaza el set bindless global en set 1; fallback legacy
+    bindless), `RenderPipeline` (push `textureIndex` en `RenderMeshRenderer`; `RenderSprite`
+    enlaza el set bindless en set 0 y elimina `descSetCache`/`descPool`; `RenderOverlay` sin
+    cambios), `UIRenderer` (eliminados `GetOrCreateDesc`/`m_DescCache`/`m_DescPool`; el set
+    bindless se enlaza **una vez** en `Flush`; batching por `texIndex`+scissor; los viewports usan
+    `GetBindlessIndex()`).
+    **Verificado (2026-08-14)**: ctest 2/2; editor Vulkan y D3D12 limpios (0 VUIDs / 0 errores
+    debug layer), close limpio; bindless table Vulkan `1.048.576 (update-after-bind)`; paridad
+    cross-backend 1.52% ≈ baseline 1.4%; el leak de SRV por resize quedó eliminado estructuralmente
+    (no queda ningún path que aloque SRVs por textura/frame).
 4. **`GCommandGraph`** (§3.2): `RenderPassRecord` + `DrawRecord`/`CopyRecord`/`ComputeRecord`
    registrados por frame; el backend traduce a comandos nativos y **genera transiciones de estado
    por last-use tracking** (reemplaza los `TransitionImageLayout`/`CmdBarrier` manuales).

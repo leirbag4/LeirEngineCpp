@@ -26,6 +26,8 @@ public:
     RHI::RHISampler GetSampler() const { return m_Sampler; }
     uint32_t GetWidth() const { return m_Width; }
     uint32_t GetHeight() const { return m_Height; }
+    // Stable index into the backend's global bindless texture table.
+    uint32_t GetBindlessIndex() const { return m_BindlessIndex; }
 
     RHI::RHIDescriptorImageInfo GetDescriptorInfo() const {
         RHI::RHIDescriptorImageInfo info;
@@ -47,6 +49,7 @@ private:
     RHI::RHISampler m_Sampler;
     uint32_t m_Width = 0;
     uint32_t m_Height = 0;
+    uint32_t m_BindlessIndex = 0;
 };
 
 } // namespace Leir

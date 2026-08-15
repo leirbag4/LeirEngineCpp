@@ -11,7 +11,10 @@ RenderTexture::RenderTexture(RHI::RenderBackend* device, uint32_t width, uint32_
     CreateRenderPass();
     CreateSampler();
     CreateResources();
-    CreateDescriptorResources();
+    // Register once into the backend's bindless table; Resize only updates the
+    // descriptor in place (no per-resize heap growth — the old per-texture
+    // descriptor set leaked one SRV per resize on D3D12).
+    m_BindlessIndex = m_Device->RegisterBindlessTexture(GetDescriptorInfo());
 }
 
 RenderTexture::~RenderTexture()
@@ -22,7 +25,7 @@ RenderTexture::~RenderTexture()
     // Without this the D3D12 debug layer raises 0x87d (resource destroyed while
     // in GPU use) → unhandled break → WER → multi-second close.
     m_Device->WaitIdle();
-    DestroyDescriptorResources();
+    m_Device->UnregisterBindlessTexture(m_BindlessIndex);
     DestroyResources();
     if (m_PassTemplate.IsValid()) m_Device->DestroyPassTemplate(m_PassTemplate);
     if (m_Sampler.IsValid()) m_Device->DestroySampler(m_Sampler);
@@ -45,7 +48,8 @@ void RenderTexture::Resize(uint32_t width, uint32_t height)
     m_Width = width;
     m_Height = height;
     CreateResources();
-    UpdateDescriptor();
+    // Point the existing bindless slot at the new image view — no allocation.
+    m_Device->UpdateBindlessTexture(m_BindlessIndex, GetDescriptorInfo());
     // The template viewport/scissor/renderArea depend on the size.
     BuildPassTemplate(m_BakedClearColor, m_BakedDepthClear);
 }
@@ -170,45 +174,6 @@ RHI::RHIDescriptorImageInfo RenderTexture::GetDescriptorInfo() const
     info.sampler = m_Sampler;
     info.valid = true;
     return info;
-}
-
-void RenderTexture::CreateDescriptorResources()
-{
-    RHI::RHIDescriptorBinding binding{};
-    binding.binding = 0;
-    binding.type = RHI::DescriptorType::CombinedImageSampler;
-    binding.count = 1;
-    binding.stage = RHI::ShaderStage::Fragment;
-    m_DescSetLayout = m_Device->CreateDescriptorSetLayout({ binding });
-
-    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
-        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
-    };
-    m_DescPool = m_Device->CreateDescriptorPool(poolBindings, 1);
-
-    m_DescriptorSet = m_Device->AllocateDescriptorSet(m_DescPool, m_DescSetLayout);
-
-    UpdateDescriptor();
-}
-
-void RenderTexture::UpdateDescriptor()
-{
-    RHI::RHIDescriptorWrite write{};
-    write.dstSet = m_DescriptorSet;
-    write.dstBinding = 0;
-    write.count = 1;
-    write.type = RHI::DescriptorType::CombinedImageSampler;
-    write.imageInfo = GetDescriptorInfo();
-    m_Device->WriteDescriptorSets({ write });
-}
-
-void RenderTexture::DestroyDescriptorResources()
-{
-    if (m_DescPool.IsValid()) m_Device->DestroyDescriptorPool(m_DescPool);
-    if (m_DescSetLayout.IsValid()) m_Device->DestroyDescriptorSetLayout(m_DescSetLayout);
-    m_DescriptorSet = RHI::RHIDescriptorSet{};
-    m_DescPool = RHI::RHIDescriptorPool{};
-    m_DescSetLayout = RHI::RHIDescriptorSetLayout{};
 }
 
 } // namespace Leir

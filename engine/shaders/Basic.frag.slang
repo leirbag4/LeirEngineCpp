@@ -4,8 +4,11 @@ struct PSInput {
     [[vk::location(2)]] float3 fragWorldPos : TEXCOORD2;
 };
 
+// Bindless texture table (set 1): the engine binds its global bindless set
+// here and textures are referenced by index. The count is runtime (unbounded
+// array); Vulkan/D3D12 back it with the backend's bindless table.
 [[vk::binding(0, 1)]]
-Sampler2D texSampler;
+Sampler2D textures[];
 
 struct PushConstants {
     float3 lightDir;
@@ -16,6 +19,7 @@ struct PushConstants {
     float pad2;
     float4 color;
     float4x4 model;
+    uint textureIndex;
 };
 
 [[vk::push_constant]]
@@ -31,7 +35,8 @@ float4 main(PSInput input) : SV_Target {
 
     float3 ambient = push.ambientColor;
 
-    float4 texColor = texSampler.Sample(input.fragTexCoord);
+    // The index comes from a push constant: uniform across the draw.
+    float4 texColor = textures[push.textureIndex].Sample(input.fragTexCoord);
     float4 baseColor = texColor * push.color;
 
     return float4((ambient + diffuse) * baseColor.rgb, baseColor.a);

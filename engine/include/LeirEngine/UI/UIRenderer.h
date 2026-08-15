@@ -19,6 +19,7 @@ struct LEIR_API UIVertex {
     Vector2 position;
     Vector2 texCoord;
     Vector4 color;
+    float textureIndex; // bindless index; constant per quad
 };
 
 struct LEIR_API ViewportDraw {
@@ -58,7 +59,6 @@ private:
     void RenderElement(UIElement* elem, const Vector4* clip, bool isDebug);
     void BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
     void BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color);
-    RHI::RHIDescriptorSet GetOrCreateDesc(Texture2D* texture);
     void Flush(RHI::RHICommandBuffer cmd);
     void ApplyScissor(RHI::RHICommandBuffer cmd, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid);
 
@@ -68,7 +68,6 @@ private:
     RHI::RHIPipeline m_Pipeline;
     RHI::RHIDescriptorSetLayout m_DescSetLayout;
     std::vector<RHISetLayoutEntry> m_SetLayouts; // derived from reflection (owned)
-    RHI::RHIDescriptorPool m_DescPool;
     RHI::RHIBuffer m_VertexBuffers[2];
     RHI::RHIDeviceMemory m_VertexMemories[2];
     int m_MaxVertices = 0;
@@ -76,7 +75,6 @@ private:
     std::vector<UIVertex> m_Vertices;
     std::vector<Texture2D*> m_QuadTextures;
     std::vector<Vector4> m_QuadClips;
-    std::unordered_map<Texture2D*, RHI::RHIDescriptorSet> m_DescCache;
     Texture2D* m_FallbackTex = nullptr;
 
     std::vector<ViewportDraw> m_ViewportDraws;

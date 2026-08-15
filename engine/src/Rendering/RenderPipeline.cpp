@@ -144,10 +144,13 @@ void RenderPipeline::CreateSpriteResources()
         m_Sprite.pipelineLayout = CreatePipelineLayoutFromReflection(
             m_Device, spriteReflection, m_Sprite.setLayouts);
     } else {
-        // Descriptor set layout (set=0, binding=0: combined image sampler)
-        m_Sprite.descSetLayout = m_Device->CreateDescriptorSetLayout({
-            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
-        });
+        // Descriptor set layout (set=0: bindless combined image sampler)
+        RHI::RHIDescriptorBinding sampler{};
+        sampler.binding = 0;
+        sampler.type = RHI::DescriptorType::CombinedImageSampler;
+        sampler.stage = RHI::ShaderStage::Fragment;
+        sampler.bindless = true;
+        m_Sprite.descSetLayout = m_Device->CreateDescriptorSetLayout({ sampler });
         m_Sprite.setLayouts = { { 0, m_Sprite.descSetLayout } };
 
         RHI::RHIPushConstantRange pushRange{};
@@ -158,12 +161,6 @@ void RenderPipeline::CreateSpriteResources()
         m_Sprite.pipelineLayout = m_Device->CreatePipelineLayout(
             { m_Sprite.descSetLayout }, { pushRange });
     }
-
-    // Descriptor pool for sampler (256 max sets for texture caching)
-    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
-        { 0, RHI::DescriptorType::CombinedImageSampler, 256, RHI::ShaderStage::Fragment }
-    };
-    m_Sprite.descPool = m_Device->CreateDescriptorPool(poolBindings, 256);
 
     CreateSpritePipeline();
 
@@ -231,14 +228,12 @@ void RenderPipeline::DestroySpriteResources()
         if (entry.layout.IsValid())
             m_Device->DestroyDescriptorSetLayout(entry.layout);
     }
-    if (m_Sprite.descPool.IsValid()) m_Device->DestroyDescriptorPool(m_Sprite.descPool);
     if (m_Sprite.vertexBuffer.IsValid()) m_Device->DestroyBuffer(m_Sprite.vertexBuffer);
     if (m_Sprite.vertexMemory.IsValid()) m_Device->DestroyMemory(m_Sprite.vertexMemory);
     if (m_Sprite.indexBuffer.IsValid()) m_Device->DestroyBuffer(m_Sprite.indexBuffer);
     if (m_Sprite.indexMemory.IsValid()) m_Device->DestroyMemory(m_Sprite.indexMemory);
     delete m_Sprite.fallbackTexture;
     m_Sprite.fallbackTexture = nullptr;
-    m_Sprite.descSetCache.clear();
 }
 
 void RenderPipeline::Render(RHI::RHICommandBuffer cmd, Scene* scene)
@@ -370,29 +365,16 @@ void RenderPipeline::RenderSprite(RHI::RHICommandBuffer cmd, SpriteRenderer* ren
 
     if (!tex) tex = m_Sprite.fallbackTexture;
 
-    // Cache one descriptor set per unique texture — write once, never update
-    auto it = m_Sprite.descSetCache.find(tex);
-    if (it == m_Sprite.descSetCache.end()) {
-        RHI::RHIDescriptorSet newSet = m_Device->AllocateDescriptorSet(m_Sprite.descPool, m_Sprite.descSetLayout);
-
-        RHI::RHIDescriptorWrite write{};
-        write.dstSet = newSet;
-        write.dstBinding = 0;
-        write.count = 1;
-        write.type = RHI::DescriptorType::CombinedImageSampler;
-        write.imageInfo = tex->GetDescriptorInfo();
-        m_Device->WriteDescriptorSets({ write });
-
-        m_Sprite.descSetCache[tex] = newSet;
-        it = m_Sprite.descSetCache.find(tex);
-    }
-
-    m_Device->CmdBindDescriptorSets(cmd, m_Sprite.pipelineLayout, 0, { it->second });
+    // Bindless: bind the global bindless set once (set 0); the texture is
+    // selected by textureIndex in the push constants below.
+    m_Device->CmdBindDescriptorSets(cmd, m_Sprite.pipelineLayout, 0,
+        { m_Device->GetBindlessDescriptorSet() });
 
     SpritePushConstants push;
     push.mvp = mvp;
     push.color = renderer->GetColor();
     push.uvRect = uvRect;
+    push.textureIndex = tex->GetBindlessIndex();
     m_Device->CmdPushConstants(cmd, m_Sprite.pipelineLayout,
         RHI::ShaderStageMask::VertexFragment, 0, sizeof(SpritePushConstants), &push);
 
@@ -446,6 +428,7 @@ void RenderPipeline::RenderMeshRenderer(RHI::RHICommandBuffer cmd, MeshRenderer*
 
     PushConstants pushWithModel = push;
     pushWithModel.model = model;
+    pushWithModel.textureIndex = material->GetTextureIndex();
     m_Device->CmdPushConstants(cmd, material->GetPipelineLayout(),
         RHI::ShaderStageMask::VertexFragment, 0, sizeof(PushConstants), &pushWithModel);
 

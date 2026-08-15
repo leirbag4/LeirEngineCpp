@@ -107,6 +107,12 @@ public:
     RHIPassTemplate CreatePassTemplate(const RHIPassTemplateDesc& desc) override;
     void DestroyPassTemplate(RHIPassTemplate passTemplate) override;
 
+    uint32_t RegisterBindlessTexture(const RHIDescriptorImageInfo& info) override;
+    void UpdateBindlessTexture(uint32_t index, const RHIDescriptorImageInfo& info) override;
+    void UnregisterBindlessTexture(uint32_t index) override;
+    RHIDescriptorSet GetBindlessDescriptorSet() const override;
+    uint32_t GetBindlessMaxTextures() const override;
+
     RHIFramebuffer CreateFramebuffer(RHIRenderPass renderPass,
         uint32_t width, uint32_t height,
         const std::vector<RHIImageView>& attachments) override;

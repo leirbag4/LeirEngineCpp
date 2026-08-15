@@ -14,9 +14,7 @@ Material::Material(RHI::RenderBackend* device, std::shared_ptr<Shader> shader)
     : m_Device(device)
     , m_Shader(std::move(shader))
 {
-    CreateDescriptorPool();
     CreateSetLayouts();
-    CreateDescriptorSet();
 }
 
 Material::~Material()
@@ -29,15 +27,12 @@ Material::~Material()
         if (entry.layout.IsValid())
             m_Device->DestroyDescriptorSetLayout(entry.layout);
     }
-    if (m_DescriptorPool.IsValid())
-        m_Device->DestroyDescriptorPool(m_DescriptorPool);
 }
 
 void Material::SetTexture(const std::string& name, std::shared_ptr<Texture2D> texture)
 {
     (void)name;
     m_Texture = std::move(texture);
-    UpdateDescriptorSet();
 }
 
 void Material::SetFloat(const std::string& name, float value)
@@ -56,8 +51,11 @@ void Material::Bind(RHI::RHICommandBuffer cmd, RHI::RHIPipelineLayout layout) co
 {
     (void)layout;
     m_Device->CmdBindPipeline(cmd, m_Pipeline);
-    if (m_DescriptorSet.IsValid())
-        m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 1, { m_DescriptorSet });
+    // Set 1 is the bindless texture table (the backend's global bindless set).
+    // All materials share it; the per-draw texture is selected via the
+    // textureIndex push constant (see RenderPipeline::RenderMeshRenderer).
+    m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 1,
+        { m_Device->GetBindlessDescriptorSet() });
 }
 
 void Material::RecreatePipeline(RHI::RHIRenderPass renderPass)
@@ -76,20 +74,12 @@ void Material::RecreatePipeline(RHI::RHIRenderPass renderPass)
     CreatePipeline(renderPass);
 }
 
-void Material::CreateDescriptorPool()
-{
-    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
-        { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
-    };
-    m_DescriptorPool = m_Device->CreateDescriptorPool(poolBindings, 1);
-}
-
 void Material::CreateSetLayouts()
 {
     if (m_Shader && m_Shader->HasReflection()) {
         // Derived from the shader's reflection sidecar (Plan B, Fase 2): the
         // pipeline layout then always matches the shader signature by
-        // construction. Ascending set order: [set 0 (UBO), set 1 (sampler)].
+        // construction. Ascending set order: [set 0 (UBO), set 1 (bindless)].
         m_SetLayouts = CreateSetLayoutsFromReflection(m_Device, m_Shader->GetReflection());
     } else {
         // Legacy fallback (no sidecar present: engine running without a
@@ -105,32 +95,13 @@ void Material::CreateSetLayouts()
         RHI::RHIDescriptorBinding sampler{};
         sampler.binding = 0;
         sampler.type = RHI::DescriptorType::CombinedImageSampler;
-        sampler.count = 1;
         sampler.stage = RHI::ShaderStage::Fragment;
+        sampler.bindless = true;
         m_SetLayouts.push_back({ 1, m_Device->CreateDescriptorSetLayout({ sampler }) }); // set 1
     }
 
     m_UBOSetLayout = m_SetLayouts.size() > 0 ? m_SetLayouts[0].layout : RHI::RHIDescriptorSetLayout{};
     m_DescriptorSetLayout = m_SetLayouts.size() > 1 ? m_SetLayouts[1].layout : RHI::RHIDescriptorSetLayout{};
-}
-
-void Material::CreateDescriptorSet()
-{
-    m_DescriptorSet = m_Device->AllocateDescriptorSet(m_DescriptorPool, m_DescriptorSetLayout);
-}
-
-void Material::UpdateDescriptorSet()
-{
-    if (!m_Texture)
-        return;
-
-    RHI::RHIDescriptorWrite write{};
-    write.dstSet = m_DescriptorSet;
-    write.dstBinding = 0;
-    write.count = 1;
-    write.type = RHI::DescriptorType::CombinedImageSampler;
-    write.imageInfo = m_Texture->GetDescriptorInfo();
-    m_Device->WriteDescriptorSets({ write });
 }
 
 void Material::CreatePipeline(RHI::RHIRenderPass renderPass)
@@ -198,6 +169,11 @@ void Material::BuildPipeline(RHI::RHIRenderPass renderPass)
 RHI::RHIDescriptorSetLayout Material::GetUBOSetLayout() const
 {
     return m_UBOSetLayout;
+}
+
+uint32_t Material::GetTextureIndex() const
+{
+    return m_Texture ? m_Texture->GetBindlessIndex() : 0;
 }
 
 } // namespace Leir

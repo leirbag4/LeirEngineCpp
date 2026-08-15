@@ -61,7 +61,7 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
         m_PipelineLayout = CreatePipelineLayoutFromReflection(m_Device, uiReflection, m_SetLayouts);
     } else {
         m_DescSetLayout = m_Device->CreateDescriptorSetLayout({
-            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
+            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment, true }
         });
         m_SetLayouts = { { 0, m_DescSetLayout } };
 
@@ -71,12 +71,6 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
         pushRange.size = sizeof(Vector2);
         m_PipelineLayout = m_Device->CreatePipelineLayout({ m_DescSetLayout }, { pushRange });
     }
-
-    // Pool: up to 64 textures
-    std::vector<RHI::RHIDescriptorBinding> poolBindings = {
-        { 0, RHI::DescriptorType::CombinedImageSampler, 64, RHI::ShaderStage::Fragment }
-    };
-    m_DescPool = m_Device->CreateDescriptorPool(poolBindings, 64);
 
     CreatePipeline();
 
@@ -118,7 +112,7 @@ void UIRenderer::CreatePipeline()
     bindingDesc.stride = sizeof(UIVertex);
     bindingDesc.inputRate = RHI::VertexInputRate::Vertex;
 
-    std::vector<RHI::RHIVertexAttribute> attrs(3);
+    std::vector<RHI::RHIVertexAttribute> attrs(4);
     attrs[0].location = 0;
     attrs[0].binding = 0;
     attrs[0].format = RHI::Format::R32G32_SFLOAT;
@@ -134,6 +128,12 @@ void UIRenderer::CreatePipeline()
     attrs[2].format = RHI::Format::R32G32B32A32_SFLOAT;
     attrs[2].offset = offsetof(UIVertex, color);
     attrs[2].semantic = "COLOR";
+    attrs[3].location = 3;
+    attrs[3].binding = 0;
+    attrs[3].format = RHI::Format::R32_SFLOAT;
+    attrs[3].offset = offsetof(UIVertex, textureIndex);
+    attrs[3].semantic = "TEXCOORD";
+    attrs[3].semanticIndex = 1; // matches UI.vert's `: TEXCOORD1`
 
     RHI::RHIPipelineDesc desc{};
     desc.layout = m_PipelineLayout;
@@ -170,7 +170,6 @@ UIRenderer::~UIRenderer()
         if (entry.layout.IsValid())
             m_Device->DestroyDescriptorSetLayout(entry.layout);
     }
-    if (m_DescPool.IsValid()) m_Device->DestroyDescriptorPool(m_DescPool);
     for (int f = 0; f < 2; ++f) {
         if (m_VertexBuffers[f].IsValid()) m_Device->DestroyBuffer(m_VertexBuffers[f]);
         if (m_VertexMemories[f].IsValid()) m_Device->DestroyMemory(m_VertexMemories[f]);
@@ -186,10 +185,12 @@ void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vecto
     float y1 = rect.y + rect.w;
     float u0 = uv.x, v0 = uv.y, u1 = uv.x + uv.z, v1 = uv.y + uv.w;
 
-    m_Vertices.push_back({{x0, y0}, {u0, v0}, color});
-    m_Vertices.push_back({{x1, y0}, {u1, v0}, color});
-    m_Vertices.push_back({{x0, y1}, {u0, v1}, color});
-    m_Vertices.push_back({{x1, y1}, {u1, v1}, color});
+    float idx = (float)(texture ? texture : m_FallbackTex)->GetBindlessIndex();
+
+    m_Vertices.push_back({{x0, y0}, {u0, v0}, color, idx});
+    m_Vertices.push_back({{x1, y0}, {u1, v0}, color, idx});
+    m_Vertices.push_back({{x0, y1}, {u0, v1}, color, idx});
+    m_Vertices.push_back({{x1, y1}, {u1, v1}, color, idx});
 
     m_QuadTextures.push_back(texture ? texture : m_FallbackTex);
     if (m_CurrentClip)
@@ -206,36 +207,18 @@ void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const 
     float y1 = rect.y + rect.w;
     float u0 = uv.x, v0 = uv.y, u1 = uv.x + uv.z, v1 = uv.y + uv.w;
 
-    m_DebugVertices.push_back({{x0, y0}, {u0, v0}, color});
-    m_DebugVertices.push_back({{x1, y0}, {u1, v0}, color});
-    m_DebugVertices.push_back({{x0, y1}, {u0, v1}, color});
-    m_DebugVertices.push_back({{x1, y1}, {u1, v1}, color});
+    float idx = (float)(texture ? texture : m_FallbackTex)->GetBindlessIndex();
+
+    m_DebugVertices.push_back({{x0, y0}, {u0, v0}, color, idx});
+    m_DebugVertices.push_back({{x1, y0}, {u1, v0}, color, idx});
+    m_DebugVertices.push_back({{x0, y1}, {u0, v1}, color, idx});
+    m_DebugVertices.push_back({{x1, y1}, {u1, v1}, color, idx});
 
     m_DebugQuadTextures.push_back(texture ? texture : m_FallbackTex);
     if (m_CurrentClip)
         m_DebugQuadClips.push_back(*m_CurrentClip);
     else
         m_DebugQuadClips.push_back({0.0f, 0.0f, m_ScreenSize.x, m_ScreenSize.y});
-}
-
-RHI::RHIDescriptorSet UIRenderer::GetOrCreateDesc(Texture2D* texture)
-{
-    Texture2D* tex = texture ? texture : m_FallbackTex;
-    auto it = m_DescCache.find(tex);
-    if (it != m_DescCache.end()) return it->second;
-
-    RHI::RHIDescriptorSet newSet = m_Device->AllocateDescriptorSet(m_DescPool, m_DescSetLayout);
-
-    RHI::RHIDescriptorWrite write{};
-    write.dstSet = newSet;
-    write.dstBinding = 0;
-    write.count = 1;
-    write.type = RHI::DescriptorType::CombinedImageSampler;
-    write.imageInfo = tex->GetDescriptorInfo();
-    m_Device->WriteDescriptorSets({ write });
-
-    m_DescCache[tex] = newSet;
-    return newSet;
 }
 
 void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
@@ -278,21 +261,22 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
         totalQuads = regCount + fixed + dbgCount;
     }
 
-    // Collect quads in draw order: regular → viewport → debug.
+    // Collect quads in draw order: regular → viewport → debug. Each quad
+    // carries the bindless texture index (read back per-vertex by UI.frag).
     struct FlushQuad {
         const UIVertex* src; // 4 source vertices
         Vector4 clip;
-        RHI::RHIDescriptorSet desc;
+        uint32_t texIndex;
     };
     std::vector<FlushQuad> quads;
     quads.reserve(totalQuads);
     for (size_t qi = 0; qi < regCount; ++qi)
-        quads.push_back({ &m_Vertices[qi * 4], m_QuadClips[qi], GetOrCreateDesc(m_QuadTextures[qi]) });
+        quads.push_back({ &m_Vertices[qi * 4], m_QuadClips[qi], m_QuadTextures[qi]->GetBindlessIndex() });
     for (size_t i = 0; i < vpCount; ++i)
         quads.push_back({ m_ViewportDraws[i].verts, m_ViewportDraws[i].clip,
-                          m_ViewportDraws[i].texture->GetDescriptorSet() });
+                          m_ViewportDraws[i].texture->GetBindlessIndex() });
     for (size_t qi = 0; qi < dbgCount; ++qi)
-        quads.push_back({ &m_DebugVertices[qi * 4], m_DebugQuadClips[qi], GetOrCreateDesc(m_DebugQuadTextures[qi]) });
+        quads.push_back({ &m_DebugVertices[qi * 4], m_DebugQuadClips[qi], m_DebugQuadTextures[qi]->GetBindlessIndex() });
 
     int frame = (int)m_Device->GetCurrentFrameIndex();
 
@@ -323,13 +307,17 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
     m_Device->CmdBindVertexBuffer(cmd, m_VertexBuffers[frame]);
     m_Device->CmdPushConstants(cmd, m_PipelineLayout, RHI::ShaderStageMask::Vertex, 0, sizeof(Vector2), &screenSize);
 
-    // Batched draw: consecutive quads that share the same texture (descriptor
-    // set) AND scissor are merged into a single draw call.
-    RHI::RHIDescriptorSet lastDesc{};
+    // Bindless: all quads index the same global bindless set (set 0); the
+    // texture is selected per-vertex via UI.frag's NonUniformResourceIndex.
+    m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 0,
+        { m_Device->GetBindlessDescriptorSet() });
+
+    // Batched draw: consecutive quads that share the same texture (bindless
+    // index) AND scissor are merged into a single draw call.
     RHI::RHIRect2D lastScissor{};
     bool lastScissorValid = false;
 
-    RHI::RHIDescriptorSet batchDesc{};
+    uint32_t batchTexIndex = 0;
     RHI::RHIRect2D batchScissor{};
     uint32_t batchStart = 0;   // first vertex index of the current batch
     uint32_t batchCount = 0;   // quads in the current batch
@@ -348,26 +336,21 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
         batchCount = 0;
     };
 
-    auto pushQuad = [&](RHI::RHIDescriptorSet desc, const Vector4& logicalClip, uint32_t quadIdx) {
-        if (!desc.IsValid()) { flushBatch(); return; }
+    auto pushQuad = [&](uint32_t texIndex, const Vector4& logicalClip, uint32_t quadIdx) {
         RHI::RHIRect2D scissor{};
         {
             const float pw = m_ScreenSize.x * m_ContentScale;
             const float ph = m_ScreenSize.y * m_ContentScale;
             ScissorFromLogicalClip(logicalClip, m_ContentScale, pw, ph, scissor);
         }
-        if (batchCount > 0 && desc.handle == batchDesc.handle && sameScissor(scissor, batchScissor)) {
+        if (batchCount > 0 && texIndex == batchTexIndex && sameScissor(scissor, batchScissor)) {
             ++batchCount;
             ++drawnQuads;
             return;
         }
         flushBatch();
         ApplyScissor(cmd, logicalClip, lastScissor, lastScissorValid);
-        if (desc.handle != lastDesc.handle) {
-            m_Device->CmdBindDescriptorSets(cmd, m_PipelineLayout, 0, { desc });
-            lastDesc = desc;
-        }
-        batchDesc = desc;
+        batchTexIndex = texIndex;
         batchScissor = scissor;
         batchStart = quadIdx * (uint32_t)slotPerQuad;
         batchCount = 1;
@@ -375,7 +358,7 @@ void UIRenderer::Flush(RHI::RHICommandBuffer cmd)
     };
 
     for (size_t qi = 0; qi < totalQuads; ++qi)
-        pushQuad(quads[qi].desc, quads[qi].clip, (uint32_t)qi);
+        pushQuad(quads[qi].texIndex, quads[qi].clip, (uint32_t)qi);
 
     flushBatch();
 
@@ -494,10 +477,11 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         if (vp->GetRenderTexture()) {
             ViewportDraw vd;
             float x0 = cr.x, y0 = cr.y, x1 = cr.x + cr.z, y1 = cr.y + cr.w;
-            vd.verts[0] = {{x0, y0}, {0, 0}, {1,1,1,1}};
-            vd.verts[1] = {{x1, y0}, {1, 0}, {1,1,1,1}};
-            vd.verts[2] = {{x0, y1}, {0, 1}, {1,1,1,1}};
-            vd.verts[3] = {{x1, y1}, {1, 1}, {1,1,1,1}};
+            float idx = (float)vp->GetRenderTexture()->GetBindlessIndex();
+            vd.verts[0] = {{x0, y0}, {0, 0}, {1,1,1,1}, idx};
+            vd.verts[1] = {{x1, y0}, {1, 0}, {1,1,1,1}, idx};
+            vd.verts[2] = {{x0, y1}, {0, 1}, {1,1,1,1}, idx};
+            vd.verts[3] = {{x1, y1}, {1, 1}, {1,1,1,1}, idx};
             vd.texture = vp->GetRenderTexture();
             vd.clip = m_CurrentClip ? *m_CurrentClip : Vector4{0.0f, 0.0f, m_ScreenSize.x, m_ScreenSize.y};
             m_ViewportDraws.push_back(vd);

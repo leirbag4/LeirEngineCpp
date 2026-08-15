@@ -43,9 +43,12 @@ LEIR_API RHI::RHIPipelineLayout CreatePipelineLayoutFromReflection(
     const std::vector<RHISetLayoutEntry>& setLayouts);
 
 // Debug-only: does `bindings` match the reflection's bindings for `set`?
-// Logs a [Reflection] warning listing the mismatch and returns false.
+// Bindless arrays (count == UINT32_MAX in the reflection) are compared against
+// `bindlessCount` (the backend's bindless bound). Logs a [Reflection] warning
+// listing the mismatch and returns false.
 LEIR_API bool ValidateSetLayoutAgainstReflection(
     const RHI::ShaderReflection& reflection, uint32_t set,
-    const std::vector<RHI::RHIDescriptorBinding>& bindings);
+    const std::vector<RHI::RHIDescriptorBinding>& bindings,
+    uint32_t bindlessCount);
 
 } // namespace Leir

@@ -56,6 +56,11 @@ public:
     VkQueue GetPresentQueue() const { return m_PresentQueue; }
     VkCommandPool GetCommandPool() const { return m_CommandPool; }
 
+    // True when descriptor-indexing update-after-bind was enabled at device
+    // creation (lets the bindless table exceed the non-update-after-bind
+    // per-stage sampler/resource limits, e.g. 64/200 on this iGPU).
+    bool IsDescriptorIndexingUpdateAfterBind() const { return m_DescriptorIndexingUpdateAfterBind; }
+
     // Resource creation helpers
     VkShaderModule CreateShaderModule(const std::vector<char>& code) const;
     VkPipeline CreateGraphicsPipeline(
@@ -75,6 +80,12 @@ public:
         const std::vector<VkPushConstantRange>& pushConstants = {}
     ) const;
     VkDescriptorSetLayout CreateDescriptorSetLayout(
+        const std::vector<VkDescriptorSetLayoutBinding>& bindings
+    ) const;
+    // `bindless`: creates a set layout that uses descriptor indexing
+    // (VK_DESCRIPTOR_SET_LAYOUT_CREATE_PARTIALLY_BOUND_BIT) with the given
+    // per-binding descriptor counts — used for the global bindless table.
+    VkDescriptorSetLayout CreateBindlessDescriptorSetLayout(
         const std::vector<VkDescriptorSetLayoutBinding>& bindings
     ) const;
     VkDescriptorPool CreateDescriptorPool(
@@ -146,6 +157,7 @@ private:
     VkDevice m_Device = VK_NULL_HANDLE;
     VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
     VkQueue m_PresentQueue = VK_NULL_HANDLE;
+    bool m_DescriptorIndexingUpdateAfterBind = false;
     VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
 
     // Swapchain

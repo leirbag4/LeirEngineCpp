@@ -31,9 +31,10 @@ public:
 
     RHI::RHIPipeline GetPipeline() const { return m_Pipeline; }
     RHI::RHIPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
-    RHI::RHIDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
     std::shared_ptr<Shader> GetShader() const { return m_Shader; }
     RHI::RHIDescriptorSetLayout GetUBOSetLayout() const;
+    // Bindless index of the bound texture (0 = untextured/fallback).
+    uint32_t GetTextureIndex() const;
 
     // Recreate pipeline when device is lost
     void RecreatePipeline(RHI::RHIRenderPass renderPass);
@@ -44,10 +45,7 @@ public:
     void ReloadShaders(RHI::RHIRenderPass renderPass);
 
 private:
-    void CreateDescriptorPool();
     void CreateSetLayouts();
-    void CreateDescriptorSet();
-    void UpdateDescriptorSet();
     void CreatePipeline(RHI::RHIRenderPass renderPass);
     void BuildPipeline(RHI::RHIRenderPass renderPass);
 
@@ -55,11 +53,9 @@ private:
     std::shared_ptr<Shader> m_Shader;
     Vector4 m_Color{1.0f, 1.0f, 1.0f, 1.0f};
 
-    RHI::RHIDescriptorPool m_DescriptorPool;
     std::vector<RHISetLayoutEntry> m_SetLayouts; // ascending set order
-    RHI::RHIDescriptorSetLayout m_DescriptorSetLayout;      // set 1 (sampler)
+    RHI::RHIDescriptorSetLayout m_DescriptorSetLayout;      // set 1 (bindless)
     RHI::RHIDescriptorSetLayout m_UBOSetLayout;             // set 0 (UBO)
-    RHI::RHIDescriptorSet m_DescriptorSet;
 
     RHI::RHIPipelineLayout m_PipelineLayout;
     RHI::RHIPipeline m_Pipeline;

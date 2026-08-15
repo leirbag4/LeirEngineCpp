@@ -16,6 +16,8 @@ cbuffer UniformBufferObject {
     float4x4 viewProjection;
 } ubo;
 
+// textureIndex is consumed by the fragment stage; it must be declared here too
+// so both stages produce the same push-constant layout (std430 size 144).
 struct PushConstants {
     float3 lightDir;
     float pad0;
@@ -25,6 +27,7 @@ struct PushConstants {
     float pad2;
     float4 color;
     float4x4 model;
+    uint textureIndex;
 };
 
 [[vk::push_constant]]

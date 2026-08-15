@@ -291,8 +291,38 @@ void VulkanDevice::CreateLogicalDevice()
         queueInfos.push_back(info);
     }
 
-    VkPhysicalDeviceFeatures features{};
-    features.samplerAnisotropy = VK_TRUE;
+    VkPhysicalDeviceFeatures2 features2{};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.features.samplerAnisotropy = VK_TRUE;
+
+    // Descriptor indexing (bindless textures, TODO_RHI_SLANG.md §3.5): core in
+    // Vulkan 1.2, exposed via VkPhysicalDeviceFeatures2 chained below. We first
+    // query what the device supports (some are optional) and enable only the
+    // features the engine's bindless table needs.
+    VkPhysicalDeviceDescriptorIndexingFeatures supported{};
+    supported.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    {
+        VkPhysicalDeviceFeatures2 probe{};
+        probe.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        probe.pNext = &supported;
+        vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &probe);
+    }
+
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexing{};
+    descriptorIndexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorIndexing.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorIndexing.runtimeDescriptorArray = VK_TRUE;
+    descriptorIndexing.descriptorBindingPartiallyBound = VK_TRUE;
+    // Update-after-bind lets the bindless table exceed the non-update-after-bind
+    // per-stage sampler/resource limits (VUID-VkPipelineLayoutCreateInfo-
+    // descriptorType-03016 / VUID-VkGraphicsPipelineCreateInfo-layout-01688).
+    // The generic descriptorBindingUpdateAfterBind feature was removed from the
+    // Vulkan 1.4 headers — the per-type descriptorBindingSampledImageUpdateAfterBind
+    // is the one relevant to the combined-image-sampler bindless table.
+    descriptorIndexing.descriptorBindingSampledImageUpdateAfterBind =
+        supported.descriptorBindingSampledImageUpdateAfterBind;
+    m_DescriptorIndexingUpdateAfterBind = supported.descriptorBindingSampledImageUpdateAfterBind;
+    features2.pNext = &descriptorIndexing;
 
     std::vector<const char*> deviceExtensions(m_DeviceExtensions.begin(), m_DeviceExtensions.end());
 #ifdef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
@@ -303,7 +333,7 @@ void VulkanDevice::CreateLogicalDevice()
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = (uint32_t)queueInfos.size();
     info.pQueueCreateInfos = queueInfos.data();
-    info.pEnabledFeatures = &features;
+    info.pNext = &features2;
     info.enabledExtensionCount = (uint32_t)deviceExtensions.size();
     info.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -1068,6 +1098,40 @@ VkDescriptorSetLayout VulkanDevice::CreateDescriptorSetLayout(
     VkDescriptorSetLayout layout;
     if (vkCreateDescriptorSetLayout(m_Device, &info, nullptr, &layout) != VK_SUCCESS)
         throw std::runtime_error("Failed to create descriptor set layout");
+    return layout;
+}
+
+VkDescriptorSetLayout VulkanDevice::CreateBindlessDescriptorSetLayout(
+    const std::vector<VkDescriptorSetLayoutBinding>& bindings) const
+{
+    VkDescriptorSetLayoutCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+    // Partially bound: not every array element must be written before use
+    // (the global bindless table starts empty). The set-level
+    // VK_DESCRIPTOR_SET_LAYOUT_CREATE_PARTIALLY_BOUND_BIT was removed in the
+    // Vulkan 1.4 headers — the capability is per-binding via
+    // VkDescriptorSetLayoutBindingFlagsCreateInfo now.
+    std::vector<VkDescriptorBindingFlags> bindingFlags(bindings.size(),
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+    flagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    flagsInfo.bindingCount = (uint32_t)bindings.size();
+    flagsInfo.pBindingFlags = bindingFlags.data();
+    info.pNext = &flagsInfo;
+
+    // Update-after-bind: exempts the binding from the non-update-after-bind
+    // per-stage limits (maxPerStageDescriptorSamplers / maxPerStageResources),
+    // which are too small for a real bindless table (64/200 on this iGPU).
+    if (m_DescriptorIndexingUpdateAfterBind)
+        info.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+
+    info.bindingCount = (uint32_t)bindings.size();
+    info.pBindings = bindings.data();
+
+    VkDescriptorSetLayout layout;
+    if (vkCreateDescriptorSetLayout(m_Device, &info, nullptr, &layout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create bindless descriptor set layout");
     return layout;
 }
 
