@@ -395,8 +395,11 @@ struct WebGPUBackend::Impl {
     // texture/sampler pair per bind group).
     std::unordered_map<uint32_t, WGPUBindGroup> textureBindGroups;
     int bindlessSetSlot = -1; // bindless set index of the current graph, -1 if none
-    uint32_t pushSlot = 0;    // per-draw push UBO slot of the current graph
 #endif
+    // Per-draw push UBO slot of the current graph. Web increments it per push
+    // (see CmdExecuteGraph) so concurrent draws each read their own block;
+    // desktop keeps slot 0 (single buffer, matching the pre-pool behavior).
+    uint32_t pushSlot = 0;
 
     // Dummy white texture filling unbound bindless slots (1x1 R8G8B8A8Unorm).
     WGPUTexture dummyTexture = nullptr;
