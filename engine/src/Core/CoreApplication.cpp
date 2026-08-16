@@ -3,7 +3,9 @@
 #include "LeirEngine/Input/EventQueue.h"
 #include "LeirEngine/Scene/SceneManager.h"
 
+#if !defined(__EMSCRIPTEN__)
 #define GLFW_INCLUDE_VULKAN
+#endif
 #include <GLFW/glfw3.h>
 
 #include "LeirEngine/Core/Log.h"
@@ -11,6 +13,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
 
 #ifdef _WIN32
 namespace {
@@ -150,6 +156,11 @@ void CoreApplication::Run()
 
     OnInit();
 
+#if defined(__EMSCRIPTEN__)
+    m_LastFrameTime = glfwGetTime();
+    emscripten_set_main_loop_arg(&CoreApplication::FrameThunk, this, 0, true);
+    return;
+#else
     double lastTime = glfwGetTime();
     while (m_Running && !glfwWindowShouldClose(m_Window)) {
         glfwPollEvents();
@@ -177,11 +188,36 @@ void CoreApplication::Run()
     auto tShutdown1 = std::chrono::steady_clock::now();
     XConsole::Debug("[Timing] OnShutdown() completed in {:.1f} ms",
         std::chrono::duration<double, std::milli>(tShutdown1 - tShutdown0).count());
+#endif
 }
 
 void CoreApplication::Quit()
 {
     m_Running = false;
+}
+
+void CoreApplication::Frame(double currentTime)
+{
+    glfwPollEvents();
+
+    EventQueue::Get().Process();
+
+    float deltaTime = static_cast<float>(currentTime - m_LastFrameTime);
+    m_LastFrameTime = currentTime;
+
+    if (auto* scene = SceneManager::GetInstance().GetActiveScene())
+        scene->OnUpdate(deltaTime);
+
+    OnUpdate(deltaTime);
+
+    InputManager::GetInstance().Update();
+
+    OnRender();
+}
+
+void CoreApplication::FrameThunk(void* userData)
+{
+    static_cast<CoreApplication*>(userData)->Frame(glfwGetTime());
 }
 
 void CoreApplication::FramebufferSizeCallback(GLFWwindow* window, int width, int height)

@@ -163,7 +163,11 @@ public:
     void CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
         Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) override;
 
+    #if defined(__EMSCRIPTEN__)
+    const char* GetShaderFileExtension() const override { return ".web.wgsl"; }
+#else
     const char* GetShaderFileExtension() const override { return ".wgsl"; }
+#endif
 
 private:
     struct Impl;

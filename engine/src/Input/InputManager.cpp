@@ -5,7 +5,9 @@
 #include "LeirEngine/Input/Touch.h"
 #include "LeirEngine/Input/Pointer.h"
 
+#if !defined(__EMSCRIPTEN__)
 #define GLFW_INCLUDE_VULKAN
+#endif
 #include <GLFW/glfw3.h>
 #include <unordered_map>
 

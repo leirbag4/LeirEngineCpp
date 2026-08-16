@@ -48,6 +48,7 @@ protected:
     int m_FbWidth = 1280;  // physical framebuffer size (pixels)
     int m_FbHeight = 720;
     bool m_Running = false;
+    double m_LastFrameTime = 0.0;
     float m_ContentScale = 1.0f;
     bool m_HidpiEnabled = true;
 
@@ -59,6 +60,8 @@ protected:
     bool m_HasNormalRect = false;
 
 private:
+    void Frame(double currentTime);
+    static void FrameThunk(void* userData);
     static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void WindowPosCallback(GLFWwindow* window, int x, int y);

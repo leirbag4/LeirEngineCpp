@@ -1,0 +1,22 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "emscripten",
+            "displayName": "Emscripten (WebEngineDemo M2)",
+            "description": "Fase 6 M2: full engine (LeirEngineCore static) with Emscripten + emdawnwebgpu",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/emscripten-webengine",
+            "toolchainFile": "C:/programs_dev/emsdk6/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "emscripten",
+            "configurePreset": "emscripten"
+        }
+    ]
+}

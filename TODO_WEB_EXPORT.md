@@ -1,7 +1,8 @@
 # TODO_WEB_EXPORT.md — Fase 6: Export Web (Emscripten + WebGPU en navegador)
 
 > Estado: **EN CURSO** — M0 ✅ (2026-08-15), **M1 ✅ verificado en navegador
-> (Firefox 153 + Chrome + Opera, 2026-08-15)**, pendiente M2+.
+> (Firefox 153 + Chrome + Opera, 2026-08-15)**, **M2 ✅ verificado en navegador
+> (Firefox, 2026-08-16)**, pendiente M3+.
 
 ## Objetivo
 
@@ -89,9 +90,10 @@ Decisiones de alcance (usuario, 2026-08-15):
 - `Settings.cpp` (config dir + `create_directories`) → no-op por `#ifdef __EMSCRIPTEN__`.
 - `LEIR_SHADER_DIR` es ruta host absoluta → en web definir `/shaders` (virtual) +
   `--preload-file <host shaders>@/shaders`. `ShaderLayout` necesita `.reflect.json` sidecars
-  → **commitear los 6 sidecars** y copiarlos al dir de shaders del build web.
+  → **los 6 sidecars están commiteados** en `engine/shaders/` (cargados en web vía el fix de
+  `SidecarPathFor` para `.web.wgsl`, M2/D).
 - Font: `Font.cpp` lee TTF con `fopen` → en web el FS virtual (preload-file) funciona tal cual;
-  el demo apunta a `/fonts/<ttf>`.
+  el demo usa `/assets/Roboto-Regular.ttf` (commiteado en `examples/WebEngineDemo/assets/`).
 - `UIDebugOverlay.cpp:53` lee `/proc/self/status` (falla limpio en web).
 
 ## Plan de fases
@@ -167,6 +169,12 @@ Decisiones de alcance (usuario, 2026-08-15):
   cámara auto-orbit. Log de consola limpio (solo `favicon.ico` 404, inocuo). Artefactos
   finales: `.wasm` 10.39 MB, `.js` 426 KB, `.data` 15,209 B.
 - [ ] **M2 — Motor completo a wasm** (static lib, GLFW port, CoreApplication loop, Settings no-op, input)
+  - [x] **Fase A** — multi-textura web: per-texture bind groups + push-slot pool (ver "Estado M2")
+  - [x] **Fase B** — `LeirEngineCore` static lib web-safe (`engine/CMakeLists.web.txt`, 45 sources) + `PhysicsWorld.web.cpp`
+  - [x] **Fase C** — `CoreApplication::Run()` → `emscripten_set_main_loop_arg` (Frame/FrameThunk)
+  - [x] **Fase D** — shaders `*.web.wgsl` (6) + sidecars web + `WebEngineDemo` (Scene completa + UI + Font)
+  - [x] **Verificar render en navegador** — ✅ Firefox (2026-08-16), 2 cubos checker + cámara órbita + UI + fuente Roboto
+  - [x] **Regresión M1** — rebuild WebDemo tras el rename `Basic.frag.web.wgsl` ✅
 - [ ] **M3 — Física** (Jolt wasm + JobSystemSingleThreaded)
 - [ ] **M4 — Fase 4 Audio** (desktop primero, luego wasm WebAudio)
 - [ ] **M5 — CI** (job ubuntu setup-emsdk 6.0.6, compile-only)
@@ -229,6 +237,86 @@ para que funcione en los tres navegadores.
   iluminado (checker 2×2 sRGB) con cámara orbitando. Consola sin errores.
 - Parity visual contra el desktop WebGPU (wgpu-native) no aplica pixel-a-pixel en navegador;
   validado que el render (cubo + clear + textura) se ve correcto.
+
+## Estado M2 (build + navegador, 2026-08-16)
+
+Motor completo (Scene/Object3D/Camera/Light/MeshRenderer/Material/Texture2D/RenderTexture/
+RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU. Build:
+`examples/WebEngineDemo` standalone (preset `emscripten`, binaryDir
+`build/emscripten-webengine`) → `WebEngineDemo.html/.js/.wasm/.data`.
+
+- **Fase A — multi-textura web** (WebGPUBackend.cpp): la web no puede usar `binding_array`
+  (naga), así que el backend degrada la tabla bindless compartida a **recurso único** y los
+  draws ligan su textura con **bind groups per-texture**:
+  - `Impl::textureBindGroups` (cache) + `GetTextureBindGroup(index)` (mismo `bindlessLayout`:
+    binding 0 = texture, binding 1 = sampler; fallback dummy).
+  - `CmdBindDescriptorSets` web marca `im.bindlessSetSlot = slot` (no bindless no toca);
+  - el executor (`CmdExecuteGraph`, `__EMSCRIPTEN__`) resetea `bindlessSetSlot=-1`/`pushSlot=0`
+    al inicio y, **por draw**, re-liga el slot bindless con
+    `GetTextureBindGroup(rec.draw.sampledTextures[0])` (o dummy).
+  - **push slot pool**: `CmdPushConstants` crea un UBO de push por draw (`lr->pushBuffers`/
+    `pushBindGroups` + `im.pushSlot++`) — cada draw lee su propio bloque (sin last-write-wins).
+    Tamaño = `max(pushSize,16)` alineado a 16. `Material::Bind` liga set1 (bindless);
+    `RenderPipeline::RenderMeshRenderer` liga set0 (UBO) via shadow `MapMemory`/`UnmapMemory`
+    (QueueWriteChunked). Validado en navegador: **3 cubos** (gris/rojo/azul) en el M1, cada
+    uno con su propia textura, mismo pipeline.
+- **Fase B — `LeirEngineCore` static lib** (`engine/CMakeLists.web.txt`, nuevo): 45 sources
+  web-safe (Core, Scene, Objects, Input, RHI WebGPU, Rendering, Components, UI + Dock, Physics
+  stub). Include PUBLIC `engine/include` + glm; PRIVATE `engine/src`, stb, emdawnwebgpu.
+  Define PUBLIC `LEIR_SHADER_DIR="/shaders"`. Link PUBLIC nlohmann_json. Compile
+  `-sASYNCIFY=1 --use-port=contrib.glfw3`. `CXX_VISIBILITY_PRESET hidden`. Robust a
+  `include()` vía `LEIR_ROOT = CMAKE_CURRENT_LIST_DIR/..`.
+  - **`engine/src/Physics/PhysicsWorld.web.cpp`** (nuevo): stub sin Jolt — misma interfaz,
+    `StepPhysics`/`Init`/`Shutdown` no-op; `GetBodyInterface`/`GetPhysicsSystem` devuelven
+    refs a punteros null (nunca llamadas en web; refs a tipos incompletos JPH = legal).
+    El header `PhysicsWorld.h` forward-declara JPH (no incluye Jolt) → el build web es
+    **100% libre de Jolt**.
+- **Fase C — main loop web** (`CoreApplication.h/.cpp`): `Run()` bajo `__EMSCRIPTEN__` →
+  `m_LastFrameTime = glfwGetTime()` + `emscripten_set_main_loop_arg(&FrameThunk, this, 0, true)`
+  (infinite loop; `Run()` nunca retorna en web). `Frame(double)` espeja el bucle desktop:
+  `glfwPollEvents` → `EventQueue::Process` → `scene->OnUpdate` → `OnUpdate(deltaTime)` →
+  `InputManager::Update()` → `OnRender`. Nuevos `Frame(double)`/`FrameThunk(void*)`/
+  `m_LastFrameTime`. `Settings` verificado web-safe sin cambios (branch `#else`: HOME=`/` del
+  FS virtual, try/catch protege el fopen). Guards `#if !defined(__EMSCRIPTEN__)` en los
+  `#define GLFW_INCLUDE_VULKAN` de `CoreApplication.cpp`/`InputManager.cpp`.
+- **Fase D — shaders web + sidecars + demo**:
+  - `engine/shaders/*.web.wgsl` (6): `Basic.vert/frag`, `Sprite.vert/frag`, `UI.vert/frag`
+    (textura/sampler **únicos**; `Basic.frag.web.wgsl` **renombrado** desde el viejo
+    `Basic.web.frag.wgsl`). `Sprite.frag.web.wgsl` y `UI.frag.web.wgsl` son nuevos (single
+    texture; `UI.frag` sin `fragTexIndex`).
+  - `WebGPUBackend.h::GetShaderFileExtension()` → `".web.wgsl"` bajo `__EMSCRIPTEN__` → el
+    motor carga las variantes web automáticamente.
+  - `ShaderLayout.cpp::SidecarPathFor` ahora recorta `.web.wgsl`/`.dxil`/`.spv` → los **6
+    sidecars `.reflect.json` commiteados** cargan en web y dan los push sizes exactos
+    (Basic 144, Sprite 112, UI 8). **Crítico**: `sizeof(PushConstants)` C++ = 132 < 144 del
+    shader std430 → sin sidecar el push UBO web quedaría corto (validation error).
+  - **`examples/WebEngineDemo/main.cpp`** (nuevo): subclase de `CoreApplication`, backend
+    `"webgpu"`, Scene con Camera orbital (matemática EditorCamera: `Euler(pitch,yaw,0)`,
+    pos = `dist·(cos·sin, -sin, cos·cos)` → mira al origen), Light directional, 2 cubos con
+    **checkers 256×256 distintos** (gris y rojo) rotando, `RenderTexture` fullscreen−30
+    (físico = lógico×dpr) + `RenderPipeline::Render`, `UIViewportPanel` (Stretch, offset
+    `{0,0,0,-30}`) + barra inferior con `UILabel` (el texto va FUERA del viewport: la capa UI
+    normal dibuja debajo de los viewports), `Font` desde `/assets/Roboto-Regular.ttf`
+    (preload). `OnRender` = `BeginFrame(true)` → graph del RT → `CmdExecuteGraph` →
+    `BeginSwapchainOverlay` → graph UI → `EndFrame`.
+  - CMake del demo: `add_executable(WebEngineDemo)` linka `LeirEngineCore` + `--use-port=
+    ${LEIR_ROOT}/dependencies/emdawnwebgpu/emdawnwebgpu.port.py` **en el LINK** (provee la
+    glue JS de wgpu → sin él, undefined symbols `wgpuCreateInstance`/`wgpuInstanceRequestAdapter`
+    …), `contrib.glfw3`, `-sALLOW_MEMORY_GROWTH=1`, preload `engine/shaders@/shaders` y
+    `assets@/assets`. El include de emdawnwebgpu es PRIVATE en la lib; el exe no lo necesita
+    (no incluye `webgpu.h` directamente).
+  - Fuente: **Roboto-Regular.ttf** (Apache-2.0, release `googlefonts/roboto` v2.138) commiteada
+    en `examples/WebEngineDemo/assets/` (el repo no tiene TTF compilados; `roboto-3-classic`
+    y `google/fonts` ya no los alojan).
+- **Verificado en navegador (2026-08-16)**: Firefox — 2 cubos checker nítidos (256×256)
+  girando + cámara en órbita, barra inferior con título en **texto Roboto**, y **los logs del
+  motor (XConsole) visibles en la consola del navegador**. Artefactos: `.wasm` 22.5 MB,
+  `.js` 412 KB, `.data` 369,582 B (shaders + sidecars + fuente). Servidor de prueba:
+  `python -m http.server 8001` desde `examples/WebEngineDemo/build/emscripten-webengine`.
+- **Regresión M1 (2026-08-16)**: rebuild del WebDemo tras el rename `Basic.frag.web.wgsl`
+  (main.cpp ya apuntaba a `/shaders/Basic.frag.web.wgsl`) → link OK, render OK (3 cubos
+  gris/rojo/azul con sus checkers 2×2 propios + órbita). El aspecto de "4 cuadrados por cara
+  difuminados" es el **diseño M1** (texturas 2×2 con sampler Linear), no una regresión.
 
 ## Riesgos abiertos
 - ASYNCIFY overhead (global). Aceptable para demo; alternativas a revisar si duele.

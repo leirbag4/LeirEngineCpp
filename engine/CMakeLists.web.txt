@@ -1,0 +1,92 @@
+# LeirEngineCore — web-safe static subset of the engine (Fase 6 / M2).
+# Renders through the RHI (WebGPUBackend + BackendFactory); excludes the
+# Vulkan/D3D12 backends, Jolt physics (PhysicsWorld.web.cpp no-ops the step)
+# and SoLoud audio. The desktop engine keeps its own target in CMakeLists.txt.
+# This file is include()d by the standalone Emscripten projects
+# (examples/WebEngineDemo), which must already have fetched glm, nlohmann_json
+# and stb with the same tags as dependencies/CMakeLists.txt.
+
+set(LEIR_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
+
+add_library(LeirEngineCore STATIC
+    ${LEIR_ROOT}/engine/src/Core/CoreApplication.cpp
+    ${LEIR_ROOT}/engine/src/Core/Settings.cpp
+    ${LEIR_ROOT}/engine/src/Core/Log.cpp
+    ${LEIR_ROOT}/engine/src/Core/CoreObject.cpp
+    ${LEIR_ROOT}/engine/src/Core/Component.cpp
+    ${LEIR_ROOT}/engine/src/Core/Transform.cpp
+    ${LEIR_ROOT}/engine/src/Core/UUID.cpp
+    ${LEIR_ROOT}/engine/src/Scene/Scene.cpp
+    ${LEIR_ROOT}/engine/src/Scene/SceneManager.cpp
+    ${LEIR_ROOT}/engine/src/Objects/Object3D.cpp
+    ${LEIR_ROOT}/engine/src/Objects/Object2D.cpp
+    ${LEIR_ROOT}/engine/src/Input/InputManager.cpp
+    ${LEIR_ROOT}/engine/src/Input/EventQueue.cpp
+    ${LEIR_ROOT}/engine/src/Input/Keyboard.cpp
+    ${LEIR_ROOT}/engine/src/Input/Mouse.cpp
+    ${LEIR_ROOT}/engine/src/Input/Touch.cpp
+    ${LEIR_ROOT}/engine/src/Input/Pointer.cpp
+    ${LEIR_ROOT}/engine/src/RHI/BackendFactory.cpp
+    ${LEIR_ROOT}/engine/src/RHI/WebGPUBackend.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/Shader.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/ShaderLayout.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/Image.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/Texture2D.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/Mesh.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/Material.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/RenderPipeline.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/RenderTexture.cpp
+    ${LEIR_ROOT}/engine/src/Rendering/SpriteSheet.cpp
+    ${LEIR_ROOT}/engine/src/Components/MeshRenderer.cpp
+    ${LEIR_ROOT}/engine/src/Components/SpriteRenderer.cpp
+    ${LEIR_ROOT}/engine/src/Components/Camera.cpp
+    ${LEIR_ROOT}/engine/src/Components/Light.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIElement.cpp
+    ${LEIR_ROOT}/engine/src/UI/UICanvas.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIImage.cpp
+    ${LEIR_ROOT}/engine/src/UI/UILabel.cpp
+    ${LEIR_ROOT}/engine/src/UI/Font.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIButton.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIPanel.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIRenderer.cpp
+    ${LEIR_ROOT}/engine/src/UI/UITextInput.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIFloatInput.cpp
+    ${LEIR_ROOT}/engine/src/UI/UISlider.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIDebugOverlay.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIViewportPanel.cpp
+    ${LEIR_ROOT}/engine/src/UI/UITextArea.cpp
+    ${LEIR_ROOT}/engine/src/UI/ScrollView.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIScrollbar.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockNode.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockSplitNode.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockPane.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockTabBar.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockSplitter.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockDropOverlay.cpp
+    ${LEIR_ROOT}/engine/src/UI/Dock/DockManager.cpp
+    ${LEIR_ROOT}/engine/src/Physics/PhysicsWorld.web.cpp
+)
+
+target_include_directories(LeirEngineCore
+    PUBLIC
+        ${LEIR_ROOT}/engine/include
+        ${glm_SOURCE_DIR}
+    PRIVATE
+        ${LEIR_ROOT}/engine/src
+        ${stb_SOURCE_DIR}
+        ${LEIR_ROOT}/dependencies/emdawnwebgpu/webgpu/include
+)
+
+target_link_libraries(LeirEngineCore PUBLIC nlohmann_json::nlohmann_json)
+
+target_compile_definitions(LeirEngineCore PUBLIC
+    LEIR_SHADER_DIR="/shaders"
+    PRIVATE LEIR_ENGINE_BUILD
+)
+
+target_compile_options(LeirEngineCore PRIVATE
+    -sASYNCIFY=1
+    --use-port=contrib.glfw3
+)
+
+set_target_properties(LeirEngineCore PROPERTIES CXX_VISIBILITY_PRESET hidden)

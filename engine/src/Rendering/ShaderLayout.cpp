@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <map>
 
@@ -80,12 +81,18 @@ RHI::ShaderStageMask StageMaskFromString(const std::string& s)
     return RHI::ShaderStageMask::VertexFragment;
 }
 
-// ".../Basic.vert.spv" / ".dxil" -> ".../Basic.vert.reflect.json"
+// ".../Basic.vert.spv" / ".dxil" / ".web.wgsl" -> ".../Basic.vert.reflect.json"
 std::string SidecarPathFor(const std::string& bytecodePath)
 {
-    const size_t dot = bytecodePath.find_last_of('.');
-    const std::string base = dot == std::string::npos ? bytecodePath
-                                                      : bytecodePath.substr(0, dot);
+    std::string base = bytecodePath;
+    static const char* const kExtensions[] = { ".web.wgsl", ".dxil", ".spv" };
+    for (const char* ext : kExtensions) {
+        const size_t len = std::strlen(ext);
+        if (base.size() > len && base.compare(base.size() - len, len, ext) == 0) {
+            base.resize(base.size() - len);
+            break;
+        }
+    }
     return base + ".reflect.json";
 }
 

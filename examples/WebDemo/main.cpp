@@ -111,7 +111,7 @@ public:
         // Firefox's naga cannot compile binding_array, so the browser build
         // uses the single-texture variant (the backend binds the first
         // registered texture into the shared group).
-        m_Fs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.web.frag.wgsl"));
+        m_Fs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.frag.web.wgsl"));
 #else
         m_Fs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.frag.wgsl"));
 #endif
@@ -201,15 +201,33 @@ public:
             BufferUsage::Index, m_IndexMemory);
         if (!m_VertBuf.IsValid() || !m_IndexBuf.IsValid()) return false;
 
-        // ---- Checker texture -> bindless slot 0 ----
-        if (!CreateCheckerTexture()) return false;
+        // ---- Three textures -> three bindless slots (multi-texture proof) ----
+        static const uint8_t kChecker[2][2][4] = {
+            { {255,255,255,255}, {128,128,128,255} },
+            { {128,128,128,255}, {255,255,255,255} },
+        };
+        static const uint8_t kRed[2][2][4] = {
+            { {255,255,255,255}, {200, 40, 40,255} },
+            { {200, 40, 40,255}, {255,255,255,255} },
+        };
+        static const uint8_t kBlue[2][2][4] = {
+            { {255,255,255,255}, { 40, 80,200,255} },
+            { { 40, 80,200,255}, {255,255,255,255} },
+        };
+        m_Tex.resize(3);
+        if (!CreateTextureFromPixels(reinterpret_cast<const uint8_t*>(kChecker), 2, 2, m_Tex[0]) ||
+            !CreateTextureFromPixels(reinterpret_cast<const uint8_t*>(kRed), 2, 2, m_Tex[1]) ||
+            !CreateTextureFromPixels(reinterpret_cast<const uint8_t*>(kBlue), 2, 2, m_Tex[2]))
+            return false;
+        XConsole::Println("WebDemo: 3 textures registered (slots {:d}, {:d}, {:d})",
+            m_Tex[0].index, m_Tex[1].index, m_Tex[2].index);
 
         // ---- Static push data ----
         m_Push.lightDir = glm::normalize(glm::vec3(-0.4f, -1.0f, -0.3f));
         m_Push.lightColor = glm::vec3(1.0f, 0.95f, 0.9f) * 1.2f;
         m_Push.ambientColor = glm::vec3(0.25f, 0.25f, 0.3f);
         m_Push.color = glm::vec4(1.0f);
-        m_Push.textureIndex = m_TexIndex;
+        m_Push.textureIndex = m_Tex[0].index;
 
         XConsole::Println("WebDemo: initialized (cube, {:d} indices)", m_VertexCount);
         return true;
@@ -224,7 +242,7 @@ public:
         // Auto-orbit camera looking at the origin.
         const float yaw = static_cast<float>(t) * 0.5f;
         const float pitch = 0.35f;
-        const float dist = 3.0f;
+        const float dist = 3.6f;
         const glm::vec3 camPos(dist * std::cos(pitch) * std::sin(yaw),
             dist * std::sin(pitch),
             dist * std::cos(pitch) * std::cos(yaw));
@@ -232,9 +250,6 @@ public:
         const glm::mat4 proj = glm::perspective(glm::radians(60.0f),
             static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 100.0f);
         m_ViewProjection = proj * view;
-
-        m_Push.model = glm::rotate(glm::mat4(1.0f), static_cast<float>(t) * 0.6f,
-            glm::normalize(glm::vec3(0.6f, 1.0f, 0.2f)));
 
         if (!m_Backend->BeginFrame(false)) return;
         const RHICommandBuffer cmd = m_Backend->GetCurrentCommandBuffer();
@@ -251,14 +266,34 @@ public:
         m_Graph.BindDescriptorSets(m_Layout, 1, { m_Backend->GetBindlessDescriptorSet() });
         m_Graph.BindVertexBuffer(m_VertBuf);
         m_Graph.BindIndexBuffer(m_IndexBuf);
-        m_Graph.PushConstants(m_Layout, ShaderStageMask::VertexFragment, 0,
-            sizeof(PushConstants), &m_Push);
         m_Graph.SetViewport({ 0.0f, 0.0f, static_cast<float>(m_Width),
             static_cast<float>(m_Height), 0.0f, 1.0f });
         m_Graph.SetScissor({ 0, 0, static_cast<uint32_t>(m_Width),
             static_cast<uint32_t>(m_Height) });
-        m_Graph.SetSampledTextures({ m_TexIndex });
-        m_Graph.DrawIndexed(m_VertexCount, 1, 0);
+
+        // Three cubes, one texture each. The web executor binds the per-draw
+        // texture group (single-texture layout), so each cube must sample its
+        // own checker despite sharing one pipeline.
+        for (int i = 0; i < 3; ++i) {
+            m_Push.model = glm::translate(glm::mat4(1.0f),
+                glm::vec3(static_cast<float>(i - 1) * 1.2f, 0.0f, 0.0f))
+                * glm::rotate(glm::mat4(1.0f), static_cast<float>(t) * (0.6f + 0.15f * i),
+                    glm::normalize(glm::vec3(0.6f, 1.0f, 0.2f)));
+            m_Push.textureIndex = m_Tex[i].index;
+            m_Graph.PushConstants(m_Layout, ShaderStageMask::VertexFragment, 0,
+                sizeof(PushConstants), &m_Push);
+            m_Graph.SetSampledTextures({ m_Tex[i].index });
+            m_Graph.DrawIndexed(m_VertexCount, 1, 0);
+        }
+
+        {
+            static bool logged = false;
+            if (!logged) {
+                logged = true;
+                XConsole::Println("WebDemo: recording {:d} draw records",
+                    static_cast<int>(m_Graph.GetRecords().size()));
+            }
+        }
 
         m_Backend->CmdExecuteGraph(cmd, m_Graph);
         m_Backend->EndFrame();
@@ -272,13 +307,15 @@ public:
         m_Backend->DestroyDescriptorSetLayout(m_BindlessLayout);
         m_Backend->DestroyDescriptorSetLayout(m_UboLayout);
         m_Backend->DestroyDescriptorPool(m_UboPool);
-        m_Backend->UnregisterBindlessTexture(m_TexIndex);
-        m_Backend->DestroySampler(m_Sampler);
-        m_Backend->DestroyImageView(m_TexView);
-        m_Backend->DestroyImage(m_TexImage);
-        m_Backend->DestroyMemory(m_TexMemory);
-        m_Backend->DestroyBuffer(m_Staging);
-        m_Backend->DestroyMemory(m_StagingMemory);
+        for (const TexRes& tex : m_Tex) {
+            m_Backend->UnregisterBindlessTexture(tex.index);
+            m_Backend->DestroySampler(tex.sampler);
+            m_Backend->DestroyImageView(tex.view);
+            m_Backend->DestroyImage(tex.image);
+            m_Backend->DestroyMemory(tex.memory);
+            m_Backend->DestroyBuffer(tex.staging);
+            m_Backend->DestroyMemory(tex.stagingMemory);
+        }
         m_Backend->DestroyBuffer(m_IndexBuf);
         m_Backend->DestroyMemory(m_IndexMemory);
         m_Backend->DestroyBuffer(m_VertBuf);
@@ -306,48 +343,55 @@ private:
         return buf;
     }
 
-    bool CreateCheckerTexture() {
-        static const uint8_t kPixels[4][4] = {
-            { 255, 255, 255, 255 }, { 128, 128, 128, 255 },
-            { 128, 128, 128, 255 }, { 255, 255, 255, 255 },
-        };
-        const uint32_t kBytesPerRow = 256; // WebGPU buffer-texture row pitch
-        const uint32_t kStagingSize = kBytesPerRow * 2;
+    struct TexRes {
+        RHIBuffer staging;       RHIDeviceMemory stagingMemory;
+        RHIImage image;          RHIDeviceMemory memory;
+        RHIImageView view;
+        RHISampler sampler;
+        uint32_t index = 0;
+    };
 
-        m_Staging = m_Backend->CreateBuffer(kStagingSize, BufferUsage::TransferSrc,
-            MemoryProperty::HostVisible, m_StagingMemory);
-        if (!m_Staging.IsValid()) return false;
+    bool CreateTextureFromPixels(const uint8_t* pixels, uint32_t w, uint32_t h,
+                                 TexRes& out) {
+        const uint32_t kBytesPerRow = (w * 4 + 255u) & ~255u; // WebGPU pitch
+        const uint32_t kStagingSize = kBytesPerRow * h;
+
+        out.staging = m_Backend->CreateBuffer(kStagingSize, BufferUsage::TransferSrc,
+            MemoryProperty::HostVisible, out.stagingMemory);
+        if (!out.staging.IsValid()) return false;
         void* ptr = nullptr;
-        if (m_Backend->MapMemory(m_StagingMemory, 0, kStagingSize, &ptr)) {
-            std::memcpy(ptr, kPixels, sizeof(kPixels));
-            m_Backend->UnmapMemory(m_StagingMemory);
+        if (m_Backend->MapMemory(out.stagingMemory, 0, kStagingSize, &ptr)) {
+            uint8_t* dst = static_cast<uint8_t*>(ptr);
+            for (uint32_t r = 0; r < h; ++r)
+                std::memcpy(dst + r * kBytesPerRow, pixels + r * w * 4, w * 4);
+            m_Backend->UnmapMemory(out.stagingMemory);
         }
 
-        m_TexImage = m_Backend->CreateImage(2, 2, Format::R8G8B8A8_SRGB,
+        out.image = m_Backend->CreateImage(w, h, Format::R8G8B8A8_SRGB,
             ImageUsage::TransferDst | ImageUsage::Sampled,
-            MemoryProperty::DeviceLocal, m_TexMemory);
-        if (!m_TexImage.IsValid()) return false;
+            MemoryProperty::DeviceLocal, out.memory);
+        if (!out.image.IsValid()) return false;
 
-        m_Backend->CopyBufferToImage(m_Staging, m_TexImage, 2, 2);
+        m_Backend->CopyBufferToImage(out.staging, out.image, w, h);
 
-        m_TexView = m_Backend->CreateImageView(m_TexImage, Format::R8G8B8A8_SRGB, Aspect::Color);
-        if (!m_TexView.IsValid()) return false;
-        m_Sampler = m_Backend->CreateSampler(Filter::Linear, SamplerAddressMode::Repeat);
-        if (!m_Sampler.IsValid()) return false;
+        out.view = m_Backend->CreateImageView(out.image, Format::R8G8B8A8_SRGB, Aspect::Color);
+        if (!out.view.IsValid()) return false;
+        out.sampler = m_Backend->CreateSampler(Filter::Linear, SamplerAddressMode::Repeat);
+        if (!out.sampler.IsValid()) return false;
 
         RHIDescriptorImageInfo info;
-        info.imageView = m_TexView;
-        info.sampler = m_Sampler;
-        info.image = m_TexImage;
+        info.imageView = out.view;
+        info.sampler = out.sampler;
+        info.image = out.image;
         info.valid = true;
-        m_TexIndex = m_Backend->RegisterBindlessTexture(info);
+        out.index = m_Backend->RegisterBindlessTexture(info);
         return true;
     }
 
     int m_Width = 0;
     int m_Height = 0;
     uint32_t m_VertexCount = 0;
-    uint32_t m_TexIndex = 0;
+    std::vector<TexRes> m_Tex;
 
     std::unique_ptr<RenderBackend> m_Backend;
     GCommandGraph m_Graph;
@@ -361,10 +405,6 @@ private:
     RHIBuffer m_Ubo;      RHIDeviceMemory m_UboMemory;
     RHIBuffer m_VertBuf;  RHIDeviceMemory m_VertMemory;
     RHIBuffer m_IndexBuf; RHIDeviceMemory m_IndexMemory;
-    RHIBuffer m_Staging;  RHIDeviceMemory m_StagingMemory;
-    RHIImage m_TexImage;  RHIDeviceMemory m_TexMemory;
-    RHIImageView m_TexView;
-    RHISampler m_Sampler;
 
     glm::mat4 m_ViewProjection = glm::mat4(1.0f);
     PushConstants m_Push{};

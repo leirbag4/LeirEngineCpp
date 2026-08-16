@@ -1,7 +1,7 @@
-// Basic.web.frag.wgsl - browser (Firefox) variant of Basic.frag.wgsl. naga's
-// web build cannot compile binding_array (the wgpu_binding_array enable is
-// native-only), so this variant uses a single texture/sampler pair at group 1
-// that the backend binds from the lowest registered bindless slot.
+// Basic.frag.web.wgsl - browser variant of Basic.frag.wgsl. naga's web build
+// cannot compile binding_array (the wgpu_binding_array enable is native-only),
+// so this variant uses a single texture/sampler pair at group 1 that the
+// backend binds per draw from the draw's sampled texture.
 
 struct PSInput {
     @location(0) fragNormal: vec3<f32>,

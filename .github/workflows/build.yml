@@ -122,3 +122,43 @@ jobs:
               ;;
           esac
           ctest --output-on-failure --test-dir "$BUILD_DIR" --timeout 120
+
+  # Fase 6 / M2 (see TODO_WEB_EXPORT.md): compile-only validation of the
+  # full-web-engine demo on Emscripten + WebGPU. No browser test (headless
+  # WebGPU is flaky); linking WebEngineDemo.wasm proves the engine subset
+  # (WebGPUBackend, CoreApplication loop, Scene/UI/Font, Physics stub)
+  # compiles for wasm32 and the emdawnwebgpu JS glue resolves.
+  emscripten:
+    name: Emscripten (WebEngineDemo M2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten 6.0.6
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 6.0.6 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 6.0.6
+          "$HOME/emsdk/emsdk" activate 6.0.6
+          echo "EMSDK=$HOME/emsdk" >> "$GITHUB_ENV"
+
+      - name: Configure
+        shell: bash
+        run: |
+          source "$EMSDK/emsdk_env.sh"
+          cmake -S examples/WebEngineDemo -B build/emscripten-webengine -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+
+      - name: Build
+        shell: bash
+        run: |
+          source "$EMSDK/emsdk_env.sh"
+          cmake --build build/emscripten-webengine
+
+      - name: Assert artifacts
+        shell: bash
+        run: |
+          test -f build/emscripten-webengine/WebEngineDemo.wasm
+          test -f build/emscripten-webengine/WebEngineDemo.js
+          test -f build/emscripten-webengine/WebEngineDemo.data

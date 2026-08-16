@@ -254,8 +254,12 @@ struct PipelineLayoutRec {
     bool hasPush = false;
     uint32_t pushGroup = 0;
     uint32_t pushSize = 0;
-    WGPUBuffer pushBuffer = nullptr;       // created lazily
-    WGPUBindGroup pushBindGroup = nullptr; // created lazily
+    // Push constants are emulated with one UBO per draw slot (the web executor
+    // records several draws per frame; a single buffer written via
+    // QueueWriteBuffer would make every draw read the LAST write, since queue
+    // writes all complete before the command buffer executes). Grown lazily.
+    std::vector<WGPUBuffer> pushBuffers;
+    std::vector<WGPUBindGroup> pushBindGroups;
 };
 
 struct PipelineRec {
@@ -383,6 +387,16 @@ struct WebGPUBackend::Impl {
     std::unordered_map<uint32_t, ImageViewRec*> bindlessViews;
     std::unordered_map<uint32_t, SamplerRec*> bindlessSamplers;
     DescSetRec* bindlessSetRec = nullptr; // shared singleton handed to GetBindlessDescriptorSet
+
+#if defined(__EMSCRIPTEN__)
+    // Browser builds: the shared bind group is only the default (dummy)
+    // fallback — each draw's texture is bound per-draw via GetTextureBindGroup
+    // (naga cannot compile binding_array, so the table degrades to a single
+    // texture/sampler pair per bind group).
+    std::unordered_map<uint32_t, WGPUBindGroup> textureBindGroups;
+    int bindlessSetSlot = -1; // bindless set index of the current graph, -1 if none
+    uint32_t pushSlot = 0;    // per-draw push UBO slot of the current graph
+#endif
 
     // Dummy white texture filling unbound bindless slots (1x1 R8G8B8A8Unorm).
     WGPUTexture dummyTexture = nullptr;
@@ -837,6 +851,10 @@ struct WebGPUBackend::Impl {
             WaitIdle();
 
         delete bindlessSetRec;
+#if defined(__EMSCRIPTEN__)
+        for (auto& kv : textureBindGroups) BindGroupRelease(kv.second);
+        textureBindGroups.clear();
+#endif
         if (bindlessBindGroup) BindGroupRelease(bindlessBindGroup);
         if (bindlessLayout) BindGroupLayoutRelease(bindlessLayout);
         if (pushLayout) BindGroupLayoutRelease(pushLayout);
@@ -996,23 +1014,11 @@ struct WebGPUBackend::Impl {
 
 #if defined(__EMSCRIPTEN__)
         // Browser builds cannot use binding_array (naga's wgpu_binding_array
-        // enable is native-only), so the shared table degrades to a single
-        // texture/sampler pair taken from the lowest registered slot (or the
-        // dummy). The *.web.wgsl shaders sample it without indexing.
-        WGPUTextureView view = dummyView;
-        WGPUSampler sampler = dummySampler;
-        for (uint32_t i = 0; i < kBindlessMax; ++i) {
-            auto vit = bindlessViews.find(i);
-            auto sit = bindlessSamplers.find(i);
-            if (vit == bindlessViews.end() || !vit->second || !vit->second->view)
-                continue;
-            view = vit->second->view;
-            if (sit != bindlessSamplers.end() && sit->second && sit->second->sampler)
-                sampler = sit->second->sampler;
-            break;
-        }
-        entries[0].textureView = view;
-        entries[1].sampler = sampler;
+        // enable is native-only), so the shared group is only the default
+        // (dummy) fallback. Real textures are bound per-draw: the executor
+        // overrides the bindless slot with GetTextureBindGroup(index).
+        entries[0].textureView = dummyView;
+        entries[1].sampler = dummySampler;
 #else
         // One entry per layout binding; the entry extras carry the whole
         // binding_array (N texture views / N samplers).
@@ -1048,6 +1054,51 @@ struct WebGPUBackend::Impl {
         bindlessBindGroup = DeviceCreateBindGroup(device, &bg);
         if (bindlessSetRec) bindlessSetRec->bindGroup = bindlessBindGroup;
     }
+
+#if defined(__EMSCRIPTEN__)
+    // Drop a cached per-texture bind group so the next draw recreates it from
+    // the current bindlessViews/bindlessSamplers (used on register/update/
+    // unregister and during render-target masking).
+    void InvalidateTextureBindGroup(uint32_t index) {
+        auto it = textureBindGroups.find(index);
+        if (it != textureBindGroups.end()) {
+            BindGroupRelease(it->second);
+            textureBindGroups.erase(it);
+        }
+    }
+
+    // Lazily-built bind group (same bindlessLayout: binding 0 = texture,
+    // binding 1 = sampler) for one registered texture. Falls back to the dummy
+    // when the index is unregistered or currently masked as an attachment.
+    WGPUBindGroup GetTextureBindGroup(uint32_t index) {
+        auto it = textureBindGroups.find(index);
+        if (it != textureBindGroups.end()) return it->second;
+
+        WGPUTextureView view = dummyView;
+        WGPUSampler sampler = dummySampler;
+        auto vit = bindlessViews.find(index);
+        auto sit = bindlessSamplers.find(index);
+        if (vit != bindlessViews.end() && vit->second && vit->second->view)
+            view = vit->second->view;
+        if (sit != bindlessSamplers.end() && sit->second && sit->second->sampler)
+            sampler = sit->second->sampler;
+
+        WGPUBindGroupEntry entries[2]{};
+        entries[0].binding = 0;
+        entries[0].textureView = view;
+        entries[1].binding = 1;
+        entries[1].sampler = sampler;
+
+        WGPUBindGroupDescriptor bg{};
+        bg.label = WgpuStr("tex");
+        bg.layout = bindlessLayout;
+        bg.entryCount = 2;
+        bg.entries = entries;
+        WGPUBindGroup group = DeviceCreateBindGroup(device, &bg);
+        if (group) textureBindGroups[index] = group;
+        return group;
+    }
+#endif
 
     void EndCurrentPass() {
         if (!currentPass) return;
@@ -1448,8 +1499,8 @@ void WebGPUBackend::DestroyPipelineLayout(RHIPipelineLayout layout) {
     Impl& im = *m_Impl;
     PipelineLayoutRec* rec = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
     if (rec->wgpuLayout) im.PipelineLayoutRelease(rec->wgpuLayout);
-    if (rec->pushBuffer) im.BufferRelease(rec->pushBuffer);
-    if (rec->pushBindGroup) im.BindGroupRelease(rec->pushBindGroup);
+    for (WGPUBuffer b : rec->pushBuffers) im.BufferRelease(b);
+    for (WGPUBindGroup g : rec->pushBindGroups) im.BindGroupRelease(g);
     delete rec;
 }
 
@@ -1966,7 +2017,11 @@ uint32_t WebGPUBackend::RegisterBindlessTexture(const RHIDescriptorImageInfo& in
 
     im.bindlessViews[index] = reinterpret_cast<ImageViewRec*>(info.imageView.handle);
     im.bindlessSamplers[index] = reinterpret_cast<SamplerRec*>(info.sampler.handle);
+#if defined(__EMSCRIPTEN__)
+    im.InvalidateTextureBindGroup(index);
+#else
     im.RebuildBindlessBindGroup();
+#endif
     return index;
 }
 
@@ -1975,7 +2030,11 @@ void WebGPUBackend::UpdateBindlessTexture(uint32_t index, const RHIDescriptorIma
     if (index >= kBindlessMax || !info.valid) return;
     im.bindlessViews[index] = reinterpret_cast<ImageViewRec*>(info.imageView.handle);
     im.bindlessSamplers[index] = reinterpret_cast<SamplerRec*>(info.sampler.handle);
+#if defined(__EMSCRIPTEN__)
+    im.InvalidateTextureBindGroup(index);
+#else
     im.RebuildBindlessBindGroup();
+#endif
 }
 
 void WebGPUBackend::UnregisterBindlessTexture(uint32_t index) {
@@ -1984,11 +2043,21 @@ void WebGPUBackend::UnregisterBindlessTexture(uint32_t index) {
     im.bindlessViews.erase(index);
     im.bindlessSamplers.erase(index);
     im.bindlessFree.push_back(index);
+#if defined(__EMSCRIPTEN__)
+    im.InvalidateTextureBindGroup(index);
+#else
     im.RebuildBindlessBindGroup();
+#endif
 }
 
 RHIDescriptorSet WebGPUBackend::GetBindlessDescriptorSet() const {
     Impl& im = *m_Impl;
+    // Browser builds: the shared group is only the dummy fallback; on desktop
+    // it holds the whole binding_array. RebuildBindlessBindGroup is otherwise
+    // driven by Register/Update/Unregister, so seed it lazily here in case
+    // none of those ran yet (all platforms) and refresh the singleton's group.
+    if (!im.bindlessBindGroup)
+        im.RebuildBindlessBindGroup();
     if (!im.bindlessSetRec) {
         im.bindlessSetRec = new DescSetRec();
         im.bindlessSetRec->isBindless = true;
@@ -1996,6 +2065,7 @@ RHIDescriptorSet WebGPUBackend::GetBindlessDescriptorSet() const {
         im.bindlessSetRec->bindGroup = im.bindlessBindGroup;
         im.bindlessSetRec->ownsBindGroup = false;
     }
+    im.bindlessSetRec->bindGroup = im.bindlessBindGroup;
     RHIDescriptorSet out;
     out.handle = reinterpret_cast<uint64_t>(im.bindlessSetRec);
     return out;
@@ -2053,9 +2123,15 @@ void WebGPUBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate pas
         }
     }
     if (!im.maskedSlots.empty()) {
-        for (uint32_t idx : im.maskedSlots)
+        for (uint32_t idx : im.maskedSlots) {
             im.bindlessViews.erase(idx);
+#if defined(__EMSCRIPTEN__)
+            im.InvalidateTextureBindGroup(idx);
+#endif
+        }
+#if !defined(__EMSCRIPTEN__)
         im.RebuildBindlessBindGroup();
+#endif
     }
 
     im.passW = frec->width;
@@ -2117,11 +2193,17 @@ void WebGPUBackend::CmdEndRenderPass(RHICommandBuffer cmd) {
     im.EndCurrentPass();
     // Restore bindless slots masked while this pass rendered to them.
     if (!im.maskedSlots.empty()) {
-        for (size_t i = 0; i < im.maskedSlots.size(); ++i)
+        for (size_t i = 0; i < im.maskedSlots.size(); ++i) {
             im.bindlessViews[im.maskedSlots[i]] = im.maskedOrig[i];
+#if defined(__EMSCRIPTEN__)
+            im.InvalidateTextureBindGroup(im.maskedSlots[i]);
+#endif
+        }
         im.maskedSlots.clear();
         im.maskedOrig.clear();
+#if !defined(__EMSCRIPTEN__)
         im.RebuildBindlessBindGroup();
+#endif
     }
 }
 
@@ -2144,7 +2226,11 @@ void WebGPUBackend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayou
         if (!s) continue;
         WGPUBindGroup bg = s->isBindless ? im.bindlessBindGroup : s->bindGroup;
         if (!bg) continue;
-        im.RenderPassEncoderSetBindGroup(im.currentPass, firstSet + (uint32_t)i, bg, 0, nullptr);
+        uint32_t slot = firstSet + (uint32_t)i;
+#if defined(__EMSCRIPTEN__)
+        if (s->isBindless) im.bindlessSetSlot = (int)slot;
+#endif
+        im.RenderPassEncoderSetBindGroup(im.currentPass, slot, bg, 0, nullptr);
     }
 }
 
@@ -2192,31 +2278,38 @@ void WebGPUBackend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout lay
     PipelineLayoutRec* lr = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
     if (!lr || !lr->hasPush) return;
 
-    // Lazily create the per-layout push UBO + bind group. The buffer size is
-    // the max push range aligned to 16 (WebGPU uniform buffer size rule).
-    if (!lr->pushBuffer) {
+    // One UBO per draw slot (see PipelineLayoutRec) so concurrent draws each
+    // read their own push data. The buffer size is the max push range aligned
+    // to 16 (WebGPU uniform buffer size rule).
+    if (lr->pushBuffers.size() <= im.pushSlot) {
         uint32_t bufSize = std::max<uint32_t>((lr->pushSize + 15u) & ~15u, 16u);
         WGPUBufferDescriptor bd{};
         bd.label = WgpuStr("push");
         bd.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         bd.size = bufSize;
-        lr->pushBuffer = im.DeviceCreateBuffer(im.device, &bd);
+        WGPUBuffer buf = im.DeviceCreateBuffer(im.device, &bd);
 
         WGPUBindGroupEntry entry{};
         entry.binding = 0;
-        entry.buffer = lr->pushBuffer;
+        entry.buffer = buf;
         entry.size = WGPU_WHOLE_SIZE;
         WGPUBindGroupDescriptor bg{};
         bg.label = WgpuStr("push");
         bg.layout = im.pushLayout;
         bg.entryCount = 1;
         bg.entries = &entry;
-        lr->pushBindGroup = im.DeviceCreateBindGroup(im.device, &bg);
-    }
-    if (!lr->pushBuffer || !lr->pushBindGroup) return;
+        WGPUBindGroup group = im.DeviceCreateBindGroup(im.device, &bg);
 
-    im.QueueWriteBuffer(im.queue, lr->pushBuffer, offset, data, size);
-    im.RenderPassEncoderSetBindGroup(im.currentPass, lr->pushGroup, lr->pushBindGroup, 0, nullptr);
+        lr->pushBuffers.push_back(buf);
+        lr->pushBindGroups.push_back(group);
+    }
+    if (im.pushSlot >= lr->pushBuffers.size()) return;
+    WGPUBuffer buf = lr->pushBuffers[im.pushSlot];
+    WGPUBindGroup group = lr->pushBindGroups[im.pushSlot];
+    if (!buf || !group) return;
+
+    im.QueueWriteBuffer(im.queue, buf, offset, data, size);
+    im.RenderPassEncoderSetBindGroup(im.currentPass, lr->pushGroup, group, 0, nullptr);
 }
 
 void WebGPUBackend::CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewport) {
@@ -2252,6 +2345,10 @@ void WebGPUBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
 
 void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) {
     Impl& im = *m_Impl;
+#if defined(__EMSCRIPTEN__)
+    im.bindlessSetSlot = -1;
+    im.pushSlot = 0;
+#endif
     for (const auto& rec : graph.GetRecords()) {
         switch (rec.type) {
         case GRecordType::BeginRenderPass: {
@@ -2268,14 +2365,32 @@ void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& g
                 CmdBindPipeline(cmd, rec.draw.pipeline);
             for (const auto& sb : rec.draw.setBindings)
                 CmdBindDescriptorSets(cmd, sb.layout, sb.firstSet, sb.sets);
+#if defined(__EMSCRIPTEN__)
+            // Per-texture bind groups: override the bindless slot with the
+            // group for this draw's sampled texture (single-texture layout —
+            // naga cannot compile binding_array). Falls back to the shared
+            // dummy group when the draw samples nothing.
+            if (im.bindlessSetSlot >= 0) {
+                WGPUBindGroup bg = rec.draw.sampledTextures.empty()
+                    ? im.bindlessBindGroup
+                    : im.GetTextureBindGroup(rec.draw.sampledTextures[0]);
+                if (bg)
+                    im.RenderPassEncoderSetBindGroup(im.currentPass,
+                        (uint32_t)im.bindlessSetSlot, bg, 0, nullptr);
+            }
+#endif
             if (rec.draw.vertexBuffer.IsValid())
                 CmdBindVertexBuffer(cmd, rec.draw.vertexBuffer);
             if (rec.draw.indexBuffer.IsValid())
                 CmdBindIndexBuffer(cmd, rec.draw.indexBuffer);
-            if (!rec.draw.pushData.empty())
+            if (!rec.draw.pushData.empty()) {
                 CmdPushConstants(cmd, rec.draw.layout, rec.draw.pushStage,
                     rec.draw.pushOffset, (uint32_t)rec.draw.pushData.size(),
                     rec.draw.pushData.data());
+#if defined(__EMSCRIPTEN__)
+                im.pushSlot++;
+#endif
+            }
             if (rec.draw.hasViewport)
                 CmdSetViewport(cmd, rec.draw.viewport);
             if (rec.draw.hasScissor)
