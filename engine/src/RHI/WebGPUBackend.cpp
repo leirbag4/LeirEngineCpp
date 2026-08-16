@@ -2,8 +2,15 @@
 
 #include "LeirEngine/Core/Log.h"
 
-#if defined(_WIN32) && defined(_MSC_VER)
+#if (defined(_WIN32) && defined(_MSC_VER)) || defined(__EMSCRIPTEN__)
 
+#if defined(__EMSCRIPTEN__)
+// Emscripten: emdawnwebgpu (vendored + patched) provides the standard
+// webgpu.h and links the wgpu functions STATICALLY (no DLL, no native
+// extension header). GLFW comes from the contrib.glfw3 port.
+#include <webgpu/webgpu.h>
+#include <GLFW/glfw3.h>
+#else
 #define WGPU_SKIP_DECLARATIONS
 #include <webgpu/webgpu.h>
 // wgpu-native extension header: defines WGPUNativeFeature_* (native-only device
@@ -18,6 +25,7 @@
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#endif
 
 #include <algorithm>
 #include <cstdint>
@@ -258,9 +266,13 @@ struct PipelineRec {
 } // namespace
 
 struct WebGPUBackend::Impl {
-    // ---- wgpu_native.dll (loaded dynamically) ----
+    // ---- wgpu_native.dll (loaded dynamically on desktop) ----
+#if defined(__EMSCRIPTEN__)
+    GLFWwindow* window = nullptr;
+#else
     HMODULE lib = nullptr;
     GLFWwindow* window = nullptr;
+#endif
 
     WGPUProcCreateInstance CreateInstance = nullptr;
     WGPUProcInstanceRequestAdapter InstanceRequestAdapter = nullptr;
@@ -324,6 +336,7 @@ struct WebGPUBackend::Impl {
     WGPUProcRenderPipelineRelease RenderPipelineRelease = nullptr;
     WGPUProcShaderModuleRelease ShaderModuleRelease = nullptr;
 
+    #if !defined(__EMSCRIPTEN__)
     template <typename T>
     bool LoadProc(const char* name, T& out) {
         out = reinterpret_cast<T>(GetProcAddress(lib, name));
@@ -333,6 +346,7 @@ struct WebGPUBackend::Impl {
         }
         return true;
     }
+#endif
 
     // ---- objects ----
     WGPUInstance instance = nullptr;
@@ -340,7 +354,9 @@ struct WebGPUBackend::Impl {
     WGPUDevice device = nullptr;
     WGPUQueue queue = nullptr;
     WGPUSurface surface = nullptr;
+#if !defined(__EMSCRIPTEN__)
     HWND hwnd = nullptr;
+#endif
     int width = 0, height = 0;
     bool vsync = false;
     WGPUTextureFormat swapchainFormat = WGPUTextureFormat_Undefined;
@@ -391,13 +407,74 @@ struct WebGPUBackend::Impl {
 
     Impl(void* window, int w, int h, bool vs, const std::string& /*appName*/) {
         this->window = static_cast<GLFWwindow*>(window);
-        hwnd = glfwGetWin32Window(this->window);
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(this->window, &fbW, &fbH);
         width = fbW > 0 ? fbW : w;
         height = fbH > 0 ? fbH : h;
         vsync = vs;
 
+#if defined(__EMSCRIPTEN__)
+        // Static linking (emdawnwebgpu): every proc pointer resolves to the
+        // direct exported symbol. wgpuDevicePoll is a wgpu-native extension
+        // and does NOT exist here (WaitIdle degrades to a no-op).
+        CreateInstance = wgpuCreateInstance;
+        InstanceRequestAdapter = wgpuInstanceRequestAdapter;
+        InstanceWaitAny = wgpuInstanceWaitAny;
+        InstanceProcessEvents = wgpuInstanceProcessEvents;
+        InstanceCreateSurface = wgpuInstanceCreateSurface;
+        InstanceRelease = wgpuInstanceRelease;
+        AdapterRequestDevice = wgpuAdapterRequestDevice;
+        AdapterGetInfo = wgpuAdapterGetInfo;
+        AdapterRelease = wgpuAdapterRelease;
+        DeviceRelease = wgpuDeviceRelease;
+        DevicePoll = nullptr;
+        DeviceGetQueue = wgpuDeviceGetQueue;
+        DeviceCreateCommandEncoder = wgpuDeviceCreateCommandEncoder;
+        DeviceCreateShaderModule = wgpuDeviceCreateShaderModule;
+        DeviceCreateRenderPipeline = wgpuDeviceCreateRenderPipeline;
+        DeviceCreatePipelineLayout = wgpuDeviceCreatePipelineLayout;
+        DeviceCreateBindGroupLayout = wgpuDeviceCreateBindGroupLayout;
+        DeviceCreateBindGroup = wgpuDeviceCreateBindGroup;
+        DeviceCreateBuffer = wgpuDeviceCreateBuffer;
+        DeviceCreateTexture = wgpuDeviceCreateTexture;
+        TextureCreateView = wgpuTextureCreateView;
+        DeviceCreateSampler = wgpuDeviceCreateSampler;
+        SurfaceConfigure = wgpuSurfaceConfigure;
+        SurfaceGetCapabilities = wgpuSurfaceGetCapabilities;
+        SurfaceGetCurrentTexture = wgpuSurfaceGetCurrentTexture;
+        SurfacePresent = wgpuSurfacePresent;
+        SurfaceRelease = wgpuSurfaceRelease;
+        CommandEncoderFinish = wgpuCommandEncoderFinish;
+        CommandEncoderBeginRenderPass = wgpuCommandEncoderBeginRenderPass;
+        CommandEncoderCopyBufferToBuffer = wgpuCommandEncoderCopyBufferToBuffer;
+        CommandEncoderCopyBufferToTexture = wgpuCommandEncoderCopyBufferToTexture;
+        CommandEncoderRelease = wgpuCommandEncoderRelease;
+        CommandBufferRelease = wgpuCommandBufferRelease;
+        RenderPassEncoderEnd = wgpuRenderPassEncoderEnd;
+        RenderPassEncoderSetPipeline = wgpuRenderPassEncoderSetPipeline;
+        RenderPassEncoderSetBindGroup = wgpuRenderPassEncoderSetBindGroup;
+        RenderPassEncoderSetVertexBuffer = wgpuRenderPassEncoderSetVertexBuffer;
+        RenderPassEncoderSetIndexBuffer = wgpuRenderPassEncoderSetIndexBuffer;
+        RenderPassEncoderDraw = wgpuRenderPassEncoderDraw;
+        RenderPassEncoderDrawIndexed = wgpuRenderPassEncoderDrawIndexed;
+        RenderPassEncoderSetViewport = wgpuRenderPassEncoderSetViewport;
+        RenderPassEncoderSetScissorRect = wgpuRenderPassEncoderSetScissorRect;
+        RenderPassEncoderRelease = wgpuRenderPassEncoderRelease;
+        QueueSubmit = wgpuQueueSubmit;
+        QueueWriteBuffer = wgpuQueueWriteBuffer;
+        QueueWriteTexture = wgpuQueueWriteTexture;
+        QueueRelease = wgpuQueueRelease;
+        BufferRelease = wgpuBufferRelease;
+        TextureRelease = wgpuTextureRelease;
+        TextureViewRelease = wgpuTextureViewRelease;
+        SamplerRelease = wgpuSamplerRelease;
+        BindGroupLayoutRelease = wgpuBindGroupLayoutRelease;
+        BindGroupRelease = wgpuBindGroupRelease;
+        PipelineLayoutRelease = wgpuPipelineLayoutRelease;
+        RenderPipelineRelease = wgpuRenderPipelineRelease;
+        ShaderModuleRelease = wgpuShaderModuleRelease;
+#else
+        hwnd = glfwGetWin32Window(this->window);
         lib = LoadLibraryW(L"wgpu_native.dll");
         if (!lib) {
             XConsole::PrintError(
@@ -463,11 +540,96 @@ struct WebGPUBackend::Impl {
               LoadProc("wgpuRenderPipelineRelease", RenderPipelineRelease) &&
               LoadProc("wgpuShaderModuleRelease", ShaderModuleRelease)))
             throw std::runtime_error("WebGPU: failed to resolve wgpu_native.dll exports");
+#endif
 
         Init();
     }
 
     void Init() {
+#if defined(__EMSCRIPTEN__)
+        // Browser instance: enable TimedWaitAny — required for the blocking
+        // adapter/device WaitAny(UINT64_MAX) below (emdawn glue returns
+        // WGPUWaitStatus_Error otherwise).
+        WGPUInstanceFeatureName instFeatures[1] = { WGPUInstanceFeatureName_TimedWaitAny };
+        WGPUInstanceLimits instLimits{};
+        instLimits.timedWaitAnyMaxCount = 1;
+        WGPUInstanceDescriptor instDesc{};
+        instDesc.requiredFeatureCount = 1;
+        instDesc.requiredFeatures = instFeatures;
+        instDesc.requiredLimits = &instLimits;
+        instance = CreateInstance(&instDesc);
+        if (!instance)
+            throw std::runtime_error("WebGPU: wgpuCreateInstance failed");
+
+        // Canvas surface (GLFW's Emscripten port creates the "#canvas" element).
+        WGPUEmscriptenSurfaceSourceCanvasHTMLSelector srcDesc{};
+        srcDesc.chain.sType = WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector;
+        srcDesc.selector = WgpuStr("#canvas");
+
+        WGPUSurfaceDescriptor surfDesc{};
+        surfDesc.label = WgpuStr("LeirEngine surface");
+        surfDesc.nextInChain = &srcDesc.chain;
+        surface = InstanceCreateSurface(instance, &surfDesc);
+        if (!surface)
+            throw std::runtime_error("WebGPU: failed to create surface");
+
+        // Adapter request (async; completed synchronously via wgpuInstanceWaitAny,
+        // which requires -sASYNCIFY=1 in the build).
+        InitCtx actx{};
+        WGPURequestAdapterOptions opts{};
+        opts.compatibleSurface = surface;
+        WGPURequestAdapterCallbackInfo acb{};
+        acb.mode = WGPUCallbackMode_WaitAnyOnly;
+        acb.callback = OnAdapter;
+        acb.userdata1 = &actx;
+        WGPUFuture afut = InstanceRequestAdapter(instance, &opts, acb);
+        WGPUFutureWaitInfo awi{};
+        awi.future = afut;
+        if (InstanceWaitAny(instance, 1, &awi, UINT64_MAX) != WGPUWaitStatus_Success ||
+            !actx.done || !actx.success) {
+            InstanceRelease(instance);
+            instance = nullptr;
+            throw std::runtime_error("WebGPU: no compatible adapter");
+        }
+        adapter = actx.adapter;
+
+        // Adapter diagnostics.
+        {
+            WGPUAdapterInfo info{};
+            if (AdapterGetInfo(adapter, &info) == WGPUStatus_Success) {
+                XConsole::Println("[WebGPU] adapter: browser / {} / {}", 
+                    WgpuStrView(info.device), WgpuStrView(info.description));
+            }
+        }
+
+        // Device request (async; completed synchronously via WaitAny).
+        // No requiredFeatures/requiredLimits: browsers enable the
+        // texture-binding-array capabilities by default and the default limits
+        // (16 sampled textures + 16 samplers per stage) match kBindlessMax.
+        InitCtx dctx{};
+        WGPUDeviceDescriptor devDesc{};
+        devDesc.label = WgpuStr("LeirEngine device");
+        WGPURequestDeviceCallbackInfo dcb{};
+        dcb.mode = WGPUCallbackMode_WaitAnyOnly;
+        dcb.callback = OnDevice;
+        dcb.userdata1 = &dctx;
+        WGPUFuture dfut = AdapterRequestDevice(adapter, &devDesc, dcb);
+        WGPUFutureWaitInfo dwi{};
+        dwi.future = dfut;
+        if (InstanceWaitAny(instance, 1, &dwi, UINT64_MAX) != WGPUWaitStatus_Success ||
+            !dctx.done || !dctx.success) {
+            AdapterRelease(adapter);
+            adapter = nullptr;
+            InstanceRelease(instance);
+            instance = nullptr;
+            throw std::runtime_error("WebGPU: failed to create device: " +
+                dctx.message);
+        }
+        device = dctx.device;
+        // NOTE: the adapter is kept alive for the backend's lifetime —
+        // wgpuSurfaceGetCapabilities needs it on every (re)configure.
+        queue = DeviceGetQueue(device);
+#else
         // Prefer the DX12 backend on Windows: wgpu's Vulkan TEXTURE_BINDING_ARRAY
         // feature requires shaderSampledImageArrayNonUniformIndexing (Gen11+),
         // which Intel Gen9 iGPUs lack, so binding arrays can't be requested on a
@@ -583,36 +745,39 @@ struct WebGPUBackend::Impl {
         // NOTE: the adapter is kept alive for the backend's lifetime —
         // wgpuSurfaceGetCapabilities needs it on every (re)configure.
         queue = DeviceGetQueue(device);
+#endif
 
         // Swapchain config.
         ConfigureSwapchain(width, height);
 
-        // Shared bindless layout: binding 0 = texture binding_array<N>,
-        // binding 1 = sampler binding_array<N>. All pipelines and the bindless
-        // bind group share this exact object (WebGPU requires identity).
-        // Array sizes go in the extras chain (plain bindingArraySize is
-        // ignored by wgpu-native).
+        // Shared bindless layout: binding 0 = texture, binding 1 = sampler. All
+        // pipelines and the bindless bind group share this exact object
+        // (WebGPU requires identity). Native builds make them binding_array<N>
+        // (array sizes go in the extras chain — plain bindingArraySize is
+        // ignored by wgpu-native); browser builds use single resources because
+        // naga (Firefox) cannot compile binding_array at all.
+        WGPUBindGroupLayoutEntry entries[2]{};
+        entries[0].binding = 0;
+        entries[0].visibility = static_cast<WGPUShaderStage>(
+            WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
+        entries[0].texture.sampleType = WGPUTextureSampleType_Float;
+        entries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
+        entries[1].binding = 1;
+        entries[1].visibility = static_cast<WGPUShaderStage>(
+            WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
+        entries[1].sampler.type = WGPUSamplerBindingType_Filtering;
+#if !defined(__EMSCRIPTEN__)
         WGPUBindGroupLayoutEntryExtras texExtras{};
         texExtras.chain.sType = static_cast<WGPUSType>(WGPUSType_BindGroupLayoutEntryExtras);
         texExtras.count = kBindlessMax;
         WGPUBindGroupLayoutEntryExtras sampExtras{};
         sampExtras.chain.sType = static_cast<WGPUSType>(WGPUSType_BindGroupLayoutEntryExtras);
         sampExtras.count = kBindlessMax;
-
-        WGPUBindGroupLayoutEntry entries[2]{};
-        entries[0].binding = 0;
-        entries[0].visibility = static_cast<WGPUShaderStage>(
-            WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
         entries[0].bindingArraySize = kBindlessMax;
-        entries[0].texture.sampleType = WGPUTextureSampleType_Float;
-        entries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
         entries[0].nextInChain = &texExtras.chain;
-        entries[1].binding = 1;
-        entries[1].visibility = static_cast<WGPUShaderStage>(
-            WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
         entries[1].bindingArraySize = kBindlessMax;
-        entries[1].sampler.type = WGPUSamplerBindingType_Filtering;
         entries[1].nextInChain = &sampExtras.chain;
+#endif
 
         WGPUBindGroupLayoutDescriptor bglDesc{};
         bglDesc.label = WgpuStr("bindless");
@@ -689,7 +854,9 @@ struct WebGPUBackend::Impl {
         if (instance) InstanceRelease(instance);
         delete mainRenderPass;
         delete overlayRenderPass;
+#if !defined(__EMSCRIPTEN__)
         if (lib) FreeLibrary(lib);
+#endif
     }
 
     void CreateDummyTexture() {
@@ -768,7 +935,11 @@ struct WebGPUBackend::Impl {
         sc.width = (uint32_t)w;
         sc.height = (uint32_t)h;
         sc.alphaMode = WGPUCompositeAlphaMode_Auto;
+#if defined(__EMSCRIPTEN__)
+        sc.presentMode = WGPUPresentMode_Fifo; // emdawn glue only accepts Fifo/Undefined
+#else
         sc.presentMode = vsync ? WGPUPresentMode_Fifo : WGPUPresentMode_Immediate;
+#endif
         SurfaceConfigure(surface, &sc);
 
         width = w;
@@ -819,6 +990,30 @@ struct WebGPUBackend::Impl {
     void RebuildBindlessBindGroup() {
         if (bindlessBindGroup) { BindGroupRelease(bindlessBindGroup); bindlessBindGroup = nullptr; }
 
+        WGPUBindGroupEntry entries[2]{};
+        entries[0].binding = 0;
+        entries[1].binding = 1;
+
+#if defined(__EMSCRIPTEN__)
+        // Browser builds cannot use binding_array (naga's wgpu_binding_array
+        // enable is native-only), so the shared table degrades to a single
+        // texture/sampler pair taken from the lowest registered slot (or the
+        // dummy). The *.web.wgsl shaders sample it without indexing.
+        WGPUTextureView view = dummyView;
+        WGPUSampler sampler = dummySampler;
+        for (uint32_t i = 0; i < kBindlessMax; ++i) {
+            auto vit = bindlessViews.find(i);
+            auto sit = bindlessSamplers.find(i);
+            if (vit == bindlessViews.end() || !vit->second || !vit->second->view)
+                continue;
+            view = vit->second->view;
+            if (sit != bindlessSamplers.end() && sit->second && sit->second->sampler)
+                sampler = sit->second->sampler;
+            break;
+        }
+        entries[0].textureView = view;
+        entries[1].sampler = sampler;
+#else
         // One entry per layout binding; the entry extras carry the whole
         // binding_array (N texture views / N samplers).
         std::vector<WGPUTextureView> views(kBindlessMax);
@@ -841,11 +1036,9 @@ struct WebGPUBackend::Impl {
         sampExtras.samplers = samplers.data();
         sampExtras.samplerCount = samplers.size();
 
-        WGPUBindGroupEntry entries[2]{};
-        entries[0].binding = 0;
         entries[0].nextInChain = &texExtras.chain;
-        entries[1].binding = 1;
         entries[1].nextInChain = &sampExtras.chain;
+#endif
 
         WGPUBindGroupDescriptor bg{};
         bg.label = WgpuStr("bindless");
@@ -865,9 +1058,15 @@ struct WebGPUBackend::Impl {
 
     void WaitIdle() {
         if (!device) return;
+#if defined(__EMSCRIPTEN__)
+        // wgpuDevicePoll is a wgpu-native extension unavailable in the browser;
+        // the browser's command queue is drained internally (best-effort no-op).
+        (void)0;
+#else
         // wgpuDevicePoll is still exported by wgpu-native v29 (extension);
         // wait=true blocks until all queued GPU work completes.
         DevicePoll(device, true, nullptr);
+#endif
     }
 
     // wgpuQueueWriteBuffer in safe chunks (queue order guarantees the writes
@@ -948,8 +1147,6 @@ bool WebGPUBackend::BeginFrame(bool skipRenderPass) {
         depth.depthLoadOp = WGPULoadOp_Clear;
         depth.depthStoreOp = WGPUStoreOp_Store;
         depth.depthClearValue = 1.0f;
-        depth.stencilLoadOp = WGPULoadOp_Clear;
-        depth.stencilStoreOp = WGPUStoreOp_Store;
 
         WGPURenderPassDescriptor rpd{};
         rpd.label = WgpuStr("main");
@@ -1009,7 +1206,9 @@ void WebGPUBackend::EndFrame() {
     if (cb) {
         im.QueueSubmit(im.queue, 1, &cb);
         im.CommandBufferRelease(cb);
+#if !defined(__EMSCRIPTEN__)
         im.SurfacePresent(im.surface);
+#endif
     }
 
     if (im.swapchainView) { im.TextureViewRelease(im.swapchainView); im.swapchainView = nullptr; }
@@ -1051,10 +1250,21 @@ RHIShaderModule WebGPUBackend::CreateShaderModule(const std::vector<char>& code)
     Impl& im = *m_Impl;
     ShaderRec* rec = new ShaderRec();
 
+#if defined(__EMSCRIPTEN__)
+    // Browser WGSL (Firefox naga) cannot compile binding_array at all — the
+    // wgpu_binding_array enable it requires is native-only. Web builds must use
+    // the *.web.wgsl variants (single texture/sampler), so no enable is
+    // prepended here.
     WGPUShaderSourceWGSL wgsl{};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgsl.code.data = code.data();
     wgsl.code.length = code.size();
+#else
+    WGPUShaderSourceWGSL wgsl{};
+    wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgsl.code.data = code.data();
+    wgsl.code.length = code.size();
+#endif
 
     WGPUShaderModuleDescriptor smd{};
     smd.label = WgpuStr("shader");
@@ -1887,8 +2097,6 @@ void WebGPUBackend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate pas
         depth.depthLoadOp = hasDepthClear ? WGPULoadOp_Clear : WGPULoadOp_Load;
         depth.depthStoreOp = WGPUStoreOp_Store;
         depth.depthClearValue = depthClearValue;
-        depth.stencilLoadOp = WGPULoadOp_Load;
-        depth.stencilStoreOp = WGPUStoreOp_Store;
     }
 
     WGPURenderPassDescriptor rpd{};
@@ -2091,8 +2299,9 @@ void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& g
 namespace Leir {
 namespace RHI {
 
-// WebGPU is only built on Windows/MSVC (wgpu-native zip for Windows); other
-// platforms get a stub that reports the backend as unavailable.
+// WebGPU full impl is built on Windows/MSVC (wgpu-native zip) and Emscripten
+// (emdawnwebgpu); other platforms get a stub that reports the backend as
+// unavailable.
 
 WebGPUBackend::WebGPUBackend(void*, int, int, bool, const std::string&)
     : m_Impl(nullptr)
@@ -2189,4 +2398,4 @@ void WebGPUBackend::CmdTransitionImageLayout(RHICommandBuffer, RHIImage, Format,
 } // namespace RHI
 } // namespace Leir
 
-#endif // !(WIN32 && MSVC)
+#endif // !(WIN32 && MSVC) && !__EMSCRIPTEN__

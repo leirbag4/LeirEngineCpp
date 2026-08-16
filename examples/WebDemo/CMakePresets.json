@@ -1,0 +1,22 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "emscripten",
+            "displayName": "Emscripten (WebDemo M1)",
+            "description": "Fase 6 M1: standalone raw-RHI WebDemo with Emscripten + emdawnwebgpu",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/emscripten-webdemo",
+            "toolchainFile": "C:/programs_dev/emsdk6/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "emscripten",
+            "configurePreset": "emscripten"
+        }
+    ]
+}

@@ -27,6 +27,7 @@ namespace RHI {
 // Define LEIR_BACKEND before including to pick another backend once available.
 #define LEIR_BACKEND_VULKAN 1
 #define LEIR_BACKEND_D3D12 2
+#define LEIR_BACKEND_WEBGPU 3
 #ifndef LEIR_BACKEND
 #define LEIR_BACKEND LEIR_BACKEND_VULKAN
 #endif

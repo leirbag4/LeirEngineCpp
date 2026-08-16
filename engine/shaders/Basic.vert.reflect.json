@@ -1,0 +1,20 @@
+{
+  "bindings": [
+    {
+      "binding": 0,
+      "count": 1,
+      "name": "ubo",
+      "set": 0,
+      "stage": "Vertex",
+      "type": "UniformBuffer"
+    }
+  ],
+  "pushConstants": [
+    {
+      "offset": 0,
+      "size": 144,
+      "stage": "Vertex"
+    }
+  ],
+  "stage": "Vertex"
+}

@@ -1,0 +1,20 @@
+{
+  "bindings": [
+    {
+      "binding": 0,
+      "count": 4294967295,
+      "name": "textures",
+      "set": 0,
+      "stage": "Fragment",
+      "type": "CombinedImageSampler"
+    }
+  ],
+  "pushConstants": [
+    {
+      "offset": 0,
+      "size": 112,
+      "stage": "Fragment"
+    }
+  ],
+  "stage": "Fragment"
+}

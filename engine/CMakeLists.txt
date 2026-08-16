@@ -18,6 +18,7 @@ add_library(LeirEngine SHARED
     src/Input/Pointer.cpp
     src/Rendering/VulkanDevice.cpp
     src/RHI/VulkanBackend.cpp
+    src/RHI/BackendFactory.cpp
     src/Rendering/Shader.cpp
     src/Rendering/ShaderLayout.cpp
 

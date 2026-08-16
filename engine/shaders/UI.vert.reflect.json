@@ -1,0 +1,11 @@
+{
+  "bindings": [],
+  "pushConstants": [
+    {
+      "offset": 0,
+      "size": 8,
+      "stage": "Vertex"
+    }
+  ],
+  "stage": "Vertex"
+}
