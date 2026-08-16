@@ -68,6 +68,26 @@ cmake --preset=linux-debug
 cmake --build build/linux-debug
 ```
 
+### Web export (WebGPU demos)
+
+One command builds + serves + opens the browser. `scripts/export_web.py` is the
+cross-platform core; the wrappers pick the demo:
+
+- `scripts/export_web_engine.bat` (double-click) → **WebEngineDemo** (full engine),
+  serves on **8001**
+- `scripts/export_web_demo.bat` (double-click) → **WebDemo** (M1 raw RHI), 8000
+- `scripts/export_web_engine.sh` / `export_web_demo.sh` → same on Linux/macOS
+
+Flags: `--demo {demo,engine}`, `--no-serve` (build only), `--port N`,
+`--no-open`, `--emsdk <path>`. Fixed emsdk default: `C:\programs_dev\emsdk6`
+(Windows) / `~/emsdk` (POSIX), overridable via `--emsdk`. The EMSDK *env var*
+is intentionally ignored (a stale one pointed at an old emsdk with Python 3.9
+broke emscripten's ≥3.10 requirement); use `--emsdk` instead.
+
+Windows notes: CreateProcess resolves bare exe names against the *parent*
+PATH, so the script passes an absolute `cmake.exe` path; `EMSDK_PYTHON` is set
+to the emsdk-bundled Python for em++.
+
 ## Notable Design Decisions
 
 - All public symbols use `LEIR_API` macro (`__declspec` on Windows, `visibility("default")` on Unix)
