@@ -351,7 +351,7 @@ Fase 0-1: shaders Slang (hecho) → [RHI mínima + Vulkan] ✅ → [RHI mínima 
           del depth → fondo magenta del viewport; se añadió `RHIClearValue::isDepth`).
         - Crash de arranque (`vector Line 1931`): `CreateSyncObjects` ya no toca
           `m_RenderFinishedSemaphores` (los crea `CreateSwapchain`, que corre antes en el ctor).
-- [ ] **Fase 2b — Backend D3D12** (v2, sobre la misma RHI mínima): implementar la interfaz con
+- [x] **Fase 2b — Backend D3D12** (v2, sobre la misma RHI mínima): implementar la interfaz con
       D3D12; los shaders ya están en DXIL desde Fase 0/1. `LEIR_BACKEND=d3d12` corre igual.
       **Avance 2026-08-12**: `D3D12Backend` implementa la RHI mínima completa (device, buffers,
       textures 2D + staging con row-pitch alineado, samplers, descriptor sets sobre heaps
@@ -468,8 +468,9 @@ GLM pura y front-face **CCW en todos los backends**.
       Implementado con **libslang dinámica** del SDK (no la `SLANG_LIB_TYPE=STATIC` original —
       desviación documentada en el "Estado Plan A" abajo).
       **Plan de acción detallado → "Plan A" abajo (2026-08-14).**
-- [ ] **Fase 5** — **Backend WebGPU nativo** (wgpu-native) en el editor como backend de primera
-      clase (igual que Vulkan/D3D12), y después export web con Emscripten.
+- [x] **Fase 5** — **Backend WebGPU nativo** (wgpu-native) en el editor como backend de primera
+      clase (igual que Vulkan/D3D12), y después export web con Emscripten. ✅ (2026-08-15) — ver
+      "Fase 5 (WebGPU)" abajo + `TODO_WEB_EXPORT.md` (export web M0→M3 + M5 + M6).
       **Decisión 2026-08-15 (reemplaza el Plan C anterior)**: WebGPU-only, sin fallback WebGL2
       (WebGPU es cross-browser desde enero 2026: Chrome/Edge 113+, Firefox 141+, Safari 26; la
       cola restante ~10-18% — Firefox Linux/Android, iPhones pre-A12, WebViews sociales — se

@@ -1,8 +1,10 @@
 # LeirEngine — TODO List
 
 > **Estado actual:** Core, Renderer (RHI multi-backend: Vulkan + D3D12 + WebGPU), Physics (Jolt),
-> UI system propio y Editor base están implementados. Pendiente: Audio (SoLoud), Serialización &
-> Assets, Animaciones, Documentación, build WSL/Linux y MoltenVK. Detalle de lo ya hecho en cada
+> UI system propio y Editor base están implementados. **Export web (Fase 6)**: M0→M3 + M5 + M6 ✅
+> (motor completo — render + física + UI + input — en navegador por WebGPU; tag `v0.1.0-alpha`).
+> Pendiente: **Audio (M4 — plan en `TODO_AUDIO_SYSTEM.md`)**, Serialización & Assets, Animaciones,
+> Documentación, build WSL/Linux local y MoltenVK. Detalle de lo ya hecho en cada
 > fase abajo. El renderer pasó de un backend Vulkan monolítico a una **RHI multi-backend**
 > (`RenderBackend` → `VulkanBackend` / `D3D12Backend` / `WebGPUBackend`) con comandos por-frame
 > (`GCommandGraph`), texturas **bindless** y layouts derivados de **reflection sidecars** — ver
@@ -48,7 +50,7 @@
 - [x] `Light` component (directional, point, spot)
 - [x] Sprite 2D overlay system (pipeline, SpriteRenderer, SpriteSheet, push constants con uvRect)
 - [x] **RHI multi-backend** (`RenderBackend`): `VulkanBackend` + `D3D12Backend` + `WebGPUBackend` (wgpu-native v29, backend DX12 forzado en Windows) — render parity entre los 3, selección via `Settings.graphics.backend` ("vulkan"/"d3d12"/"webgpu") + `BackendFactory::Create`. Ver `TODO_RHI_SLANG.md` (Plan B fases 1-4 + Fase 5 WebGPU)
-- [ ] Web export (Emscripten): el mismo `WebGPUBackend.cpp` compila contra `webgpu.h` de Emscripten (canvas vs HWND, aislado por `#ifdef`) — ver `TODO_RHI_SLANG.md` "Fase 6"
+- [x] Web export (Emscripten): el mismo `WebGPUBackend.cpp` compila contra `webgpu.h` de Emscripten (canvas vs HWND, aislado por `#ifdef`) — ver `TODO_RHI_SLANG.md` "Fase 6" y `TODO_WEB_EXPORT.md` (Fase 6 completa salvo M4 audio)
 - [ ] MoltenVK integration para macOS/iOS
 - [x] Limpiar recursos en teardown: `VUID-vkDestroyDevice-device-05137` (recursos no destruidos antes de `vkDestroyDevice`). Verificado: 2 corridas limpias con validation layers (dock ops + resize de ventana/swapchain, cerrar app → sin VUID). Fixes: `Material::RecreatePipeline` destruye el `m_UBOSetLayout` viejo antes de recrear (fuga latente de `VkDescriptorSetLayout`); el editor ahora libera todos los subtrees de contenido del dock (`DeleteUiSubtree`) en `OnShutdown` (antes `hierarchy`/`inspector`/paneles debug quedaban huérfanos y nunca se borraban).
 
@@ -63,7 +65,7 @@
 - [x] Configurar Jolt multithreading
 - [x] Configuración por capas (NON_MOVING/MOVING, tablas BroadPhase/ObjectLayer)
 
-## Fase 4 — Audio (SoLoud)
+## Fase 4 — Audio (SoLoud) — plan completo en `TODO_AUDIO_SYSTEM.md` (M4 web, difirido)
 - [ ] `AudioSystem` wrapper
 - [ ] `AudioSource` component (3D position, pitch, volume, looping, WAV/OGG)
 - [ ] `AudioListener` component (atado a Camera)
@@ -78,7 +80,7 @@
 - [x] `UIImage` (textura)
 - [x] `UIPanel` (contenedor)
 - [x] `UIScrollView`
-- [x] `UIScrollbar` (scrollbars en ScrollView — ver `TODO_UI_SCROLLBARS.md`; UITextArea scroll offset pendiente en `TODO_UI_INPUT.md` F3.1/F3.3)
+- [x] `UIScrollbar` (scrollbars en ScrollView — ver `TODO_UI_SCROLLBARS.md`; UITextArea scroll offset completo en `TODO_UI_INPUT.md` F3.1/F3.3 + `TODO_UI_TEXTAREA.md`)
 - [x] Bug ScrollView arreglado (track del scrollbar no cubría el alto + drag/thumb/rueda invertidos): `SyncScrollbar` con coordenadas absolutas + contenido en `cr - scrollOffset` + drag touch-style — ver `TODO_UI_SCROLLBARS.md`
 - [x] Bug consola: flash al resize de docksplitters (rebuild de líneas corría tras el layout → 1 frame culled) — `ConsolePanel::Refresh()` movido antes de `UpdateLayout()`; log "Viewport Resized" debounced (0 msgs por drag, 1 al soltar) — ver `TODO_UI_CONSOLE.md`
 - [x] `UITextInput` (caret, click-to-position, drag selection, double-click word, Ctrl+A, Ctrl+arrow)

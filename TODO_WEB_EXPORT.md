@@ -1,9 +1,10 @@
 # TODO_WEB_EXPORT.md — Fase 6: Export Web (Emscripten + WebGPU en navegador)
 
-> Estado: **EN CURSO** — M0 ✅ (2026-08-15), **M1 ✅ verificado en navegador
-> (Firefox 153 + Chrome + Opera, 2026-08-15)**, **M2 ✅ verificado en navegador
-> (Firefox, 2026-08-16)**, **M3 ✅ física Jolt verificada en navegador
-> (2026-08-17)**, pendiente M4+.
+> Estado: **EN CURSO** — M0 ✅, **M1 ✅** (Firefox 153 + Chrome + Opera,
+> 2026-08-15), **M2 ✅** (Firefox, 2026-08-16), **M3 ✅ física Jolt**
+> (2026-08-17), **M5 ✅ CI emscripten** (2026-08-17), **M6 ✅ docs + tag
+> `v0.1.0-alpha`** (2026-08-17). **Pendiente: M4 — audio** — ver
+> `TODO_AUDIO_SYSTEM.md` (plan completo, esperando decisiones del usuario).
 
 ## Objetivo
 
@@ -105,8 +106,8 @@ Decisiones de alcance (usuario, 2026-08-15):
 
 ## Plan de fases
 
-- [ ] **M0 — Toolchain** — emsdk 6.0.6 clon fresco + install/activate + validar ports. ✅ (2026-08-15)
-- [ ] **M1 — WebGPUBackend web + render mínimo** (de-risking)
+- [x] **M0 — Toolchain** — emsdk 6.0.6 clon fresco + install/activate + validar ports. ✅ (2026-08-15)
+- [x] **M1 — WebGPUBackend web + render mínimo** (de-risking)
   - [x] Vendor + parchear emdawnwebgpu (arrays en bind groups) — `dependencies/emdawnwebgpu/`
   - [x] `BackendFactory` → `RHI/BackendFactory.cpp` neutro
   - [x] Split `#if __EMSCRIPTEN__` en `WebGPUBackend.cpp` (device vía WaitAny+ASYNCIFY,
@@ -175,7 +176,7 @@ Decisiones de alcance (usuario, 2026-08-15):
   **Firefox 153 / Chrome / Opera** renderizan el **cubo checker rotando en 3D** con
   cámara auto-orbit. Log de consola limpio (solo `favicon.ico` 404, inocuo). Artefactos
   finales: `.wasm` 10.39 MB, `.js` 426 KB, `.data` 15,209 B.
-- [ ] **M2 — Motor completo a wasm** (static lib, GLFW port, CoreApplication loop, Settings no-op, input)
+- [x] **M2 — Motor completo a wasm** (static lib, GLFW port, CoreApplication loop, Settings no-op, input)
   - [x] **Fase A** — multi-textura web: per-texture bind groups + push-slot pool (ver "Estado M2")
   - [x] **Fase B** — `LeirEngineCore` static lib web-safe (`engine/CMakeLists.web.txt`, 45 sources) + `PhysicsWorld.web.cpp`
   - [x] **Fase C** — `CoreApplication::Run()` → `emscripten_set_main_loop_arg` (Frame/FrameThunk)
@@ -184,8 +185,8 @@ Decisiones de alcance (usuario, 2026-08-15):
   - [x] **Regresión M1** — rebuild WebDemo tras el rename `Basic.frag.web.wgsl` ✅
 - [x] **M3 — Física** (Jolt wasm + JobSystemSingleThreaded) — ✅ verificado en navegador (2026-08-17)
 - [ ] **M4 — Fase 4 Audio** (desktop primero, luego wasm WebAudio)
-- [ ] **M5 — CI** (job ubuntu setup-emsdk 6.0.6, compile-only)
-- [ ] **M6 — Docs + commit + tag**
+- [x] **M5 — CI** (job ubuntu setup-emsdk 6.0.6, compile-only) — ✅ job `Emscripten` en `build.yml`, verde en el run #32034689253 (2026-08-17)
+- [x] **M6 — Docs + commit + tag** — ✅ `v0.1.0-alpha` (2026-08-17)
 
 ## Verificación M1 en navegador — bugs encontrados y fixes (2026-08-15)
 
@@ -381,3 +382,15 @@ RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU
 - SoLoud bajo Emscripten (M4) — ver `TODO_AUDIO_SYSTEM.md` (subsistema de audio
   completo, planificado 2026-08-17, pendiente de implementar).
 - Tamaño wasm + `ALLOW_MEMORY_GROWTH` + preload de fuentes/audio.
+
+## Estado M6 — docs + commit + tag (2026-08-17)
+
+- Checkboxes del plan M0/M1/M2/M3/M5 marcados ✅ (M4 sigue pendiente).
+- Docs actualizadas: `TODO_WEB_EXPORT.md` (este), `TODO.md`, `TODO_RHI_SLANG.md`
+  (Fase 2b/Fase 5 ✅), `TODO_UI_INPUT.md` ya estaba ✅, y **`TODO_AUDIO_SYSTEM.md`**
+  (plan M4 completo, creado 2026-08-17).
+- **Tag `v0.1.0-alpha`** — primer corte estable de la Fase 6 / export web
+  (M0→M3 + M5 + M6). El motor completo (render + física + UI + input) corre en
+  navegador por WebGPU; falta M4 (audio).
+- CI: docs-only → commit con `[skip ci]` (cualquier `[skip ci]` en un push saltea
+  el push completo; el M3 se validó con un commit vacío sin marcador).
