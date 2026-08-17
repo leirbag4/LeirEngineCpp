@@ -1,10 +1,11 @@
 # TODO_WEB_EXPORT.md — Fase 6: Export Web (Emscripten + WebGPU en navegador)
 
-> Estado: **EN CURSO** — M0 ✅, **M1 ✅** (Firefox 153 + Chrome + Opera,
+> Estado: **COMPLETO** — M0 ✅, **M1 ✅** (Firefox 153 + Chrome + Opera,
 > 2026-08-15), **M2 ✅** (Firefox, 2026-08-16), **M3 ✅ física Jolt**
-> (2026-08-17), **M5 ✅ CI emscripten** (2026-08-17), **M6 ✅ docs + tag
-> `v0.1.0-alpha`** (2026-08-17). **Pendiente: M4 — audio** — ver
-> `TODO_AUDIO_SYSTEM.md` (plan completo, esperando decisiones del usuario).
+> (2026-08-17), **M4 ✅ audio SoLoud→WebAudio** (2026-08-17), **M5 ✅ CI
+> emscripten** (2026-08-17), **M6 ✅ docs + tag `v0.1.0-alpha`** (2026-08-17).
+> Todos los milestones del port completo (rendering + física + audio + UI + input)
+> cerrados y verificados en navegador.
 
 ## Objetivo
 
@@ -184,7 +185,7 @@ Decisiones de alcance (usuario, 2026-08-15):
   - [x] **Verificar render en navegador** — ✅ Firefox (2026-08-16), 2 cubos checker + cámara órbita + UI + fuente Roboto
   - [x] **Regresión M1** — rebuild WebDemo tras el rename `Basic.frag.web.wgsl` ✅
 - [x] **M3 — Física** (Jolt wasm + JobSystemSingleThreaded) — ✅ verificado en navegador (2026-08-17)
-- [ ] **M4 — Fase 4 Audio** (desktop primero, luego wasm WebAudio)
+- [x] **M4 — Fase 4 Audio** (desktop primero, luego wasm WebAudio) — ✅ SoLoud→WebAudio completo (ver `TODO_AUDIO_SYSTEM.md`), música loop + beep 2D + pop 3D verificados por el usuario en Firefox (2026-08-17). Backend web = miniaudio `ma_backend_webaudio`; 3 exports JS necesarios (`_malloc/_free`, `HEAP*`, `ccall`)
 - [x] **M5 — CI** (job ubuntu setup-emsdk 6.0.6, compile-only) — ✅ job `Emscripten` en `build.yml`, verde en el run #32034689253 (2026-08-17)
 - [x] **M6 — Docs + commit + tag** — ✅ `v0.1.0-alpha` (2026-08-17)
 
@@ -379,18 +380,21 @@ RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU
   M1 degradando a recurso único en web**; el UI real (M2) deberá decidir entre variantes
   `*.web.wgsl` por shader o un pipeline UI sin non-uniform indexing.
 - `contrib.glfw3` cobertura de `glfwGetMonitorWorkarea`/`glfwCreateStandardCursor` (M2).
-- SoLoud bajo Emscripten (M4) — ver `TODO_AUDIO_SYSTEM.md` (subsistema de audio
-  completo, planificado 2026-08-17, pendiente de implementar).
-- Tamaño wasm + `ALLOW_MEMORY_GROWTH` + preload de fuentes/audio.
+- SoLoud bajo Emscripten (M4) — ✅ resuelto 2026-08-17: backend `miniaudio`
+  (`ma_backend_webaudio`), ver `TODO_AUDIO_SYSTEM.md`. Tres exports del módulo JS
+  necesarios (miniaudio EM_ASM accede a `Module.*`): `_malloc/_free`
+  (`EXPORTED_FUNCTIONS`), `HEAP*` y `ccall` (`EXPORTED_RUNTIME_METHODS`).
+- Tamaño wasm + `ALLOW_MEMORY_GROWTH` + preload de fuentes/audio (con M4 el
+  `.data` creció a ~493 KB con los 3 assets de `assets/audio/`).
 
 ## Estado M6 — docs + commit + tag (2026-08-17)
 
-- Checkboxes del plan M0/M1/M2/M3/M5 marcados ✅ (M4 sigue pendiente).
+- Checkboxes del plan M0/M1/M2/M3/M4/M5 marcados ✅ (todos).
 - Docs actualizadas: `TODO_WEB_EXPORT.md` (este), `TODO.md`, `TODO_RHI_SLANG.md`
   (Fase 2b/Fase 5 ✅), `TODO_UI_INPUT.md` ya estaba ✅, y **`TODO_AUDIO_SYSTEM.md`**
-  (plan M4 completo, creado 2026-08-17).
+  (plan M4 completo, cerrado 2026-08-17).
 - **Tag `v0.1.0-alpha`** — primer corte estable de la Fase 6 / export web
-  (M0→M3 + M5 + M6). El motor completo (render + física + UI + input) corre en
-  navegador por WebGPU; falta M4 (audio).
+  (M0→M3 + M5 + M6). El motor completo (render + física + audio + UI + input) corre
+  en navegador por WebGPU; M4 (audio) quedó cerrado después del tag.
 - CI: docs-only → commit con `[skip ci]` (cualquier `[skip ci]` en un push saltea
   el push completo; el M3 se validó con un commit vacío sin marcador).

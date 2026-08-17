@@ -17,6 +17,10 @@
 #include <LeirEngine/Physics/PhysicsWorld.h>
 #include <LeirEngine/Physics/RigidBody.h>
 #include <LeirEngine/Physics/Collider.h>
+#include <LeirEngine/Audio/AudioEngine.h>
+#include <LeirEngine/Audio/SoundPlayer.h>
+#include <LeirEngine/Components/AudioListener.h>
+#include <LeirEngine/Input/Mouse.h>
 #include <LeirEngine/UI/UICanvas.h>
 #include <LeirEngine/UI/UIPanel.h>
 #include <LeirEngine/UI/UILabel.h>
@@ -122,10 +126,16 @@ protected:
 
         Leir::PhysicsWorld::GetInstance().Init();
 
+        // Audio (Fase 6 / M4). On web this creates the (suspended) WebAudio
+        // context; the device starts on the first user gesture (click) via
+        // SoundPlayer's lazy WakeUp.
+        Leir::AudioEngine::GetInstance().Init();
+
         auto* cameraObj = scene.CreateObject3D("Camera");
         auto& camera = cameraObj->AddComponent<Leir::Camera>();
         camera.SetPerspective(60.0f, (float)m_ViewportW / (float)m_ViewportH, 0.1f, 100.0f);
         camera.SetPrimary(true);
+        cameraObj->AddComponent<Leir::AudioListener>();
         m_CameraObj = cameraObj;
 
         auto* lightObj = scene.CreateObject3D("Light");
@@ -188,7 +198,7 @@ protected:
 
         auto* title = new Leir::UILabel();
         title->SetName("Title");
-        title->SetText("LeirEngine Web - Fase 6 / M3 (Scene + Camera + Light + Jolt Physics + UI + Font)");
+        title->SetText("LeirEngine Web - Fase 6 / M4 (Audio + Jolt Physics + UI + Font) - click para sonido");
         title->SetFont(m_FontSmall.get());
         title->SetColor({0.55f, 0.85f, 0.65f, 1.0f});
         title->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -205,6 +215,24 @@ protected:
     {
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
+
+        Leir::AudioEngine::GetInstance().Update(deltaTime);
+
+        // Audio starts on the first user gesture (autoplay policy): first click
+        // starts the (looping) music, every click plays a beep. The 3D "pop" is
+        // spatialized at CubeA's position to demo the listener/3D path.
+        if (Leir::Mouse::WasPressed(Leir::PointerButton::Primary)) {
+            Leir::AudioEngine::GetInstance().WakeUp();
+            if (!m_MusicStarted) {
+                m_MusicStarted = true;
+                Leir::SoundPlayer::PlayMusic(1, "/assets/audio/music_loop.ogg");
+            }
+            Leir::SoundPlayer::Play("/assets/audio/beep.wav");
+            if (m_CubeA) {
+                Leir::SoundPlayer::Play(2, false, 0.8f, "/assets/audio/pop.wav",
+                    m_CubeA->GetTransform().GetWorldPosition());
+            }
+        }
 
         m_OrbitYaw += deltaTime * 20.0f;
         UpdateCamera();
@@ -254,6 +282,7 @@ protected:
         auto& sm = Leir::SceneManager::GetInstance();
         sm.DestroyScene("Web Scene");
         sm.SetActiveScene(nullptr);
+        Leir::AudioEngine::GetInstance().Shutdown();
     }
 
     void OnWindowResized(int width, int height) override
@@ -333,6 +362,7 @@ private:
     uint32_t m_ViewportH = 0;
     float m_OrbitYaw = 0.0f;
     float m_OrbitPitch = -25.0f;
+    bool m_MusicStarted = false;
 };
 
 int main()

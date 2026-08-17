@@ -57,7 +57,15 @@ FetchContent_Declare(jolt
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR Build
 )
+# SoLoud (Fase 6 / M4) — same pin as the desktop engine; the `soloud` static
+# lib is created by cmake/AudioTooling.cmake (MiniAudio -> WebAudio backend on
+# web, built with -std=gnu++20 because miniaudio forbids strict -std=c*).
+FetchContent_Declare(soloud
+    GIT_REPOSITORY https://github.com/jarikomppa/soloud.git
+    GIT_TAG e82fd32c
+)
 FetchContent_MakeAvailable(jolt)
+FetchContent_MakeAvailable(soloud)
 FetchContent_MakeAvailable(nlohmann_json)
 FetchContent_GetProperties(glm)
 if(NOT glm_POPULATED)
@@ -68,6 +76,7 @@ if(NOT stb_POPULATED)
     FetchContent_Populate(stb)
 endif()
 
+include(../../cmake/AudioTooling.cmake)
 include(../../engine/CMakeLists.web.txt)
 
 # (Fase D) demo executable: links LeirEngineCore (full web-safe engine subset),
@@ -85,8 +94,21 @@ target_link_options(WebEngineDemo PRIVATE
     -sASYNCIFY=1
     -sALLOW_MEMORY_GROWTH=1
     -sSTACK_SIZE=16777216
+    # Export malloc/free to the JS Module (Module['_malloc']) so miniaudio's
+    # WebAudio backend can allocate its JS<->C interop buffer (EM_ASM calls
+    # Module._malloc / Module._free). Only symbols listed in EXPORTED_FUNCTIONS
+    # get the Module[name] copy; the auto-generated exports (KEEPALIVE,
+    # emwgpuOn*, dynCall, stack) are preserved separately by the linker.
+    -sEXPORTED_FUNCTIONS=_malloc,_free,_main
+    # The same EM_ASM block builds the interop view as
+    # new Float32Array(Module.HEAPF32.buffer, ...) and the ScriptProcessorNode
+    # callback calls the C callback via ccall(...) — the default
+    # EXPORTED_RUNTIME_METHODS is empty, so HEAP* and ccall must be exported
+    # explicitly to be reachable as Module.HEAPF32 / the ccall helper.
+    -sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAP8,HEAPU8,HEAP16,HEAPU16,HEAP32,HEAPU32,HEAPF64,ccall
     --use-port=${LEIR_DEMO_ROOT}/dependencies/emdawnwebgpu/emdawnwebgpu.port.py
     --use-port=contrib.glfw3
     "--preload-file=${LEIR_DEMO_ROOT}/engine/shaders@/shaders"
     "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
+    "--preload-file=${LEIR_DEMO_ROOT}/assets/audio@/assets/audio"
 )

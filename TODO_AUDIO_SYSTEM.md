@@ -1,9 +1,13 @@
 # TODO_AUDIO_SYSTEM.md — Fase 4: Audio (SoLoud → WebAudio)
 
-> Estado: **PENDIENTE / DIFERIDO** (planificado 2026-08-17, sin fecha). El motor
-> NO tiene subsistema de audio: SoLoud está fetcheado y linkeado pero **no se usa
-> en ningún lado**. Nunca se reprodujo música ni SFX en el proyecto. Este doc es el
-> plan completo para implementarlo (desktop + web).
+> Estado: **COMPLETO** (2026-08-17, verificado en Firefox por el usuario:
+> música loop + beep 2D + pop 3D con click). Diseño final cerrado con el usuario
+> (audio 3D completo, `SoundPlayer` estático con métodos cortos, `volume` como
+> nombre unificado, 8 overloads de `Play` con vec3). Implementado: target
+> `soloud` propio + `IAudioBackend`/`AudioEngine`/`AudioClip`/`AudioSource`/
+> `AudioListener`/`SoundPlayer` + demo en WebEngineDemo + assets WAV/OGG CC0 +
+> builds desktop y web verdes. Nota: la demo web necesitó exportar 3 símbolos de
+> miniaudio al módulo JS de Emscripten (ver "Gotchas" — `_malloc`/`HEAPF32`/`ccall`).
 
 ## Objetivo
 
@@ -93,23 +97,46 @@ la jerarquía de AGENTS.md ya promete.
 - No existe **ninguna** abstracción propia de audio (como sí la hay para RHI y
   física).
 
-## Arquitectura propuesta (patrón RHI/Physics, biblioteca aislada)
+## Diseño final (cerrado con el usuario, 2026-08-17)
+
+### Tabla de nombres por motor (Unity / Unreal / Leir)
+
+| Concepto | Unity | Unreal | **Leir (nuestro)** |
+|---|---|---|---|
+| Singleton de audio | `AudioSettings` / `AudioMixer` | `FAudioDevice` / `UAudioSubsystem` | `AudioEngine` |
+| Clip / asset | `AudioClip` | `USoundBase` (`USoundWave`/`USoundCue`) | `AudioClip` |
+| Emisor 3D (componente) | `AudioSource` | `UAudioComponent` | `AudioSource` |
+| Oyente | `AudioListener` | (listener del player) | `AudioListener` |
+| Quick-play estático | `AudioSource.PlayOneShot(clip)` | `UGameplayStatics::PlaySound2D`/`PlaySoundAtLocation` | `SoundPlayer` (estáticos) |
+| Handle por fuente | `AudioSource` | `FActiveSound` | `SoundId` (uint32 opaco) |
+| Estado | `isPlaying` | `EAudioComponentPlayState` (`Playing/Stopped/Paused/Loading`) | `SoundState` |
+| Volumen | `volume` | `SetVolumeMultiplier` | `SetVolume` |
+| Pitch | `pitch` | `SetPitchMultiplier` | `SetPitch` |
+| Loop | `loop` | `bLooping` | `SetLooping` / `loop` |
+| Seek / tiempo | `AudioSource.time` | (limitado) | `Seek(seconds)` / `GetTime` |
+| Posición 3D | `transform.position` | `PlaySoundAtLocation(Location)` | `Play(..., pos)` / `SetPosition(id, pos)` |
+| Falloff 3D | `minDistance`/`maxDistance` | `USoundAttenuation` | `SetMinDistance`/`SetMaxDistance` |
+| Mute/pausa global | `AudioListener.pause` | `FAudioDevice` | `SetMasterVolume` / `PauseAll` |
+
+### Arquitectura (patrón RHI/Physics, biblioteca aislada)
 
 Regla: **los headers públicos NUNCA exponen tipos de SoLoud** (como
-`PhysicsConversions.h` para Jolt). Todo handle = `uint32_t`. El usuario del motor
-usa **métodos propios**: `.Play()`, `.Stop()`, `.Pause()`, `.Resume()`, `.Seek()`,
-`.SetVolume()`, `.SetPitch()`, `.SetLooping()`, etc.
+`PhysicsConversions.h` para Jolt). Todo handle = `SoundId`/`ClipId` (`uint32_t`).
+Las posiciones usan `Leir::Vector3` (el `Transform` del engine usa esos tipos, no glm).
 
 ```
 engine/include/LeirEngine/Audio/
+├── AudioTypes.h      → SoundId, ClipId, SoundState
 ├── AudioBackend.h    → interfaz IAudioBackend (LEIR_API)
-├── AudioEngine.h     → singleton (como PhysicsWorld/SceneManager)
-└── AudioClip.h       → asset de audio (datos crudos, formato-neutral)
+├── AudioEngine.h     → singleton + caché de clips (patrón PhysicsWorld)
+├── AudioClip.h       → asset de audio (path + duration + ClipId)
+└── SoundPlayer.h     → API estática rápida (patrón XConsole/Keyboard)
 
 engine/src/Audio/
-├── AudioBackend.cpp
-├── SoLoudBackend.cpp → implementación real (SoLoud::Soloud + Wav/WavStream)
-└── AudioEngine.cpp
+├── AudioEngine.cpp
+├── AudioClip.cpp
+├── SoLoudBackend.cpp → implementación real (SoLoud::Soloud + Wav)
+└── SoundPlayer.cpp
 
 engine/include/LeirEngine/Components/
 ├── AudioSource.h
@@ -118,76 +145,175 @@ engine/src/Components/AudioSource.cpp
 engine/src/Components/AudioListener.cpp
 ```
 
-### Interfaz propuesta — IAudioBackend (métodos propios del motor)
+### Tipos compartidos (`AudioTypes.h`)
 ```cpp
-// Todos los handles son uint32_t opacos. Sin tipos SoLoud en público.
-class IAudioBackend {
-public:
-    virtual ~IAudioBackend() = default;
-    virtual bool Init() = 0;                  // abre el device de salida
-    virtual void Shutdown() = 0;              // cierra device, libera todo
-    virtual void Update(float dt) = 0;        // sync 3D, procesos de fondo
+using SoundId = uint32_t;                    // id opaco de fuente/reproductor
+inline constexpr SoundId kInvalidSoundId = 0;
+using ClipId = uint32_t;                     // handle de clip (backend)
 
-    // Clips (assets)
-    virtual uint32_t LoadClip(const std::string& path) = 0;   // devuelve handle
-    virtual void UnloadClip(uint32_t clip) = 0;
-
-    // Sources (instancias reproducibles)
-    virtual uint32_t CreateSource() = 0;      // source vacío
-    virtual void DestroySource(uint32_t src) = 0;
-    virtual void Play(uint32_t src, uint32_t clip) = 0;   // clip opcional
-    virtual void Stop(uint32_t src) = 0;
-    virtual void Pause(uint32_t src) = 0;
-    virtual void Resume(uint32_t src) = 0;
-    virtual void Seek(uint32_t src, double seconds) = 0;
-    virtual void SetLooping(uint32_t src, bool loop) = 0;
-    virtual void SetVolume(uint32_t src, float v) = 0;
-    virtual void SetPitch(uint32_t src, float pitch) = 0;
-    virtual void SetSource3D(uint32_t src, float x, float y, float z) = 0;
-
-    // Mezcla global
-    virtual void SetMasterVolume(float v) = 0;
-    virtual float GetMasterVolume() const = 0;
-
-    // Listener (audio 3D)
-    virtual void SetListener3D(const glm::vec3& pos,
-                               const glm::vec3& fwd,
-                               const glm::vec3& up) = 0;
-    virtual bool Supports3D() const = 0;
+enum class SoundState : uint8_t {
+    Stopped = 0,   // no reproduce
+    Playing = 1,
+    Paused = 2,
+    Loading = 3,   // clip decodificando
 };
 ```
 
-### SoLoudBackend (implementación)
-- Mapea la interfaz a `SoLoud::Soloud` + `SoLoud::Wav`/`WavStream` + `SoLoud::handle`.
-- En **desktop**: backend de salida WASAPI/WinMM/DSound (SoLoud lo elige solo).
-- En **web (`__EMSCRIPTEN__`)**: backend `miniaudio` → WebAudio (`ma_backend_webaudio`).
-- `AudioSource::OnDestroy` libera su handle; `AudioEngine::Shutdown` limpia todo.
+### IAudioBackend (`AudioBackend.h`) — método por método propios del motor
+```cpp
+class IAudioBackend {
+    virtual bool Init() = 0;                       // abre el device (no en web)
+    virtual void Shutdown() = 0;
+    virtual void Update(float dt) = 0;             // faders + update3dAudio
+    virtual bool WakeUp() = 0;                     // (web) arranca device en 1er gesto
+
+    virtual ClipId LoadClip(const std::string& path) = 0;
+    virtual void UnloadClip(ClipId clip) = 0;
+    virtual float GetClipDuration(ClipId clip) const = 0;
+
+    virtual SoundId CreateSource() = 0;
+    virtual void DestroySource(SoundId source) = 0;
+    virtual void Play(SoundId source, ClipId clip) = 0;
+    virtual void Stop(SoundId source) = 0;
+    virtual void Pause(SoundId source) = 0;
+    virtual void Resume(SoundId source) = 0;
+    virtual void Seek(SoundId source, double seconds) = 0;
+    virtual void SetLooping(SoundId source, bool loop) = 0;
+    virtual void SetVolume(SoundId source, float volume) = 0;
+    virtual void SetPitch(SoundId source, float pitch) = 0;
+    virtual void FadeVolume(SoundId source, float targetVolume, float seconds) = 0;
+
+    virtual void SetSource3D(SoundId source, const Vector3& position) = 0;
+    virtual void SetListener3D(const Vector3& position, const Vector3& forward, const Vector3& up) = 0;
+    virtual bool Supports3D() const = 0;
+
+    virtual SoundState GetState(SoundId source) const = 0;
+    virtual double GetTime(SoundId source) const = 0;
+
+    virtual void SetMasterVolume(float volume) = 0;
+    virtual float GetMasterVolume() const = 0;
+};
+```
+
+### SoLoudBackend
+- Mapea a `SoLoud::Soloud` + `SoLoud::Wav` (decodifica completo en memoria; los
+  assets del demo son chicos; `WavStream` queda para música larga futura).
+- Un `SoundId` = una voz: `Play` = `stop()` previo + `play()`/`play3d()` + `setLooping`,
+  `Pause/Resume` = `setPause`, `Stop` = `stop`, `Seek` = `seek`, `GetTime` = `getStreamTime`.
+- 3D: `play3d()` cuando el source es espacial; `set3dSourcePosition` para moverlo;
+  `Update()` llama `soloud.update()` (faders) + `soloud.update3dAudio()`.
+- Listener: `set3dListenerParameters(pos, at=pos+fwd, up)`.
+- **Web**: `Init()` NO llama `soloud.init()` (el AudioContext nace suspendido);
+  `WakeUp()` lo inicia en el primer gesto. Desktop: `Init()` inicia al toque, `WakeUp()` no-op.
+- Master volume: `setGlobalVolume`. Fades: `setFadeVolume`.
 
 ### AudioEngine (singleton)
 ```cpp
 class AudioEngine {
-public:
     static AudioEngine& GetInstance();
-    void Init();                // crea el IAudioBackend según plataforma
+    void Init();                 // crea el IAudioBackend por plataforma
     void Shutdown();
-    void Update(float dt);      // lo llama Scene::OnUpdate
+    void Update(float dt);       // lo llama el app/demo (o Scene::OnUpdate)
+    void WakeUp();               // (web) primer gesto del usuario
+    bool IsInitialized() const;
     IAudioBackend* GetBackend();
+    ClipId GetOrLoadClip(const std::string& path);   // caché: decodifica 1 vez
+    std::shared_ptr<AudioClip> GetClipAsset(const std::string& path);
+    void UnloadAllClips();
 };
 ```
 
-### Componentes
-- **AudioSource**: `Play()/Stop()/Pause()/Resume()/Seek()/SetLooping()/SetVolume()/
-  SetPitch()/SetClip()`, flag `Spatial3D` → posición desde el `Transform` sincronizada
-  en `Scene::OnUpdate`. Destructor/`OnDestroy` → `DestroySource`.
-- **AudioListener**: pos/orientación (mundo) → `SetListener3D`. La cámara primaria
-  alimenta al listener (o un AudioListener explícito en la escena).
+### AudioClip (asset)
+`AudioClip::Load(path)` → `shared_ptr<AudioClip>` (con caché en AudioEngine).
+`GetPath()`, `GetDuration()` (segundos), `GetClipId()`.
 
-## Assets (plan)
-- Commitear 2 archivos **CC0** en `assets/audio/` (como `assets/Roboto-Regular.ttf`):
-  un SFX corto (WAV, p. ej. beep/impacto) + una música corta (OGG loop).
-- Generar con ffmpeg o bajar de fuente libre. SoLoud carga WAV/OGG (stb_vorbis
-  incluido). Música larga → `WavStream` (streaming).
-- Web: `--preload-file assets@/assets`.
+### AudioSource (componente, estilo Unity)
+```cpp
+SetClip(shared_ptr<AudioClip>) / SetClipPath(path) / GetClip()
+Play(); Stop(); Pause(); Resume(); Seek(double seconds)
+SetLooping(bool) / IsLooping();  SetVolume(float volume) / GetVolume()
+SetPitch(float) / GetPitch();    SetPlayOnAwake(bool) / GetPlayOnAwake()
+SetSpatial3D(bool) / IsSpatial3D()
+SetMinDistance(float) / SetMaxDistance(float)      // falloff 3D
+IsPlaying(); GetState() → SoundState;  GetTime() / GetDuration()
+// OnAwake → CreateSource (+Play si playOnAwake en OnStart)
+// OnUpdate → sync pos 3D desde el Transform si Spatial3D
+// OnDestroy → DestroySource
+```
+
+### AudioListener (componente)
+`OnUpdate` → `SetListener3D(GetWorldPosition(), GetForward(), GetUp())`.
+
+### SoundPlayer (API estática rápida, patrón XConsole/Keyboard)
+Overloads estilo C#: cortas para lo común, largas solo cuando se necesita. `SoundId`
+convertible desde int (`Play(1, "x")`). Auto-ids de `Play(path)` salen de un contador
+monotónico con base alta (`kAutoIdBase`) → nunca chocan con ids de usuario chicos.
+**`volume` como nombre unificado en toda la API** (decisión del usuario). Música =
+**un canal activo a la vez**; `StopMusic()`/`PauseMusic()` sin id actúan sobre la actual.
+
+```cpp
+// --- Reproducir SFX ---
+static SoundId Play(std::string_view path);                            // 2D one-shot → SoundId auto
+static SoundId Play(std::string_view path, const Vector3& pos);        // 3D
+static SoundId Play(SoundId id, std::string_view path);
+static SoundId Play(SoundId id, std::string_view path, const Vector3& pos);
+static SoundId Play(SoundId id, bool loop, std::string_view path);
+static SoundId Play(SoundId id, bool loop, std::string_view path, const Vector3& pos);
+static SoundId Play(SoundId id, bool loop, float volume, std::string_view path);
+static SoundId Play(SoundId id, bool loop, float volume, std::string_view path, const Vector3& pos);
+static SoundId PlayOneShot(std::string_view path);                     // alias de Play(path)
+
+// --- Control por id ---
+static void Stop(SoundId id);  static void Pause(SoundId id);  static void Resume(SoundId id);
+static void Stop();            static void Pause();            static void Resume();  // = último Play()
+static void Seek(SoundId id, double seconds);
+static void SetLoop(SoundId id, bool loop);  static bool GetLoop(SoundId id);
+static void SetVolume(SoundId id, float volume);  static float GetVolume(SoundId id);
+static void SetPitch(SoundId id, float pitch);   static float GetPitch(SoundId id);
+static void SetPosition(SoundId id, const Vector3& pos);   // mueve un sonido 3D
+static void FadeOut(SoundId id, float seconds);  static void FadeTo(SoundId id, float volume, float seconds);
+
+// --- Estado ---
+static SoundState GetState(SoundId id);  static bool IsPlaying(SoundId id);
+static double GetTime(SoundId id);       static float GetDuration(SoundId id);
+static SoundId GetPlayingSound();        // último quick-play activo (o kInvalidSoundId)
+
+// --- Música (DEFAULT LOOP = true) ---
+static SoundId PlayMusic(SoundId id, std::string_view path);        // loop = true
+static SoundId PlayMusic(SoundId id, bool loop, std::string_view path);
+static void StopMusic(SoundId id);   static void StopMusic();
+static void PauseMusic(SoundId id);  static void PauseMusic();
+static void ResumeMusic(SoundId id); static void ResumeMusic();
+static void SetMusicLoop(bool loop); static bool GetMusicLoop();
+static void SetMusicVolume(float volume); static float GetMusicVolume();
+static SoundState GetMusicState();   static SoundId GetMusic();
+
+// --- Global ---
+static void SetMasterVolume(float volume);  static float GetMasterVolume();
+static void StopAll();       // efectos + música
+static void PauseAll();      static void ResumeAll();
+static void FadeAll(float seconds);
+```
+
+### Semántica interna de SoundPlayer
+- Registro `SoundId → {backend source, isMusic}` (static, patrón function-local
+  statics como `XConsole`).
+- El quick-play sin id **reusa un único slot** (`g_LastQuick`): `Play(path)` reinicia
+  la misma fuente → memoria acotada y `Stop()`/`Pause()` sin argumentos son naturales.
+- `Play(id, ...)` con id nuevo → `CreateSource`; con id existente → reinicia (stop previo).
+- Si un id es de música y se usa para efecto (o viceversa), se hace switch limpio.
+- `GetPlayingSound()` = `g_LastQuick` si su estado backend != `Stopped`; si no, `kInvalidSoundId`.
+
+### Ampliaciones profesionales (incluidas)
+- **Fades nativos de SoLoud** (`FadeOut`/`FadeTo`/`FadeAll`).
+- **Seek/GetTime/GetDuration/GetState** por id y por componente.
+- **Caché de clips por path** (mismo WAV/OGG reproducido N veces decodifica 1 vez).
+- **WakeUp** → resuelve la autoplay policy de web (primer click del demo).
+- **Master volume + PauseAll/ResumeAll/StopAll/FadeAll** globales.
+- 3D completo: `AudioSource` espacial + `AudioListener` + falloff min/maxDistance;
+  sin `pos` el sonido es **2D**.
+- Futuro (anotado, no en M4): `AudioBus`/grupos mixer, DSP filters, variación aleatoria
+  de pitch, playlist, `PlayDelayed`.
 
 ## Integración de builds
 
@@ -204,8 +330,9 @@ public:
 ### Desktop (`dependencies/CMakeLists.txt` + `engine/CMakeLists.txt`)
 - Crear el target `soloud` tras `FetchContent_MakeAvailable` → el
   `if(TARGET soloud)` de `engine/CMakeLists.txt:228` ya linkea.
-- Agregar a `target_sources` del engine: `src/Audio/AudioBackend.cpp`,
-  `src/Audio/SoLoudBackend.cpp`, `src/Audio/AudioEngine.cpp`,
+- Agregar a `target_sources` del engine: `src/Audio/AudioEngine.cpp`,
+  `src/Audio/AudioClip.cpp`, `src/Audio/SoLoudBackend.cpp`,
+  `src/Audio/SoundPlayer.cpp`,
   `src/Components/AudioSource.cpp`, `src/Components/AudioListener.cpp`.
 
 ### Web (`examples/WebEngineDemo/CMakeLists.txt` + `engine/CMakeLists.web.txt`)
@@ -214,22 +341,43 @@ public:
 - Agregar las fuentes de audio a `LeirEngineCore` + link `PRIVATE soloud`.
 - `--preload-file` de `assets@/assets` ya cubre `assets/audio/`.
 
-## Gotchas (estado tras la investigación 2026-08-17)
+## Gotchas (estado tras la implementación 2026-08-17)
 
-1. **Autoplay policy del browser** (PENDIENTE de resolver en implementación): el
-   `AudioContext` nace suspendido y el browser exige un **gesto del usuario** para
-   `resume()`. Plan: **init lazy del audio en el primer gesto** (primer
-   `OnPointerDown`/click del demo) — el WebEngineDemo no maneja gestos hoy, hay que
-   agregar click-to-enable-audio.
-2. **miniaudio en Emscripten**: NO compila con `-std=c*` estricto ni `-ansi`
-   (miniaudio.h:276,1466) → compilar el TU del backend miniaudio con
-   `-std=gnu++20`. ✅ Verificado contra miniaudio.h; falta verificar contra emsdk 6.0.6.
-3. **Pin de SoLoud**: `GIT_TAG master` → pinear a commit **`e82fd32c`** (el ya
-   fetcheado). ✅ Decidido.
+1. **Autoplay policy del browser** (✅ resuelto): el `AudioContext` nace suspendido
+   y el browser exige un **gesto del usuario** para `resume()`. Resuelto con
+   **init lazy**: `AudioEngine::WakeUp()` inicia el device en el primer gesto; el
+   WebEngineDemo llama `WakeUp()` + `PlayMusic(...)`/`Play(...)` en el primer
+   `OnPointerDown` (click-to-enable-audio). miniaudio además registra su propio
+   unlock en los eventos `click`/`touchstart`/`touchend` (creado con `suspend()`,
+   `ma_device_start` → `resume()`).
+2. **miniaudio en Emscripten** (✅ resuelto): NO compila con `-std=c*` estricto ni
+   `-ansi` (miniaudio.h:276,1466) → el TU del backend miniaudio se compila con
+   `-std=gnu++20`. Verificado contra emsdk 6.0.6 (build web verde).
+3. **Pin de SoLoud** (✅ hecho): `GIT_TAG master` → pin a commit **`e82fd32c`**.
 4. **Streaming en web**: todo el asset vive en memoria (preload) — `WavStream`
    funciona sobre el archivo preloadado; no hay streaming real por red en el demo.
-5. **Desktop NO compila SoLoud hoy** (sin CMakeLists en el repo → sin target) —
-   el build de audio arranca de cero con el target propio. ✅ Diagnóstico hecho.
+5. **Desktop NO compila SoLoud hoy** (✅ resuelto): sin CMakeLists en el repo →
+   target propio `soloud` STATIC creado desde `${soloud_SOURCE_DIR}`.
+6. **Exports del módulo JS en el build web (3 fixes encadenados, ✅ resuelto)** —
+   el backend **webaudio** de miniaudio ejecuta EM_ASM JS que accede a
+   `Module.*`; en Emscripten 4.x solo los símbolos listados en
+   `EXPORTED_FUNCTIONS` reciben copia `Module[name]`, y `EXPORTED_RUNTIME_METHODS`
+   por defecto es `[]`:
+   - **`Module._malloc`/`_free`** → `Uncaught TypeError: Module._malloc is not a
+     function`. miniaudio reserva el buffer intermedio con `Module._malloc`/`_free`
+     (miniaudio.h L32306-32327). Fix: `-sEXPORTED_FUNCTIONS=_malloc,_free,_main`.
+   - **`Module.HEAPF32`** → `Aborted('HEAPF32' was not exported. add it to
+     EXPORTED_RUNTIME_METHODS ...)`. El mismo EM_ASM construye la vista del buffer
+     como `new Float32Array(Module.HEAPF32.buffer, ...)`. Fix:
+     `-sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAP8,HEAPU8,HEAP16,HEAPU16,HEAP32,HEAPU32,HEAPF64`.
+   - **`ccall`** → `Uncaught TypeError: ccall is not a function` lanzado en
+     `onaudioprocess` (ScriptProcessorNode): el callback invoca el C
+     `ma_device_process_pcm_frames_playback__webaudio` vía `ccall(...)` (EM_ASM_CONST
+     16962705). Fix: agregar `ccall` a `EXPORTED_RUNTIME_METHODS`.
+   - **Reglas aprendidas**: (a) si se especifica `EXPORTED_FUNCTIONS` hay que
+     incluir `_main` (si no → `EXPECT_MAIN=0` y main no corre); (b) los exports
+     auto-generados (KEEPALIVE `ma_device_process_pcm_frames_*`, `emwgpuOn*`,
+     dynCall, stack) se conservan aparte — no se rompen al fijar la lista.
 
 ## Verificación / Demo
 
@@ -246,18 +394,22 @@ public:
   se implemente.
 - Commit **sin** `[skip ci]` → CI valida 3 plataformas + job emscripten.
 
-## Decisiones pendientes (usuario, cuando retomemos)
-1. **Audio 3D**: ¿completo (espacializado, listener con posición — recomendado, lo
-   promete la jerarquía) o solo 2D (volumen/pitch)?
-2. **Demo**: ¿integrar en `WebEngineDemo` (recomendado) o `AudioDemo` aparte?
-3. **Assets**: ¿generar WAV+OGG CC0 de prueba o archivos propios del usuario?
+## Decisiones del usuario (cerradas 2026-08-17)
+1. **Audio 3D**: ✅ completo — `AudioSource` espacial + `AudioListener` + falloff
+   min/maxDistance; sin `pos` el sonido es 2D.
+2. **Demo**: ✅ en `WebEngineDemo` (música loop + SFX por click).
+3. **Assets**: ✅ genero WAV+OGG CC0 con ffmpeg (disponible, v8.1.2).
+4. **Naming**: ✅ `volume` unificado en toda la API (no `level`).
+5. **GetPlayingSound()**: ✅ último quick-play activo (o `kInvalidSoundId`).
+6. **Overloads 3D**: ✅ 8 overloads de `Play` con `Vector3`.
 
-## Fases sugeridas (cuando se retome)
-1. ~~Spike~~ investigación de SoLoud/build hecha (2026-08-17) — queda el spike de
-   build: target `soloud` propio (wasapi/null/miniaudio) + validar miniaudio contra
-   emsdk 6.0.6 (`-std=gnu++20`) + autoplay con init lazy.
-2. `IAudioBackend` + `SoLoudBackend` + `AudioEngine` (desktop).
-3. `AudioSource`/`AudioListener` + sync 3D en `Scene::OnUpdate`.
-4. Assets + integración builds (desktop + web).
-5. Demo con música + SFX + verificación Firefox y desktop.
-6. Docs + CI + commit (sin `[skip ci]`).
+## Fases sugeridas (todas completas 2026-08-17)
+1. ✅ Investigación hecha. Target `soloud` propio (wasapi/null/miniaudio) +
+   validado contra emsdk 6.0.6 (`-std=gnu++20`).
+2. ✅ `IAudioBackend` + `SoLoudBackend` + `AudioEngine` + `AudioClip` (desktop).
+3. ✅ `AudioSource`/`AudioListener` + sync 3D.
+4. ✅ `SoundPlayer` (API estática).
+5. ✅ Assets + integración builds (desktop + web).
+6. ✅ Demo WebEngineDemo (click→WakeUp→música + SFX) + verificación Firefox
+   (usuario: sonidos OK) y desktop (build verde).
+7. ✅ Docs + CI + commit (sin `[skip ci]`).

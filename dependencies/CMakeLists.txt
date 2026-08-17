@@ -40,9 +40,12 @@ FetchContent_Declare(jolt
 )
 
 # SoLoud — audio
+# Pinned to the commit we fetch (e82fd32c, 2026-08-17). SoLoud has no root
+# CMakeLists.txt; the `soloud` target is built by cmake/AudioTooling.cmake
+# (core + WAV/OGG decode + one output backend per platform).
 FetchContent_Declare(soloud
     GIT_REPOSITORY https://github.com/jarikomppa/soloud.git
-    GIT_TAG master
+    GIT_TAG e82fd32c
 )
 
 # nlohmann/json — JSON serialization
@@ -66,6 +69,9 @@ FetchContent_Declare(cereal
 
 FetchContent_MakeAvailable(glfw glm stb jolt soloud nlohmann_json cereal)
 
+# Build the SoLoud static lib (no root CMakeLists.txt in the repo).
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/AudioTooling.cmake)
+
 # wgpu-native — WebGPU backend (Fase 5, see TODO_RHI_SLANG.md).
 # Prebuilt release asset, used header-only: the engine loads wgpu_native.dll at
 # runtime (WGPU_SKIP_DECLARATIONS + LoadLibrary/GetProcAddress), so only the
@@ -84,3 +90,4 @@ if(WIN32 AND MSVC)
     )
     FetchContent_MakeAvailable(wgpu)
 endif()
+

@@ -59,6 +59,12 @@ add_library(LeirEngine SHARED
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp
     src/Physics/RigidBody.cpp
+    src/Audio/AudioEngine.cpp
+    src/Audio/AudioClip.cpp
+    src/Audio/SoLoudBackend.cpp
+    src/Audio/SoundPlayer.cpp
+    src/Components/AudioSource.cpp
+    src/Components/AudioListener.cpp
 )
 
 if(WIN32 AND MSVC)

@@ -1,9 +1,10 @@
 # LeirEngine — TODO List
 
 > **Estado actual:** Core, Renderer (RHI multi-backend: Vulkan + D3D12 + WebGPU), Physics (Jolt),
-> UI system propio y Editor base están implementados. **Export web (Fase 6)**: M0→M3 + M5 + M6 ✅
-> (motor completo — render + física + UI + input — en navegador por WebGPU; tag `v0.1.0-alpha`).
-> Pendiente: **Audio (M4 — plan en `TODO_AUDIO_SYSTEM.md`)**, Serialización & Assets, Animaciones,
+> Audio (SoLoud→WebAudio), UI system propio y Editor base están implementados. **Export web
+> (Fase 6)**: M0→M4 + M5 + M6 ✅ (motor completo — render + física + **audio** + UI + input — en
+> navegador por WebGPU; tag `v0.1.0-alpha`, M4 cerrado 2026-08-17).
+> Pendiente: Serialización & Assets, Animaciones,
 > Documentación, build WSL/Linux local y MoltenVK. Detalle de lo ya hecho en cada
 > fase abajo. El renderer pasó de un backend Vulkan monolítico a una **RHI multi-backend**
 > (`RenderBackend` → `VulkanBackend` / `D3D12Backend` / `WebGPUBackend`) con comandos por-frame
@@ -65,10 +66,12 @@
 - [x] Configurar Jolt multithreading
 - [x] Configuración por capas (NON_MOVING/MOVING, tablas BroadPhase/ObjectLayer)
 
-## Fase 4 — Audio (SoLoud) — plan completo en `TODO_AUDIO_SYSTEM.md` (M4 web, difirido)
-- [ ] `AudioSystem` wrapper
-- [ ] `AudioSource` component (3D position, pitch, volume, looping, WAV/OGG)
-- [ ] `AudioListener` component (atado a Camera)
+## Fase 4 — Audio (SoLoud) — COMPLETA (M4 web cerrado 2026-08-17, ver `TODO_AUDIO_SYSTEM.md`)
+- [x] `IAudioBackend`/`SoLoudBackend` + `AudioEngine` singleton + `AudioClip`
+- [x] `SoundPlayer` (API estática, 8 overloads de Play, música loop, fades, master)
+- [x] `AudioSource` component (3D position, pitch, volume, looping, WAV/OGG)
+- [x] `AudioListener` component (atado a Camera)
+- [x] M4 web: SoLoud→WebAudio (`soloud_miniaudio` → `ma_backend_webaudio`) + autoplay lazy (`WakeUp`)
 - [ ] DSP filters (echo, reverb, biquad)
 - [ ] Gestión de memoria de sonidos
 
