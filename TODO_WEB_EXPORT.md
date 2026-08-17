@@ -378,5 +378,6 @@ RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU
   M1 degradando a recurso único en web**; el UI real (M2) deberá decidir entre variantes
   `*.web.wgsl` por shader o un pipeline UI sin non-uniform indexing.
 - `contrib.glfw3` cobertura de `glfwGetMonitorWorkarea`/`glfwCreateStandardCursor` (M2).
-- SoLoud bajo Emscripten (M4).
+- SoLoud bajo Emscripten (M4) — ver `TODO_AUDIO_SYSTEM.md` (subsistema de audio
+  completo, planificado 2026-08-17, pendiente de implementar).
 - Tamaño wasm + `ALLOW_MEMORY_GROWTH` + preload de fuentes/audio.
