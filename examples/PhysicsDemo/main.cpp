@@ -13,16 +13,21 @@
 #include <LeirEngine/Components/MeshRenderer.h>
 #include <LeirEngine/Components/Camera.h>
 #include <LeirEngine/Components/Light.h>
+#include <LeirEngine/Components/AudioListener.h>
 #include <LeirEngine/Physics/PhysicsWorld.h>
 #include <LeirEngine/Physics/RigidBody.h>
 #include <LeirEngine/Physics/Collider.h>
 #include <LeirEngine/Input/Mouse.h>
+#include <LeirEngine/Input/Keyboard.h>
+#include <LeirEngine/Audio/AudioEngine.h>
+#include <LeirEngine/Audio/SoundPlayer.h>
 
 #include "LeirEngine/Core/Log.h"
 
 #include <memory>
 #include <vector>
 #include <cmath>
+#include <string>
 
 class PhysicsDemo : public Leir::CoreApplication {
 public:
@@ -85,6 +90,12 @@ protected:
         // ---- Physics ----
         Leir::PhysicsWorld::GetInstance().Init();
 
+        // ---- Audio (Fase 6 / M4) ----
+        // Desktop starts the WASAPI device immediately (WakeUp() is a no-op
+        // outside the browser); the WebGPU/Vulkan/D3D12 render backends are
+        // orthogonal to this.
+        Leir::AudioEngine::GetInstance().Init();
+
         // ---- Scene ----
         auto& sceneManager = Leir::SceneManager::GetInstance();
         auto& scene = sceneManager.CreateScene("Main Scene");
@@ -96,6 +107,7 @@ protected:
         auto& camera = m_CameraObj->AddComponent<Leir::Camera>();
         camera.SetPerspective(60.0f, (float)GetWidth() / (float)GetHeight(), 0.1f, 100.0f);
         camera.SetPrimary(true);
+        m_CameraObj->AddComponent<Leir::AudioListener>();
 
         // Light
         auto* lightObj = scene.CreateObject3D("Light");
@@ -132,16 +144,37 @@ protected:
                 renderer.SetMaterial(m_BoxMat);
                 box->AddComponent<Leir::Collider>().SetBox(glm::vec3(0.5f, 0.5f, 0.5f));
                 box->AddComponent<Leir::RigidBody>().SetType(Leir::RigidBodyType::Dynamic);
+                if (row == 1 && col == 1)
+                    m_PopBox = box;
             }
         }
 
+        // Music loop + 3D "pop" anchored at the center box. Paths resolve to
+        // the repo's assets/audio via LEIR_AUDIO_DIR (compile definition).
+        Leir::SoundPlayer::PlayMusic(1, AudioPath("music_loop.ogg"));
+        Leir::SoundPlayer::SetMusicVolume(0.7f);
+
         Leir::XConsole::Println("Physics Demo initialized — 9 boxes + ground");
+        Leir::XConsole::Println("Controls: Left-drag = orbit, wheel = zoom, "
+            "click = beep (2D), Space = pop at center box (3D), music looping");
     }
 
     void OnUpdate(float deltaTime) override
     {
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
+
+        Leir::AudioEngine::GetInstance().Update(deltaTime);
+
+        // ---- SFX triggers ----
+        // Click = 2D beep (one-shot). Space = 3D pop at the center box's
+        // current world position (spatialized against the camera listener).
+        if (Leir::Mouse::WasPressed(Leir::PointerButton::Primary))
+            Leir::SoundPlayer::Play(AudioPath("beep.wav"));
+        if (Leir::Keyboard::WasPressed(Leir::Key::Space) && m_PopBox) {
+            Leir::SoundPlayer::Play(2, false, 0.8f, AudioPath("pop.wav"),
+                m_PopBox->GetTransform().GetWorldPosition());
+        }
 
         // ---- Orbit Camera ----
         if (Leir::Mouse::IsDown(Leir::PointerButton::Left)) {
@@ -211,9 +244,15 @@ protected:
         sm.SetActiveScene(nullptr);
 
         Leir::PhysicsWorld::GetInstance().Shutdown();
+        Leir::AudioEngine::GetInstance().Shutdown();
     }
 
 private:
+    static std::string AudioPath(const char* fileName)
+    {
+        return std::string(LEIR_AUDIO_DIR) + "/" + fileName;
+    }
+
     std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
 
@@ -226,6 +265,7 @@ private:
     std::shared_ptr<Leir::Material> m_BoxMat;
     std::shared_ptr<Leir::Texture2D> m_WhiteTexture;
     Leir::Object3D* m_CameraObj = nullptr;
+    Leir::Object3D* m_PopBox = nullptr;
 
     float m_OrbitYaw = 0.0f;
     float m_OrbitPitch = 0.3f;

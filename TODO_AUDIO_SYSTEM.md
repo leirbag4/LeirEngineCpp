@@ -381,9 +381,14 @@ static void FadeAll(float seconds);
 
 ## Verificación / Demo
 
-- **WebEngineDemo** (recomendado, ya es el demo "motor completo"): música de fondo
-  loop + SFX al hacer click (+ opcional beep al impactar los cubos con el piso).
-  Verificación: **Firefox** (web) + demo/editor nativo desktop.
+- **WebEngineDemo** (demo "motor completo"): música de fondo loop + SFX al hacer
+  click. Verificado en **Firefox** (usuario, 2026-08-17).
+- **PhysicsDemo desktop** (`examples/PhysicsDemo`, backend seleccionable por
+  `settings.json → graphics.backend`): música loop al inicio, click = beep 2D,
+  Space = pop 3D espacializado en el cubo central. Verificado con los 3 backends
+  (webgpu/vulkan/d3d12): `[Audio] SoLoud initialized (backend 'WASAPI')` sin
+  errores ni stderr (2026-08-17). Los assets se resuelven vía la define CMake
+  `LEIR_AUDIO_DIR` (ruta absoluta a `assets/audio` del repo).
 - Alternativa: demo `AudioDemo` aparte.
 
 ## Docs / CI
