@@ -32,6 +32,32 @@ FetchContent_Declare(stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG master
 )
+# Jolt Physics (Fase 6 / M3) — same tag/source as the desktop engine. Jolt's
+# CMake edits global CMAKE_CXX_FLAGS, so pin the options that would otherwise
+# break the engine build: keep RTTI + exceptions ON (the engine uses
+# dynamic_cast in the UI and try/catch in Settings), drop -Wall -Werror, leave
+# our own flags untouched, and disable the graphics/compute backends (CPU
+# compute pulls x86-only Xbyak).
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
+set(CPP_RTTI_ENABLED ON CACHE BOOL "" FORCE)
+set(CPP_EXCEPTIONS_ENABLED ON CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(jolt
+    GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR Build
+)
+FetchContent_MakeAvailable(jolt)
 FetchContent_MakeAvailable(nlohmann_json)
 FetchContent_GetProperties(glm)
 if(NOT glm_POPULATED)
@@ -58,6 +84,7 @@ target_compile_options(WebEngineDemo PRIVATE
 target_link_options(WebEngineDemo PRIVATE
     -sASYNCIFY=1
     -sALLOW_MEMORY_GROWTH=1
+    -sSTACK_SIZE=16777216
     --use-port=${LEIR_DEMO_ROOT}/dependencies/emdawnwebgpu/emdawnwebgpu.port.py
     --use-port=contrib.glfw3
     "--preload-file=${LEIR_DEMO_ROOT}/engine/shaders@/shaders"

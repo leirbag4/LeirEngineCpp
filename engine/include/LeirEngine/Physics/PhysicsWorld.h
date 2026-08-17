@@ -41,6 +41,8 @@ private:
     JPH::TempAllocator* m_TempAllocator = nullptr;
     JPH::JobSystem* m_JobSystem = nullptr;
 
+    float m_Accumulator = 0.0f;
+
     bool m_Initialized = false;
 };
 

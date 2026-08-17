@@ -14,6 +14,9 @@
 #include <LeirEngine/Components/MeshRenderer.h>
 #include <LeirEngine/Components/Camera.h>
 #include <LeirEngine/Components/Light.h>
+#include <LeirEngine/Physics/PhysicsWorld.h>
+#include <LeirEngine/Physics/RigidBody.h>
+#include <LeirEngine/Physics/Collider.h>
 #include <LeirEngine/UI/UICanvas.h>
 #include <LeirEngine/UI/UIPanel.h>
 #include <LeirEngine/UI/UILabel.h>
@@ -60,7 +63,7 @@ constexpr float kDegToRad = 3.14159265358979f / 180.0f;
 class WebEngineDemoApp : public Leir::CoreApplication {
 public:
     WebEngineDemoApp()
-        : CoreApplication("LeirEngine Web Demo (Fase 6 / M2)", 1280, 720)
+        : CoreApplication("LeirEngine Web Demo (Fase 6 / M3)", 1280, 720)
     {
     }
 
@@ -89,10 +92,13 @@ protected:
 
         m_CheckerA = MakeCheckerTexture(m_Backend.get(), 256, {230, 230, 240}, {120, 120, 140});
         m_CheckerB = MakeCheckerTexture(m_Backend.get(), 256, {205, 85, 70}, {80, 28, 24});
+        m_CheckerFloor = MakeCheckerTexture(m_Backend.get(), 256, {95, 95, 110}, {55, 55, 65});
         m_MaterialA = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
         m_MaterialA->SetTexture("texSampler", m_CheckerA);
         m_MaterialB = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
         m_MaterialB->SetTexture("texSampler", m_CheckerB);
+        m_MaterialFloor = std::make_shared<Leir::Material>(m_Backend.get(), m_Shader);
+        m_MaterialFloor->SetTexture("texSampler", m_CheckerFloor);
 
         auto [verts, idxs] = Leir::Primitives::CreateCube();
         m_Mesh = std::make_shared<Leir::Mesh>(m_Backend.get(), verts, idxs);
@@ -112,6 +118,9 @@ protected:
             (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportH * dpr)));
         m_MaterialA->RecreatePipeline(m_ViewportRT->GetRenderPass());
         m_MaterialB->RecreatePipeline(m_ViewportRT->GetRenderPass());
+        m_MaterialFloor->RecreatePipeline(m_ViewportRT->GetRenderPass());
+
+        Leir::PhysicsWorld::GetInstance().Init();
 
         auto* cameraObj = scene.CreateObject3D("Camera");
         auto& camera = cameraObj->AddComponent<Leir::Camera>();
@@ -128,17 +137,30 @@ protected:
         light.SetColor({1.0f, 0.95f, 0.9f});
         light.SetIntensity(1.5f);
 
+        m_Floor = scene.CreateObject3D("Floor");
+        m_Floor->GetTransform().SetLocalPosition({0.0f, -1.5f, 0.0f});
+        m_Floor->GetTransform().SetLocalScale({12.0f, 1.0f, 12.0f});
+        auto& floorMesh = m_Floor->AddComponent<Leir::MeshRenderer>();
+        floorMesh.SetMesh(m_Mesh);
+        floorMesh.SetMaterial(m_MaterialFloor);
+        m_Floor->AddComponent<Leir::Collider>().SetBox({6.0f, 0.5f, 6.0f});
+        m_Floor->AddComponent<Leir::RigidBody>().SetType(Leir::RigidBodyType::Static);
+
         m_CubeA = scene.CreateObject3D("CubeA");
-        m_CubeA->GetTransform().SetLocalPosition({-1.1f, 0.0f, 0.0f});
+        m_CubeA->GetTransform().SetLocalPosition({-1.5f, 2.0f, 0.0f});
         auto& ra = m_CubeA->AddComponent<Leir::MeshRenderer>();
         ra.SetMesh(m_Mesh);
         ra.SetMaterial(m_MaterialA);
+        m_CubeA->AddComponent<Leir::Collider>().SetBox({0.5f, 0.5f, 0.5f});
+        m_CubeA->AddComponent<Leir::RigidBody>();
 
         m_CubeB = scene.CreateObject3D("CubeB");
-        m_CubeB->GetTransform().SetLocalPosition({1.1f, 0.0f, 0.0f});
+        m_CubeB->GetTransform().SetLocalPosition({1.5f, 3.2f, 0.0f});
         auto& rb = m_CubeB->AddComponent<Leir::MeshRenderer>();
         rb.SetMesh(m_Mesh);
         rb.SetMaterial(m_MaterialB);
+        m_CubeB->AddComponent<Leir::Collider>().SetBox({0.5f, 0.5f, 0.5f});
+        m_CubeB->AddComponent<Leir::RigidBody>();
 
         m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_Backend.get());
         m_UIRenderer->SetContentScale(GetContentScale());
@@ -166,7 +188,7 @@ protected:
 
         auto* title = new Leir::UILabel();
         title->SetName("Title");
-        title->SetText("LeirEngine Web - Fase 6 / M2 (Scene + Camera + Light + Material + UI + Font)");
+        title->SetText("LeirEngine Web - Fase 6 / M3 (Scene + Camera + Light + Jolt Physics + UI + Font)");
         title->SetFont(m_FontSmall.get());
         title->SetColor({0.55f, 0.85f, 0.65f, 1.0f});
         title->GetRect().anchor = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -184,15 +206,8 @@ protected:
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 
-        scene->OnUpdate(deltaTime);
-
         m_OrbitYaw += deltaTime * 20.0f;
         UpdateCamera();
-
-        if (m_CubeA)
-            m_CubeA->GetTransform().Rotate(deltaTime * 40.0f, {0.0f, 1.0f, 0.0f});
-        if (m_CubeB)
-            m_CubeB->GetTransform().Rotate(deltaTime * -25.0f, {0.0f, 1.0f, 0.0f});
 
         if (m_Canvas) {
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
@@ -300,10 +315,13 @@ private:
     std::shared_ptr<Leir::Mesh> m_Mesh;
     std::shared_ptr<Leir::Texture2D> m_CheckerA;
     std::shared_ptr<Leir::Texture2D> m_CheckerB;
+    std::shared_ptr<Leir::Texture2D> m_CheckerFloor;
     std::shared_ptr<Leir::Material> m_MaterialA;
     std::shared_ptr<Leir::Material> m_MaterialB;
+    std::shared_ptr<Leir::Material> m_MaterialFloor;
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::Object3D* m_CameraObj = nullptr;
+    Leir::Object3D* m_Floor = nullptr;
     Leir::Object3D* m_CubeA = nullptr;
     Leir::Object3D* m_CubeB = nullptr;
     std::unique_ptr<Leir::UIRenderer> m_UIRenderer;

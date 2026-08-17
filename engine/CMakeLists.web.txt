@@ -1,10 +1,11 @@
-# LeirEngineCore — web-safe static subset of the engine (Fase 6 / M2).
+# LeirEngineCore — web-safe static subset of the engine (Fase 6 / M3).
 # Renders through the RHI (WebGPUBackend + BackendFactory); excludes the
-# Vulkan/D3D12 backends, Jolt physics (PhysicsWorld.web.cpp no-ops the step)
-# and SoLoud audio. The desktop engine keeps its own target in CMakeLists.txt.
+# Vulkan/D3D12 backends and SoLoud audio. Jolt physics runs on wasm via the
+# real PhysicsWorld.cpp (JobSystemSingleThreaded under __EMSCRIPTEN__) +
+# RigidBody/Collider. The desktop engine keeps its own target in CMakeLists.txt.
 # This file is include()d by the standalone Emscripten projects
-# (examples/WebEngineDemo), which must already have fetched glm, nlohmann_json
-# and stb with the same tags as dependencies/CMakeLists.txt.
+# (examples/WebEngineDemo), which must already have fetched glm, nlohmann_json,
+# stb and Jolt with the same tags as dependencies/CMakeLists.txt.
 
 set(LEIR_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 
@@ -64,7 +65,9 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/UI/Dock/DockSplitter.cpp
     ${LEIR_ROOT}/engine/src/UI/Dock/DockDropOverlay.cpp
     ${LEIR_ROOT}/engine/src/UI/Dock/DockManager.cpp
-    ${LEIR_ROOT}/engine/src/Physics/PhysicsWorld.web.cpp
+    ${LEIR_ROOT}/engine/src/Physics/PhysicsWorld.cpp
+    ${LEIR_ROOT}/engine/src/Physics/RigidBody.cpp
+    ${LEIR_ROOT}/engine/src/Physics/Collider.cpp
 )
 
 target_include_directories(LeirEngineCore
@@ -78,6 +81,7 @@ target_include_directories(LeirEngineCore
 )
 
 target_link_libraries(LeirEngineCore PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(LeirEngineCore PRIVATE Jolt)
 
 target_compile_definitions(LeirEngineCore PUBLIC
     LEIR_SHADER_DIR="/shaders"

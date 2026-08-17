@@ -11,9 +11,12 @@
 #include <Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterTable.h>
 #include <Jolt/Physics/Collision/ObjectLayerPairFilterTable.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/JobSystemSingleThreaded.h>
 #include <Jolt/Core/TempAllocator.h>
 
 #include "LeirEngine/Core/Log.h"
+
+#include <algorithm>
 
 JPH_SUPPRESS_WARNINGS
 
@@ -37,12 +40,19 @@ void PhysicsWorld::Init() {
 
     m_TempAllocator = new JPH::TempAllocatorMalloc();
 
+#if defined(__EMSCRIPTEN__)
+    // Web: single-threaded job system (Emscripten without pthreads has no real
+    // std::thread; JobSystemSingleThreaded runs jobs synchronously on the main
+    // thread and works with ASYNCIFY / any static server).
+    m_JobSystem = new JPH::JobSystemSingleThreaded(JPH::cMaxPhysicsJobs);
+#else
     uint32_t numThreads = std::max(1u, std::thread::hardware_concurrency() - 1);
     m_JobSystem = new JPH::JobSystemThreadPool(
         JPH::cMaxPhysicsJobs,
         JPH::cMaxPhysicsBarriers,
         numThreads
     );
+#endif
 
     constexpr uint32_t NUM_OBJECT_LAYERS = 2;
     constexpr uint32_t NUM_BROAD_PHASE_LAYERS = 2;
@@ -110,8 +120,14 @@ PhysicsWorld::~PhysicsWorld() {
 void PhysicsWorld::StepPhysics(float deltaTime) {
     if (!m_Initialized) Init();
 
+    const float fixedDt = 1.0f / 60.0f;
+    m_Accumulator += std::min(deltaTime, 0.25f);
+
     const int collisionSteps = 1;
-    m_PhysicsSystem->Update(deltaTime, collisionSteps, m_TempAllocator, m_JobSystem);
+    while (m_Accumulator >= fixedDt) {
+        m_PhysicsSystem->Update(fixedDt, collisionSteps, m_TempAllocator, m_JobSystem);
+        m_Accumulator -= fixedDt;
+    }
 }
 
 // ---- Accessors ----

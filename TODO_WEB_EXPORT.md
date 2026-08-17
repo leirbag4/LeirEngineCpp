@@ -2,7 +2,8 @@
 
 > Estado: **EN CURSO** — M0 ✅ (2026-08-15), **M1 ✅ verificado en navegador
 > (Firefox 153 + Chrome + Opera, 2026-08-15)**, **M2 ✅ verificado en navegador
-> (Firefox, 2026-08-16)**, pendiente M3+.
+> (Firefox, 2026-08-16)**, **M3 ✅ física Jolt verificada en navegador
+> (2026-08-17)**, pendiente M4+.
 
 ## Objetivo
 
@@ -82,9 +83,15 @@ Decisiones de alcance (usuario, 2026-08-15):
   (M1) para que el build web tenga dispatch `"webgpu"`.
 
 ### Física (M3)
-- `PhysicsWorld.cpp:13,40-45`: swap `JobSystemThreadPool` → `JobSystemSingleThreaded` bajo
-  `__EMSCRIPTEN__` (sin pthreads → sin SharedArrayBuffer/COOP-COEP → cualquier server estático).
-- Jolt a wasm: flags `JPH_CPU_ARCH`/SIMD a resolver en el build.
+- `PhysicsWorld.cpp:40-45`: `JobSystemThreadPool` → **`JobSystemSingleThreaded`** bajo
+  `__EMSCRIPTEN__` (sin pthreads → sin SharedArrayBuffer/COOP-COEP → cualquier server estático;
+  los jobs corren síncronos en el main thread, compatible con ASYNCIFY).
+- Timestep **fijo 1/60** con acumulador (`m_Accumulator`, dt clamp 0.25 s) — arregla el
+  **tunneling** en web (a 60 Hz el cubo caía 0.16 m/paso; con dt no acotado de 25-40 fps
+  atravesaba el piso de 1 m). Desktop hereda el mismo step (regresión 9 cajas OK).
+- `engine/CMakeLists.web.txt` ahora compila el **`PhysicsWorld.cpp` real** +
+  `RigidBody.cpp`/`Collider.cpp` y linka `Jolt` (PRIVATE); el stub `PhysicsWorld.web.cpp`
+  (M2) fue **eliminado**.
 
 ### File IO en web (M2)
 - `Settings.cpp` (config dir + `create_directories`) → no-op por `#ifdef __EMSCRIPTEN__`.
@@ -175,7 +182,7 @@ Decisiones de alcance (usuario, 2026-08-15):
   - [x] **Fase D** — shaders `*.web.wgsl` (6) + sidecars web + `WebEngineDemo` (Scene completa + UI + Font)
   - [x] **Verificar render en navegador** — ✅ Firefox (2026-08-16), 2 cubos checker + cámara órbita + UI + fuente Roboto
   - [x] **Regresión M1** — rebuild WebDemo tras el rename `Basic.frag.web.wgsl` ✅
-- [ ] **M3 — Física** (Jolt wasm + JobSystemSingleThreaded)
+- [x] **M3 — Física** (Jolt wasm + JobSystemSingleThreaded) — ✅ verificado en navegador (2026-08-17)
 - [ ] **M4 — Fase 4 Audio** (desktop primero, luego wasm WebAudio)
 - [ ] **M5 — CI** (job ubuntu setup-emsdk 6.0.6, compile-only)
 - [ ] **M6 — Docs + commit + tag**
@@ -318,11 +325,47 @@ RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU
   gris/rojo/azul con sus checkers 2×2 propios + órbita). El aspecto de "4 cuadrados por cara
   difuminados" es el **diseño M1** (texturas 2×2 con sampler Linear), no una regresión.
 
+## Estado M3 (build + navegador, 2026-08-17)
+
+- **Escena M3** (`examples/WebEngineDemo/main.cpp`): Floor estático (box 12×1×12 con collider
+  6×0.5×6) + 2 cubos dinámicos (box 0.5) en `y=2.0`/`y=3.2`, gravedad −9.81. `PhysicsWorld`
+  inicializado en `OnInit`; `StepPhysics` con timestep fijo 1/60.
+- **Crash web resuelto — causa raíz: desbordamiento de pila wasm, NO la física.**
+  - Síntoma: `Uncaught RuntimeError: index out of bounds` en
+    `JPH::PhysicsSystem::ProcessBodyPair` al PRIMER contacto real (cubo A vs piso, ~1.3 s),
+    siempre antes del primer `printf` de la función (los prints de instrumentación dentro de
+    `ProcessBodyPair` nunca aparecían).
+  - Diagnóstico con un **repro mínimo** (Jolt directo + `libJolt.a` real, mismos flags
+    `-O0 -sASYNCIFY=1 -sALLOW_MEMORY_GROWTH=1`, corriendo bajo **node** — sin navegador ni
+    WebGPU): reproducía el crash 1:1 (`memory access out of bounds` en `ProcessBodyPair`,
+    mismos `[JoltAddHit] A=1 B=0`/`[JoltReadQ]` antes del trap). El par (1,0) era **válido**:
+    no había BodyID basura ni broadphase corrupto.
+  - Fix: `-sSTACK_SIZE=16777216` (16 MB) en las flags de LINK del demo
+    (`examples/WebEngineDemo/CMakeLists.txt`). Con la pila default de emscripten (5 MB) el
+    frame gigante de `ProcessBodyPair` a `-O0` (~1500+ locals wasm) + ASYNCIFY (guarda/
+    restaura pila en cada punto de suspensión) + cadena profunda
+    (`MainLoop → Frame → Scene::OnUpdate → StepPhysics → Update → JobFindCollisions →
+    ProcessBodyPair`) agotaban la pila en la entrada misma de la función. El trap "antes del
+    primer contacto visual" era coincidencia: la función solo se llama cuando existe un par
+    real, que es justo cuando el cubo llega al piso.
+  - **No se bajó nada de calidad de física**: misma gravedad, mismo step fijo, mismos settings
+    de Jolt (`mUseManifoldReduction`/contact cache/speculative distance intactos), mismo
+    commit `2e28006`. La pila es solo memoria de trabajo; agrandarla no altera la simulación.
+  - El flag es **solo del build web** (desktop usa pila nativa). Con un futuro `-O2` los
+    frames se encogen y quizá no haga falta, pero es inofensivo (con `ALLOW_MEMORY_GROWTH` la
+    pila se reserva una vez al pie de la memoria lineal).
+- **Verificado en navegador (2026-08-17, Firefox)**: 2 cubos checker caen desde el aire,
+  chocan con el piso y **se asientan** (sin rebotar/atravesar), cámara en órbita OK, log
+  XConsole limpio (sin errores). Artefactos: `.wasm` 65.1 MB (Debug `-O0`), `.js` 452 KB.
+- **Limpieza**: revertido `PhysicsSystem.cpp` en `_deps/jolt-src` (gitignored, prints de
+  instrumentación eliminados) y eliminado el `[PhysDiag]` temporal de `main.cpp`. Rebuild
+  final limpio.
+
 ## Riesgos abiertos
 - ASYNCIFY overhead (global). Aceptable para demo; alternativas a revisar si duele.
 - Feature `texture-array-non-uniform-indexing` (UI.frag indexa no-uniforme): **resuelto en
   M1 degradando a recurso único en web**; el UI real (M2) deberá decidir entre variantes
   `*.web.wgsl` por shader o un pipeline UI sin non-uniform indexing.
 - `contrib.glfw3` cobertura de `glfwGetMonitorWorkarea`/`glfwCreateStandardCursor` (M2).
-- Jolt/SoLoud bajo Emscripten (M3/M4).
+- SoLoud bajo Emscripten (M4).
 - Tamaño wasm + `ALLOW_MEMORY_GROWTH` + preload de fuentes/audio.
