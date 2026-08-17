@@ -383,6 +383,25 @@ Conversion helpers live in internal `PhysicsConversions.h`, not in public includ
   — a variable dt caused tunneling through the 1 m floor at 25-40 fps.
 - Jolt's `ProcessBodyPair` at `-O0` needs ~16 MB of wasm stack (see "Web export").
 
+### Web threading: single-thread is a deliberate, permanent decision (2026-08-17)
+- Browser threads = Emscripten `-pthread` → Web Workers + **`SharedArrayBuffer`**, which
+  requires **cross-origin isolation**: COOP (`Cross-Origin-Opener-Policy: same-origin`) +
+  COEP (`Cross-Origin-Embedder-Policy: require-corp`) headers from the **server**, HTTPS or
+  localhost, and every cross-origin embedded asset (images/audio/fonts) CORS/CORP-compliant.
+  A static server (`python -m http.server`, GitHub Pages without headers, etc.) then breaks,
+  and the "works from any hosting" property is lost. This is a browser security constraint,
+  NOT an Emscripten limitation (Emscripten threads work fine) and NOT a leftover bug.
+- **Professional engines do the same**: single-threaded web builds by default, multithreading
+  as an opt-in/experimental feature that requires the COOP/COEP headers — Unity WebGL
+  (single default; experimental threads since 2022.x/Unity 6), Godot 4 (single default;
+  "Thread Support" export option), Rapier (single-threaded wasm), Ammo.js (single/worker).
+  Even threaded engines keep the core game loop + render on one thread; workers serve
+  specialized systems (physics, jobs).
+- **Decision: LeirEngine web stays single-threaded.** Jolt's `JobSystemSingleThreaded` is
+  correct and scales for demo-scale scenes; the desktop engine keeps `JobSystemThreadPool`
+  (multithreaded) in every backend (Vulkan/D3D12/WebGPU native). Revisit only if a web game
+  ever needs hundreds of bodies → then build `-pthread` + serve with COOP/COEP.
+
 ## Class Hierarchy
 
 ```

@@ -362,6 +362,17 @@ RenderPipeline/UICanvas/UIRenderer/Font/Input) corriendo en navegador por WebGPU
   final limpio.
 
 ## Riesgos abiertos
+- **Multithreading web: decisión tomada — se queda SINGLE-THREADED** (2026-08-17). Hilos en
+  el navegador = Emscripten `-pthread` → Web Workers + `SharedArrayBuffer`, que exige
+  **cross-origin isolation** (headers COOP + COEP del server, HTTPS/localhost, y todos los
+  assets cross-origin CORS/CORP-compliant) — rompe el "funciona desde cualquier server
+  estático". Es una restricción de seguridad del browser, no de Emscripten ni bug residual.
+  Los motores profesionales hacen lo mismo: **single por default, multithreading como
+  feature opt-in/experimental** (Unity WebGL experimental, Godot 4 "Thread Support",
+  Rapier/Ammo.js single-threaded). Jolt `JobSystemSingleThreaded` es correcto para escenas
+  demo; el desktop conserva `JobSystemThreadPool` en todos los backends (Vulkan/D3D12/WebGPU
+  nativo). Revisitar solo si un juego web necesitara cientos de cuerpos (build `-pthread` +
+  COOP/COEP + hosting compatible, p. ej. Netlify/Vercel).
 - ASYNCIFY overhead (global). Aceptable para demo; alternativas a revisar si duele.
 - Feature `texture-array-non-uniform-indexing` (UI.frag indexa no-uniforme): **resuelto en
   M1 degradando a recurso único en web**; el UI real (M2) deberá decidir entre variantes
