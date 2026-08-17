@@ -268,6 +268,13 @@ struct D3D12Backend::Impl {
     UINT backBufferRtvSlots[kBackBuffers] = { UINT_MAX, UINT_MAX, UINT_MAX };
     D3D12_RESOURCE_STATES backBufferState[kBackBuffers];
 
+    // Swapchain depth buffer. The built-in 3D pass declares D32_FLOAT, but the
+    // swapchain has no depth attachment of its own — only the direct-to-swapchain
+    // path (BeginFrame(false), e.g. PhysicsDemo) binds it. Recreated on resize.
+    ComPtr<ID3D12Resource> swapchainDepth;
+    UINT swapchainDepthSlot = UINT_MAX;
+    D3D12_RESOURCE_STATES swapchainDepthState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+
     // Built-in render passes
     RenderPassRec* mainRenderPass = nullptr;
     RenderPassRec* overlayRenderPass = nullptr;
@@ -473,6 +480,37 @@ struct D3D12Backend::Impl {
             backBufferRTVs[i] = rtv;
             backBufferState[i] = D3D12_RESOURCE_STATE_PRESENT;
         }
+        CreateSwapchainDepth();
+    }
+
+    void CreateSwapchainDepth() {
+        if (swapchainDepthSlot != UINT_MAX) {
+            dsvFree[swapchainDepthSlot] = false;
+            swapchainDepthSlot = UINT_MAX;
+        }
+        swapchainDepth.Reset();
+
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.Width = (UINT)width;
+        desc.Height = (UINT)height;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.Format = DXGI_FORMAT_D32_FLOAT;
+        desc.SampleDesc.Count = 1;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        D3D12_CLEAR_VALUE clear{};
+        clear.Format = DXGI_FORMAT_D32_FLOAT;
+        clear.DepthStencil.Depth = 1.0f;
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        if (FAILED(device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE,
+                &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear,
+                IID_PPV_ARGS(&swapchainDepth))))
+            throw std::runtime_error("D3D12: failed to create swapchain depth buffer");
+        swapchainDepthSlot = AllocDsv();
+        device->CreateDepthStencilView(swapchainDepth.Get(), nullptr, DsvCpu(swapchainDepthSlot));
+        swapchainDepthState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
     }
 
     void CreateFrameObjects() {
@@ -623,7 +661,6 @@ D3D12Backend::~D3D12Backend() = default;
 // ---- Frame lifecycle ----
 
 bool D3D12Backend::BeginFrame(bool skipRenderPass) {
-    (void)skipRenderPass;
     Impl& im = *m_Impl;
 
     if (im.resized) {
@@ -659,6 +696,28 @@ bool D3D12Backend::BeginFrame(bool skipRenderPass) {
     bbBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     im.cmdList->ResourceBarrier(1, &bbBarrier);
     im.backBufferState[im.backBufferIndex] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+
+    // Direct-to-swapchain 3D path (skipRenderPass == false, e.g. PhysicsDemo):
+    // bind the backbuffer RTV + swapchain depth, clear both, and set the
+    // viewport/scissor — the D3D12 equivalent of Vulkan starting the 3D render
+    // pass. The editor never hits this (BeginFrame(true) + RenderTexture +
+    // BeginSwapchainOverlay); without it the pass-less graph draws to no render
+    // target -> black window.
+    if (!skipRenderPass) {
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = im.backBufferRTVs[im.backBufferIndex];
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv = im.DsvCpu(im.swapchainDepthSlot);
+        im.cmdList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+
+        // Same clear color as VulkanDevice::BeginFrame's 3D pass (parity).
+        float clear[4] = { 0.15f, 0.15f, 0.2f, 1.0f };
+        im.cmdList->ClearRenderTargetView(rtv, clear, 0, nullptr);
+        im.cmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+        D3D12_VIEWPORT vp{ 0.0f, 0.0f, (float)im.width, (float)im.height, 0.0f, 1.0f };
+        im.cmdList->RSSetViewports(1, &vp);
+        D3D12_RECT sc{ 0, 0, (LONG)im.width, (LONG)im.height };
+        im.cmdList->RSSetScissorRects(1, &sc);
+    }
 
     return true;
 }
