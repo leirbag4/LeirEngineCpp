@@ -1,10 +1,10 @@
 #include <LeirEngine/Core/CoreApplication.h>
 #include <LeirEngine/Core/CoreObject.h>
+#include <LeirEngine/Core/Settings.h>
 #include <LeirEngine/Objects/Object3D.h>
 #include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/Scene/SceneManager.h>
 #include <LeirEngine/RHI/RenderBackend.h>
-#include <LeirEngine/RHI/VulkanBackend.h>
 #include <LeirEngine/Rendering/RenderPipeline.h>
 #include <LeirEngine/Rendering/Shader.h>
 #include <LeirEngine/Rendering/Mesh.h>
@@ -44,14 +44,19 @@ protected:
 
         // ---- RHI backend ----
         m_Backend.reset(Leir::RHI::BackendFactory::Create(
-            "", GetWindow(), GetWidth(), GetHeight(), false, "LeirEngine Physics Demo"));
+            Leir::LeirSettings::Get().graphics.backend,
+            GetWindow(), GetWidth(), GetHeight(), false, "LeirEngine Physics Demo"));
+        if (!m_Backend) {
+            Leir::XConsole::PrintError("Failed to create render backend");
+            return;
+        }
 
         // ---- Shaders ----
         std::string shaderDir = LEIR_SHADER_DIR;
         m_Shader = std::make_shared<Leir::Shader>(
             m_Backend.get(),
-            shaderDir + "/Basic.vert.spv",
-            shaderDir + "/Basic.frag.spv"
+            shaderDir + "/Basic.vert" + m_Backend->GetShaderFileExtension(),
+            shaderDir + "/Basic.frag" + m_Backend->GetShaderFileExtension()
         );
 
         // ---- Default white texture ----
@@ -230,6 +235,7 @@ private:
 int main()
 {
     Leir::XConsole::SetLevel(Leir::LogLevel::Info);
+    Leir::LeirSettings::Get().Load();
 
     PhysicsDemo app;
     app.Run();

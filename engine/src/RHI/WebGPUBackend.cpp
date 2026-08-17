@@ -396,9 +396,11 @@ struct WebGPUBackend::Impl {
     std::unordered_map<uint32_t, WGPUBindGroup> textureBindGroups;
     int bindlessSetSlot = -1; // bindless set index of the current graph, -1 if none
 #endif
-    // Per-draw push UBO slot of the current graph. Web increments it per push
-    // (see CmdExecuteGraph) so concurrent draws each read their own block;
-    // desktop keeps slot 0 (single buffer, matching the pre-pool behavior).
+    // Per-draw push UBO slot of the current graph. CmdExecuteGraph increments
+    // it per push so concurrent draws each read their own block: queue.writeBuffer
+    // into a shared buffer is last-write-wins (all draws would see the final
+    // push — e.g. every box drawn at the last box's transform, PhysicsDemo bug
+    // 2026-08-17). The slot pool is needed on every backend, browser and native.
     uint32_t pushSlot = 0;
 
     // Dummy white texture filling unbound bindless slots (1x1 R8G8B8A8Unorm).
@@ -2348,9 +2350,9 @@ void WebGPUBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
 
 void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) {
     Impl& im = *m_Impl;
+    im.pushSlot = 0;
 #if defined(__EMSCRIPTEN__)
     im.bindlessSetSlot = -1;
-    im.pushSlot = 0;
 #endif
     for (const auto& rec : graph.GetRecords()) {
         switch (rec.type) {
@@ -2390,9 +2392,7 @@ void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& g
                 CmdPushConstants(cmd, rec.draw.layout, rec.draw.pushStage,
                     rec.draw.pushOffset, (uint32_t)rec.draw.pushData.size(),
                     rec.draw.pushData.data());
-#if defined(__EMSCRIPTEN__)
                 im.pushSlot++;
-#endif
             }
             if (rec.draw.hasViewport)
                 CmdSetViewport(cmd, rec.draw.viewport);
