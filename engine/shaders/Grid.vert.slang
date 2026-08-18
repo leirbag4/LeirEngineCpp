@@ -1,8 +1,8 @@
 // Grid.vert.slang - editor ground grid vertex shader (procedural fragment grid).
-// The grid is one flat quad per LOD level; the LINES are generated in the
-// FRAGMENT shader (distance to the nearest grid line via fwidth). This vertex
-// shader only passes the world position through; the UBO carries the view
-// projection + camera position for the per-fragment LOD fade.
+// The grid is ONE flat quad; the LINES are generated in the FRAGMENT shader
+// (distance to the nearest grid line via fwidth). This vertex shader only
+// passes the world position through; the UBO carries the view projection, the
+// push constants the per-fragment LOD fade controls.
 
 struct VSInput {
     [[vk::location(0)]] float3 inPosition : POSITION0;
@@ -18,23 +18,18 @@ cbuffer UniformBufferObject {
     float4x4 viewProjection;
 } ubo;
 
-// Per-level procedural controls. Declared in BOTH stages so the merged
-// push-constant range covers VertexFragment (the Vulkan executor pushes with
-// the combined stage flags; a Vertex-only range here would trip
-// VUID-vkCmdPushConstants-offset-01796).
+// Declared in BOTH stages so the merged push-constant range covers
+// VertexFragment (the Vulkan executor pushes with the combined stage flags; a
+// Vertex-only range here would trip VUID-vkCmdPushConstants-offset-01796).
 struct GridPushConstants {
-    float unit;        // line spacing of this level (1 / 10 / 100)
-    float fadeStart;   // LOD fade-in distance
-    float fadeEnd;     // LOD fade-out distance
-    float lineWidth;   // line width in screen pixels
-    float mode;        // 0 = grid level, 1 = axis quad
-    float pad1;
-    float pad2;
-    float pad3;
-    float3 cameraPos;  // camera world position (fragment LOD fade)
-    float pad4;
-    float4 baseColor;   // grid: thin line color / axis: X-axis color
-    float4 chunkColor;  // grid: chunk line color / axis: Z-axis color
+    float lineWidth;   // 0  base line width in screen pixels
+    float chunkWidth;  // 4  chunk line width in screen pixels
+    float pad0;        // 8
+    float pad1;        // 12
+    float3 cameraPos;  // 16 camera world position (fragment LOD fade)
+    float pad2;        // 28
+    float4 baseColor;  // 32 grid: thin line color
+    float4 chunkColor; // 48 grid: chunk line color (every 10th, brighter)
 };
 
 [[vk::push_constant]]

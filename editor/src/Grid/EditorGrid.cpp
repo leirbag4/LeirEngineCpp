@@ -11,15 +11,16 @@ namespace {
 
 constexpr float kGridY = -0.01f; // slightly below 0 to avoid z-fighting with objects on the floor
 
-// Level geometry: one flat quad spanning ±halfExtent on X and Z. The lines are
-// generated in the fragment shader, so the mesh is trivial.
-constexpr float kL1Extent = 100.0f;    // unit 1,   fade 30  - 80
-constexpr float kL10Extent = 1000.0f;  // unit 10,  fade 60  - 600
-constexpr float kL100Extent = 10000.0f;// unit 100, fade 500 - 8000
-constexpr float kAxisExtent = 250.0f;  // origin axes, no fade, 2px
+// The whole grid is ONE flat quad spanning ±halfExtent on X and Z. The lines
+// for every LOD level are generated in the fragment shader, so the mesh is
+// trivial (the largest level, L100, fades out by 8000 units).
+constexpr float kGridExtent = 10000.0f;
 
-const Leir::Vector4 kThinColor(0.85f, 0.88f, 0.93f, 1.0f);   // base grid lines
-const Leir::Vector4 kChunkColor(1.0f, 1.0f, 1.0f, 1.0f);     // every 10th line, brighter
+// Line colors: thin lines are deliberately dim, chunk lines (every 10th of a
+// level) noticeably brighter so the 10x10 pattern reads clearly. Axes are
+// saturated red/blue and never fade.
+const Leir::Vector4 kThinColor(0.30f, 0.32f, 0.36f, 1.0f);   // base grid lines
+const Leir::Vector4 kChunkColor(0.62f, 0.66f, 0.75f, 1.0f);  // every 10th line, brighter
 const Leir::Vector4 kAxisXColor(0.95f, 0.25f, 0.25f, 1.0f);  // red: X axis (left-right)
 const Leir::Vector4 kAxisZColor(0.30f, 0.55f, 1.0f, 1.0f);   // blue: Z axis (depth)
 
@@ -63,35 +64,27 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
     graph.BindPipeline(m_Pipeline);
     graph.BindDescriptorSets(m_PipelineLayout, 0, { m_UBOSets[frame] });
 
-    auto drawMesh = [&](const LevelMesh& mesh, const GridPushConstants& push) {
-        if (mesh.indexCount <= 0)
-            return;
-        graph.BindVertexBuffer(mesh.vertexBuffer);
-        graph.BindIndexBuffer(mesh.indexBuffer);
-        graph.PushConstants(m_PipelineLayout, Leir::RHI::ShaderStageMask::VertexFragment,
-            0, (uint32_t)sizeof(GridPushConstants), &push);
-        graph.DrawIndexed(mesh.indexCount, 1, 0);
-    };
+    if (m_Grid.indexCount <= 0)
+        return;
 
-    // Levels from small to large (near lines first, bigger quads on top where
-    // their fade takes over). The axes draw last so the origin crossing reads
-    // clean and never fades.
-    drawMesh(m_L1, { 1.0f, 30.0f, 80.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        cameraPos, 0.0f, kThinColor, kChunkColor });
-    drawMesh(m_L10, { 10.0f, 60.0f, 600.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        cameraPos, 0.0f, kThinColor, kChunkColor });
-    drawMesh(m_L100, { 100.0f, 500.0f, 8000.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        cameraPos, 0.0f, kThinColor, kChunkColor });
-    drawMesh(m_Axis, { 1.0f, 0.0f, 0.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-        cameraPos, 0.0f, kAxisXColor, kAxisZColor });
+    // The single grid quad (lines and LOD fade generated in the fragment
+    // shader — see Grid.frag.slang).
+    GridPushConstants push;
+    push.lineWidth = 1.5f;
+    push.chunkWidth = 2.0f;
+    push.cameraPos = cameraPos;
+    push.baseColor = kThinColor;
+    push.chunkColor = kChunkColor;
+    graph.BindVertexBuffer(m_Grid.vertexBuffer);
+    graph.BindIndexBuffer(m_Grid.indexBuffer);
+    graph.PushConstants(m_PipelineLayout, Leir::RHI::ShaderStageMask::VertexFragment,
+        0, (uint32_t)sizeof(GridPushConstants), &push);
+    graph.DrawIndexed(m_Grid.indexCount, 1, 0);
 }
 
 void EditorGrid::BuildLevelMeshes()
 {
-    BuildLevel(kL1Extent, m_L1);
-    BuildLevel(kL10Extent, m_L10);
-    BuildLevel(kL100Extent, m_L100);
-    BuildLevel(kAxisExtent, m_Axis);
+    BuildLevel(kGridExtent, m_Grid);
 }
 
 void EditorGrid::BuildLevel(float halfExtent, LevelMesh& out)
@@ -241,7 +234,11 @@ void EditorGrid::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
     desc.topology = Leir::RHI::Topology::TriangleList;
     desc.polygonMode = Leir::RHI::PolygonMode::Fill;
     desc.cullMode = Leir::RHI::CullMode::None;
-    desc.depthTestEnable = true;
+    // No depth test/write: the grid is a decal over the cleared background and
+    // must NEVER occlude scene objects (writing depth at Y=-0.01 would hide
+    // e.g. the bottom half of a cube at Y=0). Objects drawn after it still
+    // cover the grid lines naturally.
+    desc.depthTestEnable = false;
     desc.blend.enable = true;
     m_Pipeline = m_Device->CreateGraphicsPipeline(desc);
 
@@ -302,8 +299,5 @@ void EditorGrid::DestroyResources()
         if (mesh.indexMemory.IsValid())
             m_Device->DestroyMemory(mesh.indexMemory);
     };
-    destroyLevel(m_L1);
-    destroyLevel(m_L10);
-    destroyLevel(m_L100);
-    destroyLevel(m_Axis);
+    destroyLevel(m_Grid);
 }

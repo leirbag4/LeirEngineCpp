@@ -256,6 +256,9 @@ struct RHIPipelineDesc {
     PolygonMode polygonMode = PolygonMode::Fill;
     CullMode cullMode = CullMode::Back;
     bool depthTestEnable = true;
+    // Gizmo/overlay pipelines set this to false so lines do not occlude each
+    // other (they only depth-test against the scene; later-drawn wins overlaps).
+    bool depthWriteEnable = true;
     RHIBlendState blend;
 };
 

@@ -73,6 +73,7 @@ public:
         VkPolygonMode polygonMode = VK_POLYGON_MODE_FILL,
         VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
         bool depthTestEnable = true,
+        bool depthWriteEnable = true,
         bool blendEnable = false
     ) const;
     VkPipelineLayout CreatePipelineLayout(

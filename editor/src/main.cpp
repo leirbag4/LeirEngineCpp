@@ -236,10 +236,14 @@ protected:
         // Editor ground grid (Unity-style, Y=0): drawn into the viewport RT
         // before the scene objects. Its pipeline targets the viewport render
         // pass, so it must be (re)created after the RenderTexture exists.
-        m_Grid = std::make_unique<EditorGrid>(m_Backend.get(), m_ViewportRT->GetRenderPass());
+        // DISABLED (PHASE-1 TEST): the procedural grid is temporarily off while
+        // the gizmo line technique is validated; see DrawGizmoShowcase.
+        // m_Grid = std::make_unique<EditorGrid>(m_Backend.get(), m_ViewportRT->GetRenderPass());
 
         // Gizmo renderer (procedural 3D lines/boxes/circles/spheres, constant
         // screen-pixel width). Drawn into the viewport RT on top of the scene.
+        // PHASE-1 TEST: enabled with the 3 test lines (red X axis, blue Z axis,
+        // white diagonal) in DrawGizmoShowcase. On success the grid returns.
         m_Gizmos = std::make_unique<GizmoRenderer>(m_Backend.get(), m_ViewportRT->GetRenderPass());
 
         // Camera (will be driven by EditorCamera)
@@ -271,35 +275,39 @@ protected:
         child->SetParent(cubeObj);
 
         // Sprites
-        auto* spriteObj = scene.CreateObject2D("TestSprite");
-        spriteObj->GetTransform().SetLocalPosition(
-            {GetWidth() * 0.5f, GetHeight() * 0.5f, 0.0f});
-        spriteObj->GetTransform().SetLocalScale({200.0f, 200.0f, 1.0f});
-        auto& spr = spriteObj->AddComponent<Leir::SpriteRenderer>();
-        spr.SetColor({0.0f, 1.0f, 1.0f, 1.0f});
+        // PHASE-1 TEST: the demo sprites are disabled — the screen-center
+        // "TestSprite" quad writes depth and was occluding the gizmo test
+        // lines (the blue Z axis had a "gap" exactly over its 200x200 area).
+        // Re-enable after the line validation.
+        // auto* spriteObj = scene.CreateObject2D("TestSprite");
+        // spriteObj->GetTransform().SetLocalPosition(
+        //     {GetWidth() * 0.5f, GetHeight() * 0.5f, 0.0f});
+        // spriteObj->GetTransform().SetLocalScale({200.0f, 200.0f, 1.0f});
+        // auto& spr = spriteObj->AddComponent<Leir::SpriteRenderer>();
+        // spr.SetColor({0.0f, 1.0f, 1.0f, 1.0f});
 
-        auto* spriteTex = scene.CreateObject2D("TexSprite");
-        spriteTex->GetTransform().SetLocalPosition({100.0f, 100.0f, 0.0f});
-        spriteTex->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
-        auto& sprTex = spriteTex->AddComponent<Leir::SpriteRenderer>();
-        sprTex.SetTexture(m_WhiteTexture.get());
-        sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
+        // auto* spriteTex = scene.CreateObject2D("TexSprite");
+        // spriteTex->GetTransform().SetLocalPosition({100.0f, 100.0f, 0.0f});
+        // spriteTex->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
+        // auto& sprTex = spriteTex->AddComponent<Leir::SpriteRenderer>();
+        // sprTex.SetTexture(m_WhiteTexture.get());
+        // sprTex.SetColor({1.0f, 0.0f, 0.0f, 1.0f});
 
-        Leir::Image sheetImage("assets/sprite_sheet_64_64.png");
-        auto sheetTex = std::make_shared<Leir::Texture2D>(m_Backend.get(), sheetImage);
-        auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 32, 32);
+        // Leir::Image sheetImage("assets/sprite_sheet_64_64.png");
+        // auto sheetTex = std::make_shared<Leir::Texture2D>(m_Backend.get(), sheetImage);
+        // auto sheet = std::make_shared<Leir::SpriteSheet>(sheetTex.get(), 32, 32);
 
-        auto* sheetSprite = scene.CreateObject2D("SheetSprite");
-        sheetSprite->GetTransform().SetLocalPosition({GetWidth() * 0.75f, GetHeight() * 0.25f, 0.0f});
-        sheetSprite->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
-        auto& sSpr = sheetSprite->AddComponent<Leir::SpriteRenderer>();
-        sSpr.SetSpriteSheet(sheet.get());
-        sSpr.SetFrameIndex(0);
-        sSpr.SetColor({1.0f, 1.0f, 1.0f, 1.0f});
+        // auto* sheetSprite = scene.CreateObject2D("SheetSprite");
+        // sheetSprite->GetTransform().SetLocalPosition({GetWidth() * 0.75f, GetHeight() * 0.25f, 0.0f});
+        // sheetSprite->GetTransform().SetLocalScale({100.0f, 100.0f, 1.0f});
+        // auto& sSpr = sheetSprite->AddComponent<Leir::SpriteRenderer>();
+        // sSpr.SetSpriteSheet(sheet.get());
+        // sSpr.SetFrameIndex(0);
+        // sSpr.SetColor({1.0f, 1.0f, 1.0f, 1.0f});
 
-        m_SheetTexture = sheetTex;
-        m_SpriteSheet = sheet;
-        m_SheetSprites.push_back(sheetSprite);
+        // m_SheetTexture = sheetTex;
+        // m_SpriteSheet = sheet;
+        // m_SheetSprites.push_back(sheetSprite);
 
         // ---- UI System ----
         m_UIRenderer = std::make_unique<Leir::UIRenderer>(m_Backend.get());
@@ -622,15 +630,17 @@ protected:
             m_SceneGraph.Clear();
             m_ViewportRT->BeginRender(m_SceneGraph, clearColor, 1.0f);
             // Ground grid first (before the scene objects so they occlude it).
-            if (m_Grid && m_PrimaryCamera) {
-                m_PrimaryCamera->RecalculateViewMatrix();
-                auto* camOwner = m_PrimaryCamera->GetOwner();
-                m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
-                    camOwner ? camOwner->GetTransform().GetWorldPosition()
-                             : Leir::Vector3(0.0f, 0.0f, 0.0f));
-            }
+            // DISABLED (PHASE-1 TEST): see the grid creation block in OnInit.
+            // if (m_Grid && m_PrimaryCamera) {
+            //     m_PrimaryCamera->RecalculateViewMatrix();
+            //     auto* camOwner = m_PrimaryCamera->GetOwner();
+            //     m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
+            //         camOwner ? camOwner->GetTransform().GetWorldPosition()
+            //                  : Leir::Vector3(0.0f, 0.0f, 0.0f));
+            // }
             m_RenderPipeline->Render(m_SceneGraph, scene);
             // Gizmos on top of the scene (depth-tested), one draw call for all.
+            // PHASE-1 TEST: the 3 test lines (red X, blue Z, white diagonal).
             if (m_Gizmos && m_PrimaryCamera) {
                 DrawGizmoShowcase();
                 m_Gizmos->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
@@ -653,34 +663,24 @@ protected:
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin
     // tri-axis, the Cube's wireframe bounding box, and a ground ring.
+    // PHASE-1 TEST: just the 3 validation lines requested by the user:
+    //   - red X axis,   2px, (0,0,0) -> (5,0,0)
+    //   - blue Z axis,  2px, (0,0,0) -> (0,0,5)
+    //   - white diagonal 1.5px, (0,0,0) -> (-5,0,4) (near-perpendicular to the
+    //     default view so it renders as a long, clearly-separated diagonal)
+    // Constant pixel width at any distance/angle is the property under test.
     void DrawGizmoShowcase()
     {
         if (!m_Gizmos)
             return;
         m_Gizmos->BeginFrame();
 
-        const float axisLen = 1.5f;
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {axisLen, 0.0f, 0.0f},
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {5.0f, 0.0f, 0.0f},
             {1.0f, 0.25f, 0.25f, 1.0f}, 2.0f);
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, axisLen, 0.0f},
-            {0.30f, 1.0f, 0.30f, 1.0f}, 2.0f);
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, axisLen},
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 5.0f},
             {0.30f, 0.55f, 1.0f, 1.0f}, 2.0f);
-
-        auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-        if (scene) {
-            if (auto* cube = scene->FindObjectByName("Cube")) {
-                auto& t = cube->GetTransform();
-                const float s = t.GetWorldScale().x;
-                // Slightly oversized so the wireframe doesn't z-fight the faces.
-                m_Gizmos->DrawBox(t.GetWorldPosition(),
-                    {s * 1.02f, s * 1.02f, s * 1.02f},
-                    {1.0f, 0.9f, 0.3f, 1.0f}, 1.5f);
-            }
-        }
-
-        m_Gizmos->DrawCircle({0.0f, 0.005f, 0.0f}, 2.0f, {0.0f, 1.0f, 0.0f},
-            {1.0f, 0.4f, 0.4f, 1.0f}, 48, 1.5f);
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-5.0f, 0.0f, 4.0f},
+            {1.0f, 1.0f, 1.0f, 1.0f}, 1.5f);
     }
 
     void OnShutdown() override

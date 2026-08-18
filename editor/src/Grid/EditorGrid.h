@@ -18,14 +18,14 @@ class RenderBackend;
 
 // Unity-style ground grid rendered in the editor viewport (Y=0).
 //
-// The grid is drawn as ONE flat quad per LOD level and the LINES are generated
-// procedurally in the fragment shader (Grid.frag.slang): distance to the
-// nearest grid line, converted to screen pixels with fwidth(), so every line
-// has a constant 1px anti-aliased width at any distance/angle. Chunk lines
-// (every 10th of a level) are slightly brighter. Each level fades in/out by
-// horizontal camera distance (overlapping ranges dissolve smoothly: the lines
-// at multiples of 10 stay alive through the sum of alphas). A fourth quad
-// draws the origin axes (red X / blue Z) at 2px. See Grid.frag.slang.
+// The grid is drawn as ONE flat quad (a single mesh covers every LOD level) and
+// the LINES are generated procedurally in the fragment shader (Grid.frag.slang):
+// distance to the nearest grid line, converted to screen pixels with fwidth(),
+// so every line has a constant 1px anti-aliased width at any distance/angle.
+// L1/L10/L100 are evaluated and blended in the same fragment pass, so shared
+// chunk-line positions never z-fight (a single quad has no coplanar overlaps).
+// Chunk lines (every 10th of a level) are brighter; the origin axes (red X /
+// blue Z, 2px, never fading) are also computed here. See Grid.frag.slang.
 class EditorGrid {
 public:
     EditorGrid(Leir::RHI::RenderBackend* device,
@@ -50,20 +50,16 @@ private:
         Leir::Matrix4x4 viewProjection;
     };
 
-    // Layout must match Grid.vert.slang's GridPushConstants (80 bytes).
+    // Layout must match Grid.vert.slang's GridPushConstants (64 bytes).
     struct GridPushConstants {
-        float unit = 1.0f;      // 0
-        float fadeStart = 0.0f; // 4
-        float fadeEnd = 0.0f;   // 8
-        float lineWidth = 1.0f; // 12
-        float mode = 0.0f;      // 16
-        float pad1 = 0.0f;      // 20
-        float pad2 = 0.0f;      // 24
-        float pad3 = 0.0f;      // 28
-        Leir::Vector3 cameraPos; // 32
-        float pad4 = 0.0f;      // 44
-        Leir::Vector4 baseColor{1.0f, 1.0f, 1.0f, 1.0f}; // 48
-        Leir::Vector4 chunkColor{1.0f, 1.0f, 1.0f, 1.0f}; // 64
+        float lineWidth = 1.5f;      // 0
+        float chunkWidth = 2.0f;     // 4
+        float pad0 = 0.0f;           // 8
+        float pad1 = 0.0f;           // 12
+        Leir::Vector3 cameraPos;     // 16
+        float pad2 = 0.0f;           // 28
+        Leir::Vector4 baseColor{1.0f, 1.0f, 1.0f, 1.0f}; // 32
+        Leir::Vector4 chunkColor{1.0f, 1.0f, 1.0f, 1.0f}; // 48
     };
 
     struct LevelMesh {
@@ -88,10 +84,7 @@ private:
 
     Leir::RHI::RenderBackend* m_Device = nullptr;
 
-    LevelMesh m_L1;
-    LevelMesh m_L10;
-    LevelMesh m_L100;
-    LevelMesh m_Axis;
+    LevelMesh m_Grid;
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;

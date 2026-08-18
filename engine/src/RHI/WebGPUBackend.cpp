@@ -1405,7 +1405,7 @@ RHIPipeline WebGPUBackend::CreateGraphicsPipeline(const RHIPipelineDesc& desc) {
     WGPUDepthStencilState ds{};
     if (rp->hasDepth && desc.depthTestEnable) {
         ds.format = rp->depthFormat;
-        ds.depthWriteEnabled = WGPUOptionalBool_True;
+        ds.depthWriteEnabled = desc.depthWriteEnable ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         ds.depthCompare = WGPUCompareFunction_Less;
         ds.stencilReadMask = 0xFFFFFFFFu;
         ds.stencilWriteMask = 0xFFFFFFFFu;

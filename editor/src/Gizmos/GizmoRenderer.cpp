@@ -5,6 +5,7 @@
 #include "LeirEngine/Rendering/Shader.h"
 #include "LeirEngine/Rendering/ShaderLayout.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -146,26 +147,100 @@ void GizmoRenderer::Render(Leir::RHI::GCommandGraph& graph,
     std::memcpy(data, &ubo, sizeof(GizmoUBO));
     m_Device->UnmapMemory(m_UBOMemories[frame]);
 
-    // Expand lines into quads, skipping segments behind the near plane (a
-    // negative clip w would flip the quad).
+    // Expand lines into quads. Each quad is 4 strip corners; a single
+    // TriangleStrip over all quads would stitch a spurious triangle between
+    // consecutive quads, so each quad (except the last) is followed by TWO
+    // degenerate vertices that close the strip: a repeat of this quad's LAST
+    // corner, then a repeat of the NEXT quad's FIRST corner (the standard
+    // strip-restart pair). Emitting two copies of the last corner instead
+    // leaves a spurious (A3, B0, B1) triangle between the quads.
+    //
+    // Segments that cross the near plane are CLIPPED to it (a negative clip w
+    // would flip the quad), so a line stays visible until the camera actually
+    // crosses its plane instead of vanishing as an endpoint goes behind the
+    // near plane. Fully-behind segments are dropped. The clip intersection
+    // parameter t (clip.w is linear along the world segment) is reused to
+    // interpolate the WORLD endpoints, keeping the VS math unchanged.
+    //
+    // Lines are drawn FAR-TO-NEAR (the pipeline has depth WRITE disabled, so
+    // draw order decides overlaps): at a grazing camera the projections of
+    // coplanar lines overlap, and the NEAREST line must win the shared pixels
+    // — sorting by the segment's closest view-space distance makes the nearer
+    // line draw last and cleanly cover the farther one (no red/blue "mixing").
+    constexpr float kNearClip = 0.1f; // matches the camera near plane
+    struct DrawnSeg {
+        glm::vec3 s;
+        glm::vec3 e;
+        Leir::Vector4 color;
+        float width;
+        float key; // closest clip.w (= -view z) of the clipped segment
+    };
+    std::vector<DrawnSeg> segs;
+    segs.reserve(m_Lines.size());
     const glm::mat4 vp = ubo.viewProjection;
-    m_Quads.clear();
     for (const auto& line : m_Lines) {
         const glm::vec3 s(line.start);
         const glm::vec3 e(line.end);
         const glm::vec4 clipS = vp * glm::vec4(s, 1.0f);
         const glm::vec4 clipE = vp * glm::vec4(e, 1.0f);
-        if (clipS.w <= 0.0f || clipE.w <= 0.0f)
+        glm::vec3 sClipped = s;
+        glm::vec3 eClipped = e;
+        if (clipS.w <= kNearClip && clipE.w <= kNearClip)
             continue;
+        if (clipS.w <= kNearClip) {
+            const float t = (kNearClip - clipS.w) / (clipE.w - clipS.w);
+            sClipped = glm::mix(s, e, t);
+        } else if (clipE.w <= kNearClip) {
+            const float t = (kNearClip - clipS.w) / (clipE.w - clipS.w);
+            eClipped = glm::mix(s, e, t);
+        }
+        DrawnSeg seg;
+        seg.s = sClipped;
+        seg.e = eClipped;
+        seg.color = line.color;
+        seg.width = line.width;
+        seg.key = std::min(clipS.w, clipE.w); // w = -view z: smaller = nearer
+        segs.push_back(seg);
+    }
+    std::sort(segs.begin(), segs.end(),
+        [](const DrawnSeg& a, const DrawnSeg& b) { return a.key < b.key; });
+
+    m_Quads.clear();
+    for (size_t li = 0; li < segs.size(); ++li) {
+        const auto& seg = segs[li];
+        if (m_Quads.size() + 6 > kMaxVertices)
+            break;
         for (int c = 0; c < 4; ++c) {
             GizmoVertex v;
-            v.start = line.start;
-            v.end = line.end;
-            v.color = line.color;
+            v.start = seg.s;
+            v.end = seg.e;
+            v.color = seg.color;
             v.cornerX = kCornerX[c];
             v.cornerY = kCornerY[c];
-            v.width = line.width;
+            v.width = seg.width;
             m_Quads.push_back(v);
+        }
+        if (li + 1 < segs.size()) {
+            // Strip restart: repeat this quad's last corner (A3), then the
+            // next quad's first corner (B0). Both are zero-area connectors.
+            const auto& next = segs[li + 1];
+            GizmoVertex a3;
+            a3.start = seg.s;
+            a3.end = seg.e;
+            a3.color = seg.color;
+            a3.cornerX = kCornerX[3];
+            a3.cornerY = kCornerY[3];
+            a3.width = seg.width;
+            m_Quads.push_back(a3);
+
+            GizmoVertex b0;
+            b0.start = next.s;
+            b0.end = next.e;
+            b0.color = next.color;
+            b0.cornerX = kCornerX[0];
+            b0.cornerY = kCornerY[0];
+            b0.width = next.width;
+            m_Quads.push_back(b0);
         }
     }
     if (m_Quads.empty())
@@ -271,6 +346,9 @@ void GizmoRenderer::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
     desc.polygonMode = Leir::RHI::PolygonMode::Fill;
     desc.cullMode = Leir::RHI::CullMode::None;
     desc.depthTestEnable = true;
+    desc.depthWriteEnable = false; // gizmo lines only test against the scene,
+                                   // not each other (later-drawn wins overlaps
+                                   // -> no red/white zippering at grazing views)
     desc.blend.enable = true;
     m_Pipeline = m_Device->CreateGraphicsPipeline(desc);
 

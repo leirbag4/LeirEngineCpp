@@ -412,6 +412,7 @@ RHIPipeline VulkanBackend::CreateGraphicsPipeline(const RHIPipelineDesc& desc) {
         ToVk(desc.polygonMode),
         ToVk(desc.cullMode),
         desc.depthTestEnable,
+        desc.depthWriteEnable,
         desc.blend.enable));
     return p;
 }

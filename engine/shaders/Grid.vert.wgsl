@@ -16,18 +16,14 @@ struct UniformBufferObject {
 };
 
 struct PushConstants {
-    unit: f32,
-    fadeStart: f32,
-    fadeEnd: f32,
-    lineWidth: f32,
-    mode: f32,
-    pad1: f32,
-    pad2: f32,
-    pad3: f32,
-    cameraPos: vec3<f32>,
-    pad4: f32,
-    baseColor: vec4<f32>,
-    chunkColor: vec4<f32>,
+    lineWidth: f32,   // 0
+    chunkWidth: f32,  // 4
+    pad0: f32,        // 8
+    pad1: f32,        // 12
+    cameraPos: vec3<f32>, // 16
+    pad2: f32,        // 28
+    baseColor: vec4<f32>, // 32
+    chunkColor: vec4<f32>, // 48
 };
 
 @group(0) @binding(0) var<uniform> ubo: UniformBufferObject;

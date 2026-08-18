@@ -1,12 +1,18 @@
 // Gizmo.vert.wgsl - procedural constant-pixel-width 3D line vertex shader
 // (WebGPU backend). Mirrors Gizmo.vert.slang: each line is a 4-corner triangle
 // strip; each corner carries the full segment + corner selectors. The shader
-// projects both endpoints, takes the screen-space perpendicular and expands by
-// width/2 px, giving a perspective-correct constant-pixel-width line.
+// projects both endpoints, takes the screen-space (pixel) perpendicular and
+// expands by width/2 px, giving a perspective-correct constant-pixel-width
+// line.
 
 struct VSOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) fragColor: vec4<f32>,
+    // Signed perpendicular offset from the centerline in PIXELS, interpolated
+    // across the quad. The fragment shader uses it for the 1px AA ramp.
+    @location(1) sidePx: f32,
+    // Line width in pixels, interpolated (per-line, uniform across the quad).
+    @location(2) widthPx: f32,
 };
 
 struct UniformBufferObject {
@@ -39,23 +45,30 @@ fn vs_main(
     let ndcS = clipS.xy / clipS.w;
     let ndcE = clipE.xy / clipE.w;
 
-    let scale = vec2<f32>(push.viewportHeight / push.viewportWidth, 1.0);
-    let invScale = vec2<f32>(push.viewportWidth / push.viewportHeight, 1.0);
-    let sS = ndcS * scale;
-    let sE = ndcE * scale;
+    let vw = max(push.viewportWidth, 1.0);
+    let vh = max(push.viewportHeight, 1.0);
 
     let t = cornerX;
     let w = mix(clipS.w, clipE.w, t);
     let z = mix(clipS.z, clipE.z, t);
 
-    let dir = sE - sS;
-    var perp = vec2<f32>(0.0, 0.0);
-    if (length(dir) > 1e-6) {
-        perp = normalize(vec2<f32>(-dir.y, dir.x));
+    // Line direction in screen pixels (isotropic), then a unit perpendicular.
+    let dirPx = (ndcE - ndcS) * vec2<f32>(0.5 * vw, 0.5 * vh);
+    let perp = vec2<f32>(-dirPx.y, dirPx.x);
+    let dirLen = length(perp);
+    var perpN = vec2<f32>(0.0, 0.0);
+    if (dirLen > 1e-6) {
+        perpN = perp / dirLen;
     }
 
-    let expanded = mix(sS, sE, t) + perp * (width * 0.5 * cornerY);
-    out.position = vec4<f32>(expanded * invScale * w, z, w);
+    // Expand by width/2 pixels along the perpendicular and convert back to NDC.
+    let offsetPx = perpN * (width * 0.5 * cornerY);
+    let offsetNdc = offsetPx / vec2<f32>(0.5 * vw, 0.5 * vh);
+
+    let ndc = mix(ndcS, ndcE, t) + offsetNdc;
+    out.position = vec4<f32>(ndc * w, z, w);
     out.fragColor = color;
+    out.sidePx = width * 0.5 * cornerY;
+    out.widthPx = width;
     return out;
 }

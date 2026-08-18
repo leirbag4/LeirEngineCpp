@@ -867,7 +867,7 @@ RHIPipeline D3D12Backend::CreateGraphicsPipeline(const RHIPipelineDesc& desc) {
     }
 
     pso.DepthStencilState.DepthEnable = desc.depthTestEnable ? TRUE : FALSE;
-    pso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    pso.DepthStencilState.DepthWriteMask = desc.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
     pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
     pso.DepthStencilState.StencilEnable = FALSE;
 

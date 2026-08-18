@@ -3,7 +3,7 @@
 // Each line is a 4-corner triangle strip; every corner carries the full
 // segment (start, end, color) plus which corner it is (cornerX: 0=start /
 // 1=end, cornerY: side +1/-1). The vertex shader projects both endpoints,
-// computes the perpendicular of the line in screen space and expands it by
+// computes the perpendicular of the line in screen PIXELS and expands it by
 // width/2 pixels, so the line is `width` px thick at any distance/angle and
 // perspective-correct (clip w/z are interpolated between the endpoints).
 //
@@ -21,6 +21,12 @@ struct VSInput {
 
 struct VSOutput {
     [[vk::location(0)]] float4 fragColor : COLOR0;
+    // Signed perpendicular offset from the segment centerline in PIXELS,
+    // interpolated across the quad. The fragment shader uses it for the 1px
+    // anti-aliasing ramp.
+    [[vk::location(1)]] float sidePx : TEXCOORD1;
+    // Line width in pixels, interpolated (per-line, uniform across the quad).
+    [[vk::location(2)]] float widthPx : TEXCOORD2;
     float4 position : SV_Position;
 };
 
@@ -50,24 +56,27 @@ VSOutput main(VSInput input) {
     float2 ndcS = clipS.xy / clipS.w;
     float2 ndcE = clipE.xy / clipE.w;
 
-    // Screen-space uniform units (1 unit = 1 px in X and Y alike) so the
-    // perpendicular and the pixel width are angle-independent.
-    float2 scale = float2(push.viewportHeight / push.viewportWidth, 1.0);
-    float2 invScale = float2(push.viewportWidth / push.viewportHeight, 1.0);
-    float2 sS = ndcS * scale;
-    float2 sE = ndcE * scale;
+    float vw = max(push.viewportWidth, 1.0);
+    float vh = max(push.viewportHeight, 1.0);
 
     float t = input.cornerX;
     float w = lerp(clipS.w, clipE.w, t);
     float z = lerp(clipS.z, clipE.z, t);
 
-    float2 dir = sE - sS;
-    float2 perp = float2(0.0, 0.0);
-    if (length(dir) > 1e-6)
-        perp = normalize(float2(-dir.y, dir.x));
+    // Line direction in screen pixels (isotropic), then a unit perpendicular.
+    float2 dirPx = (ndcE - ndcS) * float2(0.5 * vw, 0.5 * vh);
+    float2 perp = float2(-dirPx.y, dirPx.x);
+    float dirLen = length(perp);
+    perp = dirLen > 1e-6 ? perp / dirLen : float2(0.0, 0.0);
 
-    float2 expanded = lerp(sS, sE, t) + perp * (input.width * 0.5 * input.cornerY);
-    output.position = float4(expanded * invScale * w, z, w);
+    // Expand by width/2 pixels along the perpendicular and convert back to NDC.
+    float2 offsetPx = perp * (input.width * 0.5 * input.cornerY);
+    float2 offsetNdc = offsetPx / float2(0.5 * vw, 0.5 * vh);
+
+    float2 ndc = lerp(ndcS, ndcE, t) + offsetNdc;
+    output.position = float4(ndc * w, z, w);
     output.fragColor = input.color;
+    output.sidePx = input.width * 0.5 * input.cornerY;
+    output.widthPx = input.width;
     return output;
 }

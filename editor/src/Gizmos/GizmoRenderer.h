@@ -84,7 +84,8 @@ private:
 
     static const int kFrames = 2;
     static const uint32_t kMaxLines = 16384;
-    static const uint32_t kMaxVertices = kMaxLines * 4;
+    // Each line = 4 strip corners + up to 2 degenerate strip-closers.
+    static const uint32_t kMaxVertices = kMaxLines * 6;
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();

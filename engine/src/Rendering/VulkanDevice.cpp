@@ -988,6 +988,7 @@ VkPipeline VulkanDevice::CreateGraphicsPipeline(
     VkPolygonMode polygonMode,
     VkCullModeFlags cullMode,
     bool depthTestEnable,
+    bool depthWriteEnable,
     bool blendEnable) const
 {
     VkPipelineVertexInputStateCreateInfo vertexInput{};
@@ -1026,7 +1027,7 @@ VkPipeline VulkanDevice::CreateGraphicsPipeline(
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = depthTestEnable ? VK_TRUE : VK_FALSE;
-    depthStencil.depthWriteEnable = depthTestEnable ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable = depthWriteEnable ? VK_TRUE : VK_FALSE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
     VkPipelineColorBlendAttachmentState blend{};
