@@ -35,6 +35,7 @@
 #include <LeirEngine/UI/UIDebugOverlay.h>
 #include <LeirEngine/UI/Dock/DockManager.h>
 #include "UI/UITestPanel.h"
+#include "UI/GizmoLineTestPanel.h"
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
@@ -447,11 +448,17 @@ protected:
         m_DebugPanel->SetName("DebugPanel");
         m_DebugPanel->SetFont(m_FontSmall.get());
 
+        // Gizmo-line live knobs (color / alpha / width), "Test2" tab.
+        m_GizmoTestPanel = new GizmoLineTestPanel();
+        m_GizmoTestPanel->SetName("GizmoTestPanel");
+        m_GizmoTestPanel->SetFont(m_FontSmall.get());
+
         // Register dockable panels (core ones are not closeable)
         m_DockManager->RegisterPanel("Hierarchy", "Hierarchy", hierarchy, false);
         m_DockManager->RegisterPanel("Viewport", "Viewport", m_ViewportPanel, false);
         m_DockManager->RegisterPanel("Inspector", "Inspector", inspector, false);
         m_DockManager->RegisterPanel("TestPanel", "Test", m_TestPanel, true);
+        m_DockManager->RegisterPanel("GizmoTestPanel", "Test2", m_GizmoTestPanel, true);
         m_DockManager->RegisterPanel("CameraTestPanel", "Camera", m_CameraTestPanel, true);
         m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
         m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
@@ -663,12 +670,18 @@ protected:
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin
     // tri-axis, the Cube's wireframe bounding box, and a ground ring.
-    // PHASE-1 TEST: just the 3 validation lines requested by the user:
+    // PHASE-1 TEST: the 3 validation lines requested by the user:
     //   - red X axis,   2px, (0,0,0) -> (5,0,0)
     //   - blue Z axis,  2px, (0,0,0) -> (0,0,5)
     //   - white diagonal 1.5px, (0,0,0) -> (-5,0,4) (near-perpendicular to the
     //     default view so it renders as a long, clearly-separated diagonal)
     // Constant pixel width at any distance/angle is the property under test.
+    //
+    // Extra probes so the user can eyeball the other two knobs:
+    //   - THICKNESS fan: 4 parallel opaque lines along +X at increasing heights
+    //     (y = 0.4/0.8/1.2/1.6), widths 1/2/3/5 px.
+    //   - ALPHA fan: 4 lines radiating from the origin toward -X/+Z with the
+    //     same 2px width but alphas 1.0/0.75/0.5/0.25 (blend is SrcAlpha).
     void DrawGizmoShowcase()
     {
         if (!m_Gizmos)
@@ -681,6 +694,33 @@ protected:
             {0.30f, 0.55f, 1.0f, 1.0f}, 2.0f);
         m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-5.0f, 0.0f, 4.0f},
             {1.0f, 1.0f, 1.0f, 1.0f}, 1.5f);
+
+        // Thickness fan (opaque, parallel along +X, rising in Y).
+        m_Gizmos->DrawLine({0.0f, 0.4f, 0.0f}, {5.0f, 0.4f, 0.0f},
+            {1.0f, 0.30f, 0.30f, 1.0f}, 1.0f);  // 1px
+        m_Gizmos->DrawLine({0.0f, 0.8f, 0.0f}, {5.0f, 0.8f, 0.0f},
+            {1.0f, 0.60f, 0.10f, 1.0f}, 2.0f);  // 2px
+        m_Gizmos->DrawLine({0.0f, 1.2f, 0.0f}, {5.0f, 1.2f, 0.0f},
+            {1.0f, 0.90f, 0.10f, 1.0f}, 3.0f);  // 3px
+        m_Gizmos->DrawLine({0.0f, 1.6f, 0.0f}, {5.0f, 1.6f, 0.0f},
+            {1.0f, 0.20f, 0.80f, 1.0f}, 5.0f);  // 5px
+
+        // Alpha fan (same 2px width, radiating toward -X/+Z).
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-5.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 1.0f, 1.00f}, 2.0f);   // opaque
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-4.5f, 0.0f, 1.0f},
+            {0.0f, 1.0f, 1.0f, 0.75f}, 2.0f);   // 75%
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-3.5f, 0.0f, 2.0f},
+            {0.0f, 1.0f, 0.0f, 0.50f}, 2.0f);   // 50%
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-2.5f, 0.0f, 3.0f},
+            {1.0f, 0.90f, 0.20f, 0.25f}, 2.0f); // 25%
+
+        // Live line controlled by the "Test2" dock panel (color/alpha/width).
+        if (m_GizmoTestPanel) {
+            m_Gizmos->DrawLine(m_GizmoTestPanel->GetStart(),
+                m_GizmoTestPanel->GetEnd(), m_GizmoTestPanel->GetColor(),
+                m_GizmoTestPanel->GetWidth());
+        }
     }
 
     void OnShutdown() override
@@ -723,6 +763,8 @@ protected:
         m_InspectorPanel = nullptr;
         DeleteUiSubtree(m_TestPanel);
         m_TestPanel = nullptr;
+        DeleteUiSubtree(m_GizmoTestPanel);
+        m_GizmoTestPanel = nullptr;
         DeleteUiSubtree(m_CameraTestPanel);
         m_CameraTestPanel = nullptr;
         DeleteUiSubtree(m_TextAreaDebugPanel);
@@ -868,6 +910,7 @@ private:
     Leir::Camera* m_PrimaryCamera = nullptr;
 
     UITestPanel* m_TestPanel = nullptr;
+    GizmoLineTestPanel* m_GizmoTestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;
     DebugTextPanel* m_DebugTextPanel = nullptr;
     ConsolePanel* m_ConsolePanel = nullptr;

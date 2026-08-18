@@ -61,14 +61,19 @@ fn vs_main(
         perpN = perp / dirLen;
     }
 
-    // Expand by width/2 pixels along the perpendicular and convert back to NDC.
-    let offsetPx = perpN * (width * 0.5 * cornerY);
+    // Expand by halfQuad pixels along the perpendicular and convert back to
+    // NDC. halfQuad = max(width, 1.0)/2: the quad is NEVER thinner than 1 px,
+    // otherwise a sub-pixel quad breaks up into gaps under pixel-center
+    // rasterization (no MSAA). The fragment shader scales the alpha by the
+    // REAL width to render sub-pixel lines faint and continuous.
+    let halfQuad = max(width, 1.0) * 0.5;
+    let offsetPx = perpN * (halfQuad * cornerY);
     let offsetNdc = offsetPx / vec2<f32>(0.5 * vw, 0.5 * vh);
 
     let ndc = mix(ndcS, ndcE, t) + offsetNdc;
     out.position = vec4<f32>(ndc * w, z, w);
     out.fragColor = color;
-    out.sidePx = width * 0.5 * cornerY;
+    out.sidePx = halfQuad * cornerY;
     out.widthPx = width;
     return out;
 }

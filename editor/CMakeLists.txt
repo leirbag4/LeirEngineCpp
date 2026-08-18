@@ -6,6 +6,7 @@ src/Grid/EditorGrid.cpp
 src/Gizmos/GizmoRenderer.cpp
     src/UI/UIDragFloatInput.cpp
     src/UI/UITestPanel.cpp
+    src/UI/GizmoLineTestPanel.cpp
     src/UI/CameraTestPanel.cpp
     src/UI/DebugTextPanel.cpp
     src/UI/TextAreaDebugPanel.cpp

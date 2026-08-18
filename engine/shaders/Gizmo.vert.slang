@@ -69,14 +69,19 @@ VSOutput main(VSInput input) {
     float dirLen = length(perp);
     perp = dirLen > 1e-6 ? perp / dirLen : float2(0.0, 0.0);
 
-    // Expand by width/2 pixels along the perpendicular and convert back to NDC.
-    float2 offsetPx = perp * (input.width * 0.5 * input.cornerY);
+    // Expand by halfQuad pixels along the perpendicular and convert back to
+    // NDC. halfQuad = max(width, 1.0)/2: the quad is NEVER thinner than 1 px,
+    // otherwise a sub-pixel quad breaks up into gaps under pixel-center
+    // rasterization (no MSAA). The fragment shader scales the alpha by the
+    // REAL width to render sub-pixel lines faint and continuous.
+    float halfQuad = max(input.width, 1.0) * 0.5;
+    float2 offsetPx = perp * (halfQuad * input.cornerY);
     float2 offsetNdc = offsetPx / float2(0.5 * vw, 0.5 * vh);
 
     float2 ndc = lerp(ndcS, ndcE, t) + offsetNdc;
     output.position = float4(ndc * w, z, w);
     output.fragColor = input.color;
-    output.sidePx = input.width * 0.5 * input.cornerY;
+    output.sidePx = halfQuad * input.cornerY;
     output.widthPx = input.width;
     return output;
 }
