@@ -258,6 +258,11 @@ struct PipelineLayoutRec {
     // records several draws per frame; a single buffer written via
     // QueueWriteBuffer would make every draw read the LAST write, since queue
     // writes all complete before the command buffer executes). Grown lazily.
+    // The slot counter is per-layout (not a graph-global): a graph may push on
+    // several pipeline layouts (e.g. the editor grid + the scene meshes), and
+    // each layout needs its own independent slots so a draw's push binds at its
+    // own group index. Reset to 0 by CmdExecuteGraph at the start of every graph.
+    uint32_t pushSlot = 0;
     std::vector<WGPUBuffer> pushBuffers;
     std::vector<WGPUBindGroup> pushBindGroups;
 };
@@ -396,12 +401,6 @@ struct WebGPUBackend::Impl {
     std::unordered_map<uint32_t, WGPUBindGroup> textureBindGroups;
     int bindlessSetSlot = -1; // bindless set index of the current graph, -1 if none
 #endif
-    // Per-draw push UBO slot of the current graph. CmdExecuteGraph increments
-    // it per push so concurrent draws each read their own block: queue.writeBuffer
-    // into a shared buffer is last-write-wins (all draws would see the final
-    // push — e.g. every box drawn at the last box's transform, PhysicsDemo bug
-    // 2026-08-17). The slot pool is needed on every backend, browser and native.
-    uint32_t pushSlot = 0;
 
     // Dummy white texture filling unbound bindless slots (1x1 R8G8B8A8Unorm).
     WGPUTexture dummyTexture = nullptr;
@@ -2284,9 +2283,12 @@ void WebGPUBackend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout lay
     if (!lr || !lr->hasPush) return;
 
     // One UBO per draw slot (see PipelineLayoutRec) so concurrent draws each
-    // read their own push data. The buffer size is the max push range aligned
-    // to 16 (WebGPU uniform buffer size rule).
-    if (lr->pushBuffers.size() <= im.pushSlot) {
+    // read their own push data. The slot counter is per-layout: a graph may
+    // push on several layouts and each must index its own buffer list. The
+    // buffer size is the max push range aligned to 16 (WebGPU uniform buffer
+    // size rule).
+    uint32_t slot = lr->pushSlot;
+    if (lr->pushBuffers.size() <= slot) {
         uint32_t bufSize = std::max<uint32_t>((lr->pushSize + 15u) & ~15u, 16u);
         WGPUBufferDescriptor bd{};
         bd.label = WgpuStr("push");
@@ -2308,13 +2310,14 @@ void WebGPUBackend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout lay
         lr->pushBuffers.push_back(buf);
         lr->pushBindGroups.push_back(group);
     }
-    if (im.pushSlot >= lr->pushBuffers.size()) return;
-    WGPUBuffer buf = lr->pushBuffers[im.pushSlot];
-    WGPUBindGroup group = lr->pushBindGroups[im.pushSlot];
+    if (slot >= lr->pushBuffers.size()) return;
+    WGPUBuffer buf = lr->pushBuffers[slot];
+    WGPUBindGroup group = lr->pushBindGroups[slot];
     if (!buf || !group) return;
 
     im.QueueWriteBuffer(im.queue, buf, offset, data, size);
     im.RenderPassEncoderSetBindGroup(im.currentPass, lr->pushGroup, group, 0, nullptr);
+    lr->pushSlot = slot + 1;
 }
 
 void WebGPUBackend::CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewport) {
@@ -2350,7 +2353,15 @@ void WebGPUBackend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage imag
 
 void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& graph) {
     Impl& im = *m_Impl;
-    im.pushSlot = 0;
+    // Reset the per-layout push-slot counters used by CmdPushConstants: each
+    // layout that pushes during this graph reuses its own buffers from slot 0.
+    for (const auto& rec : graph.GetRecords()) {
+        if (rec.type == GRecordType::Draw && rec.draw.layout.handle) {
+            auto* lr = reinterpret_cast<PipelineLayoutRec*>(rec.draw.layout.handle);
+            if (lr)
+                lr->pushSlot = 0;
+        }
+    }
 #if defined(__EMSCRIPTEN__)
     im.bindlessSetSlot = -1;
 #endif
@@ -2392,7 +2403,6 @@ void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& g
                 CmdPushConstants(cmd, rec.draw.layout, rec.draw.pushStage,
                     rec.draw.pushOffset, (uint32_t)rec.draw.pushData.size(),
                     rec.draw.pushData.data());
-                im.pushSlot++;
             }
             if (rec.draw.hasViewport)
                 CmdSetViewport(cmd, rec.draw.viewport);

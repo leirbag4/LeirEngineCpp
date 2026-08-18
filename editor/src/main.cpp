@@ -43,6 +43,8 @@
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "Camera/EditorCamera.h"
+#include "Grid/EditorGrid.h"
+#include "Gizmos/GizmoRenderer.h"
 
 #ifdef LEIR_EDITOR_SLANG
 #include "Shaders/SlangShaderCompiler.h"
@@ -231,11 +233,21 @@ protected:
             (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportH * dpr)));
         m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
 
+        // Editor ground grid (Unity-style, Y=0): drawn into the viewport RT
+        // before the scene objects. Its pipeline targets the viewport render
+        // pass, so it must be (re)created after the RenderTexture exists.
+        m_Grid = std::make_unique<EditorGrid>(m_Backend.get(), m_ViewportRT->GetRenderPass());
+
+        // Gizmo renderer (procedural 3D lines/boxes/circles/spheres, constant
+        // screen-pixel width). Drawn into the viewport RT on top of the scene.
+        m_Gizmos = std::make_unique<GizmoRenderer>(m_Backend.get(), m_ViewportRT->GetRenderPass());
+
         // Camera (will be driven by EditorCamera)
         auto* cameraObj = scene.CreateObject3D("Camera");
         auto& camera = cameraObj->AddComponent<Leir::Camera>();
         camera.SetPerspective(60.0f, (float)m_ViewportW / (float)m_ViewportH, 0.1f, 100.0f);
         camera.SetPrimary(true);
+        m_PrimaryCamera = &camera;
 
         // Light
         auto* lightObj = scene.CreateObject3D("Light");
@@ -609,7 +621,21 @@ protected:
             clearColor.color = {0.15f, 0.15f, 0.2f, 1.0f};
             m_SceneGraph.Clear();
             m_ViewportRT->BeginRender(m_SceneGraph, clearColor, 1.0f);
+            // Ground grid first (before the scene objects so they occlude it).
+            if (m_Grid && m_PrimaryCamera) {
+                m_PrimaryCamera->RecalculateViewMatrix();
+                auto* camOwner = m_PrimaryCamera->GetOwner();
+                m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
+                    camOwner ? camOwner->GetTransform().GetWorldPosition()
+                             : Leir::Vector3(0.0f, 0.0f, 0.0f));
+            }
             m_RenderPipeline->Render(m_SceneGraph, scene);
+            // Gizmos on top of the scene (depth-tested), one draw call for all.
+            if (m_Gizmos && m_PrimaryCamera) {
+                DrawGizmoShowcase();
+                m_Gizmos->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
+                    (float)m_ViewportRT->GetWidth(), (float)m_ViewportRT->GetHeight());
+            }
             m_ViewportRT->EndRender(m_SceneGraph);
             m_Backend->CmdExecuteGraph(cmd, m_SceneGraph);
         }
@@ -623,6 +649,38 @@ protected:
             m_Backend->CmdExecuteGraph(cmd, m_UIGraph);
         }
         m_Backend->EndFrame();
+    }
+
+    // Sample gizmos to exercise the gizmo renderer (removable): origin
+    // tri-axis, the Cube's wireframe bounding box, and a ground ring.
+    void DrawGizmoShowcase()
+    {
+        if (!m_Gizmos)
+            return;
+        m_Gizmos->BeginFrame();
+
+        const float axisLen = 1.5f;
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {axisLen, 0.0f, 0.0f},
+            {1.0f, 0.25f, 0.25f, 1.0f}, 2.0f);
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, axisLen, 0.0f},
+            {0.30f, 1.0f, 0.30f, 1.0f}, 2.0f);
+        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, axisLen},
+            {0.30f, 0.55f, 1.0f, 1.0f}, 2.0f);
+
+        auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+        if (scene) {
+            if (auto* cube = scene->FindObjectByName("Cube")) {
+                auto& t = cube->GetTransform();
+                const float s = t.GetWorldScale().x;
+                // Slightly oversized so the wireframe doesn't z-fight the faces.
+                m_Gizmos->DrawBox(t.GetWorldPosition(),
+                    {s * 1.02f, s * 1.02f, s * 1.02f},
+                    {1.0f, 0.9f, 0.3f, 1.0f}, 1.5f);
+            }
+        }
+
+        m_Gizmos->DrawCircle({0.0f, 0.005f, 0.0f}, 2.0f, {0.0f, 1.0f, 0.0f},
+            {1.0f, 0.4f, 0.4f, 1.0f}, 48, 1.5f);
     }
 
     void OnShutdown() override
@@ -679,6 +737,10 @@ protected:
         m_DebugPanel = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         Leir::XConsole::Debug("[Timing] UI subtrees freed: {:.1f} ms", elapsedMs());
+        // Destroy the ground grid and gizmos before the viewport RT they target.
+        m_Grid.reset();
+        m_Gizmos.reset();
+        m_PrimaryCamera = nullptr;
         // Destroy viewport RT before the backend
         m_ViewportRT.reset();
         Leir::XConsole::Debug("[Timing] viewport RT destroyed: {:.1f} ms", elapsedMs());
@@ -801,6 +863,9 @@ private:
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::UIViewportPanel* m_ViewportPanel = nullptr;
     EditorCamera m_EditorCamera;
+    std::unique_ptr<EditorGrid> m_Grid;
+    std::unique_ptr<GizmoRenderer> m_Gizmos;
+    Leir::Camera* m_PrimaryCamera = nullptr;
 
     UITestPanel* m_TestPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;

@@ -95,6 +95,10 @@ if(SLANGC)
         shaders/Sprite.frag.slang
         shaders/UI.vert.slang
         shaders/UI.frag.slang
+        shaders/Grid.vert.slang
+        shaders/Grid.frag.slang
+        shaders/Gizmo.vert.slang
+        shaders/Gizmo.frag.slang
     )
     foreach(SHADER ${SHADER_SOURCES})
         get_filename_component(SHADER_NAME ${SHADER} NAME)
@@ -155,6 +159,10 @@ set(WGSL_SOURCES
     shaders/Sprite.frag.wgsl
     shaders/UI.vert.wgsl
     shaders/UI.frag.wgsl
+    shaders/Grid.vert.wgsl
+    shaders/Grid.frag.wgsl
+    shaders/Gizmo.vert.wgsl
+    shaders/Gizmo.frag.wgsl
 )
 foreach(WGSL ${WGSL_SOURCES})
     get_filename_component(WGSL_NAME ${WGSL} NAME)

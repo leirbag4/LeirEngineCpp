@@ -101,6 +101,10 @@ const std::vector<ShaderExporter::ShaderFile>& ShaderExporter::ShaderFiles()
         { "Sprite.frag", Leir::RHI::ShaderStage::Fragment },
         { "UI.vert", Leir::RHI::ShaderStage::Vertex },
         { "UI.frag", Leir::RHI::ShaderStage::Fragment },
+        { "Grid.vert", Leir::RHI::ShaderStage::Vertex },
+        { "Grid.frag", Leir::RHI::ShaderStage::Fragment },
+        { "Gizmo.vert", Leir::RHI::ShaderStage::Vertex },
+        { "Gizmo.frag", Leir::RHI::ShaderStage::Fragment },
     };
     return files;
 }
