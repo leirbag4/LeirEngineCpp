@@ -152,6 +152,23 @@ protected:
             return;
         }
 
+        // The window title reflects the backend actually created (settings
+        // may hold an invalid name that BackendFactory silently falls back to
+        // the compile-time default for).
+        const char* backendName = m_Backend->GetBackendName();
+        SetWindowTitle((std::string("LeirEngine Editor - ") + backendName).c_str());
+
+        // Auto-correct an invalid/empty backend in settings so the saved value
+        // always matches reality (self-healing config).
+        auto& settings = Leir::LeirSettings::Get();
+        if (settings.graphics.backend != backendName) {
+            Leir::XConsole::PrintWarning(
+                "Graphics backend '{}' not valid; using '{}' (settings corrected)",
+                settings.graphics.backend, backendName);
+            settings.graphics.backend = backendName;
+            settings.Save();
+        }
+
         const auto& caps = m_Backend->GetCaps();
         Leir::XConsole::Println(
             "[GCaps] backend={} textures={} ubo={} samplers={} ssbo={} push={}B MRT={} maxRT={} maxTex={} "

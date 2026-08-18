@@ -168,6 +168,7 @@ public:
 #else
     const char* GetShaderFileExtension() const override { return ".wgsl"; }
 #endif
+    const char* GetBackendName() const override { return "webgpu"; }
 
 private:
     struct Impl;

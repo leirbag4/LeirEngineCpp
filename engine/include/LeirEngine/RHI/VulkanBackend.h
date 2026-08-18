@@ -34,6 +34,7 @@ public:
     void WaitIdle() override;
 
     const GCaps& GetCaps() const override;
+    const char* GetBackendName() const override { return "vulkan"; }
 
     RHICommandBuffer GetCurrentCommandBuffer() const override;
     uint32_t GetCurrentFrameIndex() const override;

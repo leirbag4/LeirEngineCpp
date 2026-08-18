@@ -16,6 +16,9 @@ public:
 
     void Run();
     void Quit();
+    // Changes the OS window title at runtime (e.g. after the render backend is
+    // known, to append its name).
+    void SetWindowTitle(const char* title);
 
     GLFWwindow* GetWindow() const { return m_Window; }
     int GetWidth() const { return m_Width; }

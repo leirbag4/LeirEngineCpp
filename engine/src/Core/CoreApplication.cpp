@@ -196,6 +196,12 @@ void CoreApplication::Quit()
     m_Running = false;
 }
 
+void CoreApplication::SetWindowTitle(const char* title)
+{
+    if (m_Window)
+        glfwSetWindowTitle(m_Window, title);
+}
+
 void CoreApplication::Frame(double currentTime)
 {
     glfwPollEvents();

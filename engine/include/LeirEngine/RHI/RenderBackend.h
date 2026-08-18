@@ -34,6 +34,12 @@ public:
     // Backend capabilities (TODO_RHI_SLANG.md §3.6). Filled once at creation.
     virtual const GCaps& GetCaps() const = 0;
 
+    // Canonical name of the backend actually created ("vulkan" / "d3d12" /
+    // "webgpu"). The source of truth for the window title and for correcting
+    // settings.graphics.backend (which may hold an invalid/empty value that
+    // BackendFactory silently falls back to the compile-time default for).
+    virtual const char* GetBackendName() const = 0;
+
     virtual RHICommandBuffer GetCurrentCommandBuffer() const = 0;
     virtual uint32_t GetCurrentFrameIndex() const = 0;
     virtual uint32_t GetSwapchainWidth() const = 0;

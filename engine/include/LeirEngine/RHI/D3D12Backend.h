@@ -141,6 +141,7 @@ public:
         Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) override;
 
     const char* GetShaderFileExtension() const override { return ".dxil"; }
+    const char* GetBackendName() const override { return "d3d12"; }
 
 private:
     struct Impl;
