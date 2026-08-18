@@ -204,6 +204,7 @@ struct D3D12Backend::Impl {
     ComPtr<ID3D12CommandQueue> queue;
     ComPtr<IDXGISwapChain3> swapchain;
     HWND hwnd = nullptr;
+    GLFWwindow* window = nullptr;
     int width = 0, height = 0;
     bool vsync = false;
 
@@ -293,7 +294,8 @@ struct D3D12Backend::Impl {
     std::unordered_map<uint32_t, ImageRec*> bindlessImages;
 
     Impl(void* window, int w, int h, bool vs, const std::string& appName) {
-        hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
+        this->window = static_cast<GLFWwindow*>(window);
+        hwnd = glfwGetWin32Window(this->window);
 
         // The swapchain must match the window's client area in PHYSICAL pixels
         // (same convention RecreateSwapchainInternal uses). The editor passes
@@ -637,7 +639,7 @@ struct D3D12Backend::Impl {
             backBuffers[i].Reset();
 
         int fbW = 0, fbH = 0;
-        glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &fbH);
+        glfwGetFramebufferSize(window, &fbW, &fbH);
         if (fbW < 1) fbW = 1;
         if (fbH < 1) fbH = 1;
 
