@@ -20,10 +20,7 @@ public:
     void SetPitch(float p) { m_Pitch = Leir::Mathf::Clamp(p, -89.0f, 89.0f); }
 
 private:
-    // TEMP-DEBUG (PHASE-1 TEST): 3/4 view, off the X+Z diagonal, so the three
-    // test gizmo lines (red X axis, blue Z axis, white diagonal) are all
-    // clearly visible and separated.
-    Leir::Vector3 m_Position = {4.0f, 2.0f, 5.0f};
-    float m_Yaw = 35.0f;
-    float m_Pitch = -25.0f;
+    Leir::Vector3 m_Position = {0.0f, 2.0f, 4.0f};
+    float m_Yaw = 0.0f;
+    float m_Pitch = -20.0f;
 };

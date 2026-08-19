@@ -234,12 +234,13 @@ protected:
             (uint32_t)std::max(1.0f, (float)std::lround(m_ViewportH * dpr)));
         m_Material->RecreatePipeline(m_ViewportRT->GetRenderPass());
 
-        // Editor ground grid (Unity-style, Y=0): drawn into the viewport RT
-        // before the scene objects. Its pipeline targets the viewport render
-        // pass, so it must be (re)created after the RenderTexture exists.
-        // DISABLED (PHASE-1 TEST): the procedural grid is temporarily off while
-        // the gizmo line technique is validated; see DrawGizmoShowcase.
-        // m_Grid = std::make_unique<EditorGrid>(m_Backend.get(), m_ViewportRT->GetRenderPass());
+        // Editor ground grid (Unity-style, Y=0): procedural line grid drawn
+        // into the viewport RT using the same constant-pixel-width gizmo
+        // technique as the Test2 line (Grid.vert/frag). Its pipeline targets
+        // the viewport render pass, so it must be (re)created after the
+        // RenderTexture exists. Follows the camera (infinite) and fades the
+        // minor 1u lines by distance, Unity-style.
+        m_Grid = std::make_unique<EditorGrid>(m_Backend.get(), m_ViewportRT->GetRenderPass());
 
         // Gizmo renderer (procedural 3D lines/boxes/circles/spheres, constant
         // screen-pixel width). Drawn into the viewport RT on top of the scene.
@@ -636,18 +637,24 @@ protected:
             clearColor.color = {0.15f, 0.15f, 0.2f, 1.0f};
             m_SceneGraph.Clear();
             m_ViewportRT->BeginRender(m_SceneGraph, clearColor, 1.0f);
-            // Ground grid first (before the scene objects so they occlude it).
-            // DISABLED (PHASE-1 TEST): see the grid creation block in OnInit.
-            // if (m_Grid && m_PrimaryCamera) {
-            //     m_PrimaryCamera->RecalculateViewMatrix();
-            //     auto* camOwner = m_PrimaryCamera->GetOwner();
-            //     m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
-            //         camOwner ? camOwner->GetTransform().GetWorldPosition()
-            //                  : Leir::Vector3(0.0f, 0.0f, 0.0f));
-            // }
             m_RenderPipeline->Render(m_SceneGraph, scene);
+            // Ground grid AFTER the scene objects (depth-tested so objects
+            // occlude the lines underneath). Procedural line grid using the
+            // same constant-pixel-width gizmo technique as the Test2 line
+            // (Grid.vert/frag): generated every frame, recentered on the
+            // camera's XZ, minor 1u lines fade by distance (Unity-style) while
+            // the 10u chunk lines reach the horizon.
+            if (m_Grid && m_PrimaryCamera) {
+                m_PrimaryCamera->RecalculateViewMatrix();
+                auto* camOwner = m_PrimaryCamera->GetOwner();
+                const Leir::Vector3 camPos =
+                    camOwner ? camOwner->GetTransform().GetWorldPosition()
+                             : Leir::Vector3(0.0f, 0.0f, 0.0f);
+                m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
+                    camPos, (float)m_ViewportRT->GetWidth(),
+                    (float)m_ViewportRT->GetHeight());
+            }
             // Gizmos on top of the scene (depth-tested), one draw call for all.
-            // PHASE-1 TEST: the 3 test lines (red X, blue Z, white diagonal).
             if (m_Gizmos && m_PrimaryCamera) {
                 DrawGizmoShowcase();
                 m_Gizmos->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
@@ -670,50 +677,14 @@ protected:
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin
     // tri-axis, the Cube's wireframe bounding box, and a ground ring.
-    // PHASE-1 TEST: the 3 validation lines requested by the user:
-    //   - red X axis,   2px, (0,0,0) -> (5,0,0)
-    //   - blue Z axis,  2px, (0,0,0) -> (0,0,5)
-    //   - white diagonal 1.5px, (0,0,0) -> (-5,0,4) (near-perpendicular to the
-    //     default view so it renders as a long, clearly-separated diagonal)
-    // Constant pixel width at any distance/angle is the property under test.
-    //
-    // Extra probes so the user can eyeball the other two knobs:
-    //   - THICKNESS fan: 4 parallel opaque lines along +X at increasing heights
-    //     (y = 0.4/0.8/1.2/1.6), widths 1/2/3/5 px.
-    //   - ALPHA fan: 4 lines radiating from the origin toward -X/+Z with the
-    //     same 2px width but alphas 1.0/0.75/0.5/0.25 (blend is SrcAlpha).
+    // The PHASE-1 validation lines + thickness/alpha fans were removed once
+    // the gizmo technique was verified; the grid now provides the reference
+    // axes. Only the live "Test2" line (color/alpha/width knobs) remains.
     void DrawGizmoShowcase()
     {
         if (!m_Gizmos)
             return;
         m_Gizmos->BeginFrame();
-
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {5.0f, 0.0f, 0.0f},
-            {1.0f, 0.25f, 0.25f, 1.0f}, 2.0f);
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 5.0f},
-            {0.30f, 0.55f, 1.0f, 1.0f}, 2.0f);
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-5.0f, 0.0f, 4.0f},
-            {1.0f, 1.0f, 1.0f, 1.0f}, 1.5f);
-
-        // Thickness fan (opaque, parallel along +X, rising in Y).
-        m_Gizmos->DrawLine({0.0f, 0.4f, 0.0f}, {5.0f, 0.4f, 0.0f},
-            {1.0f, 0.30f, 0.30f, 1.0f}, 1.0f);  // 1px
-        m_Gizmos->DrawLine({0.0f, 0.8f, 0.0f}, {5.0f, 0.8f, 0.0f},
-            {1.0f, 0.60f, 0.10f, 1.0f}, 2.0f);  // 2px
-        m_Gizmos->DrawLine({0.0f, 1.2f, 0.0f}, {5.0f, 1.2f, 0.0f},
-            {1.0f, 0.90f, 0.10f, 1.0f}, 3.0f);  // 3px
-        m_Gizmos->DrawLine({0.0f, 1.6f, 0.0f}, {5.0f, 1.6f, 0.0f},
-            {1.0f, 0.20f, 0.80f, 1.0f}, 5.0f);  // 5px
-
-        // Alpha fan (same 2px width, radiating toward -X/+Z).
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-5.0f, 0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f, 1.00f}, 2.0f);   // opaque
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-4.5f, 0.0f, 1.0f},
-            {0.0f, 1.0f, 1.0f, 0.75f}, 2.0f);   // 75%
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-3.5f, 0.0f, 2.0f},
-            {0.0f, 1.0f, 0.0f, 0.50f}, 2.0f);   // 50%
-        m_Gizmos->DrawLine({0.0f, 0.0f, 0.0f}, {-2.5f, 0.0f, 3.0f},
-            {1.0f, 0.90f, 0.20f, 0.25f}, 2.0f); // 25%
 
         // Live line controlled by the "Test2" dock panel (color/alpha/width).
         if (m_GizmoTestPanel) {
