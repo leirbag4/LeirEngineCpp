@@ -56,7 +56,8 @@ public:
     void Render(Leir::RHI::GCommandGraph& graph,
                 const Leir::Matrix4x4& viewProjection,
                 const Leir::Vector3& cameraPos,
-                float viewportWidthPx, float viewportHeightPx);
+                float viewportWidthPx, float viewportHeightPx,
+                float densityOverride = -1.0f);
 
 private:
     struct Line {
@@ -101,10 +102,16 @@ private:
                   const Leir::Vector4& color, float widthPx);
     void GenerateLines(const Leir::Vector3& cameraPos,
                        const Leir::Matrix4x4& viewProjection,
-                       float viewportWidthPx, float viewportHeightPx);
+                       float viewportWidthPx, float viewportHeightPx,
+                       float densityOverride);
     void EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
                    float viewportWidthPx, float viewportHeightPx,
-                   const Leir::Vector3& cameraPos, bool parallelToZ);
+                   const Leir::Vector3& cameraPos, bool parallelToZ,
+                   float densityOverride);
+    void EmitUniformLevels(float baseSpacing, float pxPerUnit,
+                           const Leir::Matrix4x4& viewProjection,
+                           float viewportWidthPx, float viewportHeightPx,
+                           const Leir::Vector3& cameraPos);
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();

@@ -22,6 +22,10 @@ public:
     Leir::Vector3 GetEnd() const { return m_End; }
     Leir::Vector4 GetColor() const { return {m_RVal, m_GVal, m_BVal, m_AVal}; }
     float GetWidth() const { return m_WidthVal; }
+    // Manual LOD driver for the editor grid: uniform pixels-per-world-unit
+    // override (>= 0) that drives the recursive chunk transition, decoupled
+    // from the camera. -1 disables it and uses the real camera density.
+    float GetGridDensityOverride() const { return m_DensityVal; }
 
     Leir::Vector2 GetMinSize() const override;
 
@@ -38,6 +42,7 @@ private:
     UIDragFloatInput* m_B = nullptr;
     UIDragFloatInput* m_A = nullptr;
     UIDragFloatInput* m_Width = nullptr;
+    UIDragFloatInput* m_Density = nullptr;
 
     Leir::Vector3 m_Start = {0.0f, 0.6f, 0.0f};
     Leir::Vector3 m_End = {5.0f, 0.6f, 0.0f};
@@ -46,4 +51,7 @@ private:
     float m_BVal = 1.0f;
     float m_AVal = 0.5f;
     float m_WidthVal = 3.0f;
+    // Manual LOD driver for the editor grid: uniform pxPerUnit (pixels per
+    // world unit). Lower value = camera farther away = coarser chunks.
+    float m_DensityVal = 6.0f;
 };

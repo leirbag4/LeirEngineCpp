@@ -46,6 +46,15 @@ GizmoLineTestPanel::GizmoLineTestPanel()
     auto* widthRow = makeRow();
     AddField(widthRow, "Width:", m_Width, m_WidthVal,
         [this](float v) { m_WidthVal = std::max(0.0f, v); });
+
+    // Grid LOD knob (manual density, px per world unit): drives the editor
+    // grid's recursive chunk transition (1x1 -> 10x10 -> 100x100 -> ...),
+    // decoupled from the camera so the Unity-style dissolve can be verified.
+    // Lower value = camera farther away (zoom out).
+    makeTitle("-- Grid LOD (manual) --");
+    auto* densityRow = makeRow();
+    AddField(densityRow, "px/unit:", m_Density, m_DensityVal,
+        [this](float v) { m_DensityVal = v; });
 }
 
 GizmoLineTestPanel::~GizmoLineTestPanel() = default;
@@ -81,7 +90,7 @@ void GizmoLineTestPanel::AddField(Leir::UIPanel* parent,
 
 Leir::Vector2 GizmoLineTestPanel::GetMinSize() const
 {
-    return {280.0f, 140.0f};
+    return {280.0f, 190.0f};
 }
 
 void GizmoLineTestPanel::OnLayoutComputed()

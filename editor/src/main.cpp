@@ -652,7 +652,8 @@ protected:
                              : Leir::Vector3(0.0f, 0.0f, 0.0f);
                 m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
                     camPos, (float)m_ViewportRT->GetWidth(),
-                    (float)m_ViewportRT->GetHeight());
+                    (float)m_ViewportRT->GetHeight(),
+                    m_GizmoTestPanel ? m_GizmoTestPanel->GetGridDensityOverride() : -1.0f);
             }
             // Gizmos on top of the scene (depth-tested), one draw call for all.
             if (m_Gizmos && m_PrimaryCamera) {
@@ -834,7 +835,7 @@ private:
         auto* cameraObj = scene ? scene->FindObjectByName("Camera") : nullptr;
         if (cameraObj) {
             if (auto* cam = cameraObj->GetComponent<Leir::Camera>())
-                cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 100.0f);
+                cam->SetPerspective(60.0f, (float)w / (float)h, 0.1f, 2000.0f);
         }
 
         m_PendingW = w;
