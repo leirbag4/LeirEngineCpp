@@ -71,25 +71,40 @@ float DensityAlpha(float px, float pxStart, float pxEnd)
     return t * t * (3.0f - 2.0f * t);
 }
 
-// Pixels that 1 world unit spans on screen at the given ground point (X or Z
-// axis), using the real view-projection. Returns 0 when the point is behind the
-// near plane (the line passes under the camera: nothing useful to read).
-float PxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
-                const glm::vec3& groundPt, bool alongX)
+// Rotation-invariant projection scale f = 1/tan(fovY/2), recovered from the
+// combined view-projection: row 1 of (P*V) is f * (V's row 1) and V's rotation
+// part is orthonormal, so the norm of that row's first three components is
+// exactly f regardless of camera yaw/pitch. (The raw element vp[1][1] alone is
+// f * V[1][1], which collapses to ~0 when the camera looks straight down at
+// pitch -90° — that made the whole grid vanish except the axes.)
+float ProjectionScale(const glm::mat4& vp)
 {
-    const glm::vec4 clip0 = vp * glm::vec4(groundPt, 1.0f);
-    const glm::vec4 clip1 = vp * glm::vec4(groundPt + (alongX ? glm::vec3(1.0f, 0.0f, 0.0f)
-                                                              : glm::vec3(0.0f, 0.0f, 1.0f)), 1.0f);
+    return std::sqrt(vp[0][1] * vp[0][1] +
+                     vp[1][1] * vp[1][1] +
+                     vp[2][1] * vp[2][1]);
+}
+
+// Pixels that 1 world unit spans on screen at the given ground point, using the
+// real view-projection scale but the EUCLIDEAN distance from the camera to the
+// point (NOT the view depth clip.w):
+//   pxPerUnit = (viewportHeightPx * 0.5 * f) / dist(camera, groundPt)
+// Euclidean distance depends only on the camera POSITION, never its
+// orientation, so rotating the camera in place never changes the LOD — this is
+// how professional engines (Unity et al.) drive grid fades. Monotonic with
+// distance, so it never blows up at grazing angles either. Returns 0 when the
+// point is at or behind the near plane.
+float PxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
+                const glm::vec3& cameraPos, const glm::vec3& groundPt)
+{
+    const glm::vec4 clip = vp * glm::vec4(groundPt, 1.0f);
     constexpr float kNear = 0.1f; // matches the camera near plane
-    if (clip0.w <= kNear || clip1.w <= kNear)
+    if (clip.w <= kNear)
         return 0.0f;
-    const glm::vec2 ndc0(clip0.x / clip0.w, clip0.y / clip0.w);
-    const glm::vec2 ndc1(clip1.x / clip1.w, clip1.y / clip1.w);
-    const glm::vec2 px0((ndc0.x * 0.5f + 0.5f) * viewportWidthPx,
-                        (0.5f - ndc0.y * 0.5f) * viewportHeightPx);
-    const glm::vec2 px1((ndc1.x * 0.5f + 0.5f) * viewportWidthPx,
-                        (0.5f - ndc1.y * 0.5f) * viewportHeightPx);
-    return glm::length(px1 - px0);
+    const float dist = glm::length(cameraPos - groundPt);
+    if (dist <= kNear)
+        return 0.0f;
+    const float scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
+    return scale / dist;
 }
 
 // Max pixels-per-world-unit across sample points along a grid line (which spans
@@ -99,6 +114,7 @@ float PxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeight
 // near plane contribute, and the closest one wins (the largest pxPerUnit along
 // the line). Returns 0 when the whole line is behind the camera.
 float LinePxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
+                    const glm::vec3& cameraPos,
                     float coord, float camPerp, float window, bool parallelToZ)
 {
     float best = 0.0f;
@@ -107,7 +123,7 @@ float LinePxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHe
         const glm::vec3 pt = parallelToZ
             ? glm::vec3(coord, 0.0f, camPerp + off)
             : glm::vec3(camPerp + off, 0.0f, coord);
-        const float px = PxPerUnit(vp, viewportWidthPx, viewportHeightPx, pt, parallelToZ);
+        const float px = PxPerUnit(vp, viewportWidthPx, viewportHeightPx, cameraPos, pt);
         if (px > best)
             best = px;
     }
@@ -170,6 +186,14 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
                                float viewportWidthPx, float viewportHeightPx,
                                float densityOverride)
 {
+    // Debug state for the viewport HUD. Reference px/unit at the point directly
+    // below the camera (Euclidean distance = camera height above the grid), so
+    // it is rotation-invariant by construction: rotating the camera in place
+    // leaves camH, refPxPerUnit and the derived fine/chunk spacing unchanged.
+    m_DebugCamHeight = std::max(cameraPos.y - kGridY, 0.1f);
+    const glm::mat4 vp = viewProjection;
+    m_DebugRefPxPerUnit = viewportHeightPx * 0.5f * ProjectionScale(vp) / m_DebugCamHeight;
+
     if (densityOverride >= 0.0f) {
         // MANUAL mode (Test2 panel knob): drive the recursive LOD with a single
         // uniform pxPerUnit, decoupled from the camera, so the Unity-style
@@ -177,8 +201,11 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
         // grid (spacing L) and the chunk grid (spacing 10L) — and L jumps to
         // 10L as the density drops, so the 10x10 chunks hand their thick border
         // to 100x100, then 1000x1000, exactly like Unity.
+        m_DebugRefPxPerUnit = densityOverride;
         EmitUniformLevels(1.0f, densityOverride, viewProjection,
                           viewportWidthPx, viewportHeightPx, cameraPos);
+        m_DebugLineCount = (uint32_t)m_Lines.size();
+        ComputeDebugSpacing();
         return;
     }
 
@@ -195,6 +222,22 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
     // Origin axes (opaque, never fade, reach the horizon at any zoom).
     DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
     DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
+
+    m_DebugLineCount = (uint32_t)m_Lines.size();
+    ComputeDebugSpacing();
+}
+
+// Derive the active fine/chunk recursion levels from the reference density so
+// the HUD shows the same LOD numbers the grid actually picks. This mirrors
+// EmitUniformLevels' baseSpacing walk (and EmitLevel's ramp): the fine spacing
+// is the smallest power of 10 whose cells are still readable on screen.
+void EditorGrid::ComputeDebugSpacing()
+{
+    float spacing = 1.0f;
+    while (spacing < 10000.0f && spacing * m_DebugRefPxPerUnit < kCellPxFadeStart)
+        spacing *= 10.0f;
+    m_DebugFineSpacing = spacing;
+    m_DebugChunkSpacing = spacing * 10.0f;
 }
 
 // Unity-style grid driven by a uniform pxPerUnit (manual LOD knob). Two roles
@@ -343,7 +386,7 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         if (densityOverride >= 0.0f) {
             pxPerUnit = densityOverride;
         } else {
-            pxPerUnit = LinePxPerUnit(vp, viewportWidthPx, viewportHeightPx,
+            pxPerUnit = LinePxPerUnit(vp, viewportWidthPx, viewportHeightPx, cameraPos,
                                       coord, camPerp, window, parallelToZ);
             if (pxPerUnit <= 0.0f)
                 continue;

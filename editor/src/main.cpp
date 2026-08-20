@@ -355,6 +355,24 @@ protected:
         m_ViewportPanel->SetName("Viewport");
         m_ViewportPanel->SetRenderTexture(m_ViewportRT.get());
 
+        // Grid LOD debug HUD: an overlay label pinned to the viewport's
+        // top-right corner. It is a CHILD of the viewport panel so the editor's
+        // hover->ancestor walk still finds the viewport (camera controls keep
+        // working over it); SetOverlayLayer routes it to the debug batch so it
+        // draws ABOVE the RenderTexture viewport quad. Because the viewport
+        // panel is a Free-layout element, its ComputeFreeLayout ADDS the
+        // panel's computed x/y into child offsets each frame — so the label's
+        // offset is re-pinned every frame in OnUpdate, never accumulated.
+        m_GridLodLabel = new Leir::UILabel();
+        m_GridLodLabel->SetName("GridLodDebug");
+        m_GridLodLabel->SetFont(m_FontSmall.get());
+        m_GridLodLabel->SetColor({0.6f, 0.95f, 0.6f, 1.0f});
+        m_GridLodLabel->SetOverlayLayer(true);
+        m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f}; // top-right
+        m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 64.0f};
+        m_GridLodLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
+        m_ViewportPanel->AddChild(m_GridLodLabel);
+
         // Hierarchy panel (left dock pane)
         auto* hierarchy = new Leir::UIPanel();
         m_HierarchyPanel = hierarchy;
@@ -587,6 +605,23 @@ protected:
             m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
         if (m_ConsolePanel)
             m_ConsolePanel->Refresh();
+
+        // Grid LOD debug HUD: refresh the label text from the grid's debug state
+        // and re-pin its offset. The label is a child of the Free-layout viewport
+        // panel, whose ComputeFreeLayout adds the panel's absolute x/y to child
+        // offsets every frame — resetting the anchor offset here (right before
+        // UpdateLayout) makes the net position stable instead of drifting.
+        if (m_GridLodLabel && m_Grid) {
+            m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
+            m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 64.0f};
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nlines %u",
+                m_Grid->GetDebugFineSpacing(), m_Grid->GetDebugChunkSpacing(),
+                m_Grid->GetDebugCamHeight(), m_Grid->GetDebugRefPxPerUnit(),
+                m_Grid->GetDebugLineCount());
+            m_GridLodLabel->SetText(buf);
+        }
 
         // Update UI layout on resize
         if (m_Canvas)
@@ -876,6 +911,7 @@ private:
     // Viewport system
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;
     Leir::UIViewportPanel* m_ViewportPanel = nullptr;
+    Leir::UILabel* m_GridLodLabel = nullptr; // LOD debug HUD (child of the viewport)
     EditorCamera m_EditorCamera;
     std::unique_ptr<EditorGrid> m_Grid;
     std::unique_ptr<GizmoRenderer> m_Gizmos;

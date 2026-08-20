@@ -59,6 +59,19 @@ public:
                 float viewportWidthPx, float viewportHeightPx,
                 float densityOverride = -1.0f);
 
+    // Debug state for the viewport HUD (the "LOD debug" label): how the grid
+    // reacts to camera motion. Cam height is the camera's height above the grid
+    // plane; ref px/unit is the pixel density at the point directly below the
+    // camera (rotation-invariant by construction: it uses the EUCLIDEAN camera
+    // distance). Fine/chunk spacing are the active recursion levels derived
+    // from that reference density; line count is the number of lines emitted
+    // this frame.
+    float GetDebugCamHeight() const { return m_DebugCamHeight; }
+    float GetDebugRefPxPerUnit() const { return m_DebugRefPxPerUnit; }
+    float GetDebugFineSpacing() const { return m_DebugFineSpacing; }
+    float GetDebugChunkSpacing() const { return m_DebugChunkSpacing; }
+    uint32_t GetDebugLineCount() const { return m_DebugLineCount; }
+
 private:
     struct Line {
         Leir::Vector3 start;
@@ -100,6 +113,7 @@ private:
     void BeginFrame();
     void DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
                   const Leir::Vector4& color, float widthPx);
+    void ComputeDebugSpacing();
     void GenerateLines(const Leir::Vector3& cameraPos,
                        const Leir::Matrix4x4& viewProjection,
                        float viewportWidthPx, float viewportHeightPx,
@@ -123,6 +137,12 @@ private:
 
     std::vector<Line> m_Lines;
     std::vector<GridVertex> m_Quads;
+
+    float m_DebugCamHeight = 0.0f;
+    float m_DebugRefPxPerUnit = 0.0f;
+    float m_DebugFineSpacing = 0.0f;
+    float m_DebugChunkSpacing = 0.0f;
+    uint32_t m_DebugLineCount = 0;
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;
