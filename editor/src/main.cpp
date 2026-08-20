@@ -612,13 +612,20 @@ protected:
         // offsets every frame — resetting the anchor offset here (right before
         // UpdateLayout) makes the net position stable instead of drifting.
         if (m_GridLodLabel && m_Grid) {
+            // Live-tunable fade thresholds from the Test2 panel (fall back to
+            // the defaults when the panel is gone).
+            if (m_GizmoTestPanel) {
+                m_Grid->SetFadeThresholds(m_GizmoTestPanel->GetGridFadeStartPx(),
+                                          m_GizmoTestPanel->GetGridFadeEndPx());
+            }
             m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
             m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 64.0f};
             char buf[160];
             std::snprintf(buf, sizeof(buf),
-                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nlines %u",
+                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nfade %.0f..%.0f px  lines %u",
                 m_Grid->GetDebugFineSpacing(), m_Grid->GetDebugChunkSpacing(),
                 m_Grid->GetDebugCamHeight(), m_Grid->GetDebugRefPxPerUnit(),
+                m_Grid->GetFadeStartPx(), m_Grid->GetFadeEndPx(),
                 m_Grid->GetDebugLineCount());
             m_GridLodLabel->SetText(buf);
         }

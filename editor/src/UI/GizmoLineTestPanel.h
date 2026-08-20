@@ -26,6 +26,10 @@ public:
     // override (>= 0) that drives the recursive chunk transition, decoupled
     // from the camera. -1 (default) = camera-driven (real per-line density).
     float GetGridDensityOverride() const { return m_DensityVal; }
+    // Live cell-fade thresholds (px of cell size) for the grid LOD: below
+    // fadeStart a line's role is invisible, above fadeEnd fully visible.
+    float GetGridFadeStartPx() const { return m_FadeStartVal; }
+    float GetGridFadeEndPx() const { return m_FadeEndVal; }
 
     Leir::Vector2 GetMinSize() const override;
 
@@ -43,6 +47,8 @@ private:
     UIDragFloatInput* m_A = nullptr;
     UIDragFloatInput* m_Width = nullptr;
     UIDragFloatInput* m_Density = nullptr;
+    UIDragFloatInput* m_FadeStart = nullptr;
+    UIDragFloatInput* m_FadeEnd = nullptr;
 
     Leir::Vector3 m_Start = {0.0f, 0.6f, 0.0f};
     Leir::Vector3 m_End = {5.0f, 0.6f, 0.0f};
@@ -56,4 +62,9 @@ private:
     // -1 (default) = camera-driven: each line reads the real screen density
     // at its closest visible point, so zooming the camera drives the LOD.
     float m_DensityVal = -1.0f;
+    // Cell-fade thresholds in pixels (Unity-style defaults): the fine level is
+    // fully hidden below 15px of cell size and fully visible above 30px, so
+    // only 2 levels are ever visible and micro-squares never turn solid.
+    float m_FadeStartVal = 15.0f;
+    float m_FadeEndVal = 30.0f;
 };

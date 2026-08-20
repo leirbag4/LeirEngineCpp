@@ -56,6 +56,17 @@ GizmoLineTestPanel::GizmoLineTestPanel()
     auto* densityRow = makeRow();
     AddField(densityRow, "px/unit:", m_Density, m_DensityVal,
         [this](float v) { m_DensityVal = v; });
+
+    // Cell-fade thresholds (px of cell size): below fadeStart a line's role is
+    // invisible, above fadeEnd fully visible. Raise these to ~15/30 so the
+    // finest grid fades out before its cells become sub-pixel (Unity keeps the
+    // smallest visible square ~20px, already ultra faint) — only 2 levels are
+    // ever visible at once.
+    auto* fadeRow = makeRow();
+    AddField(fadeRow, "fadeStart:", m_FadeStart, m_FadeStartVal,
+        [this](float v) { m_FadeStartVal = std::max(0.0f, v); });
+    AddField(fadeRow, "fadeEnd:", m_FadeEnd, m_FadeEndVal,
+        [this](float v) { m_FadeEndVal = std::max(0.0f, v); });
 }
 
 GizmoLineTestPanel::~GizmoLineTestPanel() = default;
@@ -91,7 +102,7 @@ void GizmoLineTestPanel::AddField(Leir::UIPanel* parent,
 
 Leir::Vector2 GizmoLineTestPanel::GetMinSize() const
 {
-    return {280.0f, 190.0f};
+    return {280.0f, 250.0f};
 }
 
 void GizmoLineTestPanel::OnLayoutComputed()

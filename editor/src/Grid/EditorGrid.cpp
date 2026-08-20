@@ -28,7 +28,7 @@ constexpr float kGridY = -0.01f;
 // pxPerUnit read at the line's nearest point to the camera. A line of level s
 // (spacing 1/10/100/1000) plays two roles at once:
 //   - fine cell boundary of size s        -> faded once a cell of size s drops
-//     below ~3px on screen (ramp 3..6px);
+//     below ~15px on screen (ramp 15..30px, live-tunable via SetFadeThresholds);
 //   - chunk boundary of the cells s/10    -> bright while those sub-cells are
 //     readable, dimming to a plain fine line once too small.
 // Zooming out makes each level hand its chunk role to the next coarser level
@@ -39,8 +39,6 @@ constexpr float kMinorMaxAlpha = 0.35f; // role: fine cell of its level
 constexpr float kMajorMaxAlpha = 0.55f; // role: chunk boundary (added)
 constexpr float kMinorWidth = 1.5f;     // px
 constexpr float kMajorWidth = 3.0f;     // px
-constexpr float kCellPxFadeStart = 3.0f; // below: line invisible in that role
-constexpr float kCellPxFadeEnd = 6.0f;   // above: fully visible in that role
 
 // Generation window scales with the spacing so coarse levels cover the horizon
 // without emitting millions of fine lines; capped near 2x the camera far plane
@@ -166,6 +164,14 @@ void EditorGrid::BeginFrame()
     m_Lines.clear();
 }
 
+void EditorGrid::SetFadeThresholds(float fadeStartPx, float fadeEndPx)
+{
+    if (fadeStartPx >= 0.0f && fadeStartPx < fadeEndPx) {
+        m_FadeStartPx = fadeStartPx;
+        m_FadeEndPx = fadeEndPx;
+    }
+}
+
 void EditorGrid::DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
                           const Leir::Vector4& color, float widthPx)
 {
@@ -234,7 +240,7 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
 void EditorGrid::ComputeDebugSpacing()
 {
     float spacing = 1.0f;
-    while (spacing < 10000.0f && spacing * m_DebugRefPxPerUnit < kCellPxFadeStart)
+    while (spacing < 10000.0f && spacing * m_DebugRefPxPerUnit < m_FadeStartPx)
         spacing *= 10.0f;
     m_DebugFineSpacing = spacing;
     m_DebugChunkSpacing = spacing * 10.0f;
@@ -243,7 +249,7 @@ void EditorGrid::ComputeDebugSpacing()
 // Unity-style grid driven by a uniform pxPerUnit (manual LOD knob). Two roles
 // crossfade seamlessly with the density:
 //   L = smallest power of 10 whose cells are still readable on screen
-//       (L*pxPerUnit >= kCellPxFadeStart). u = visibility of the current level
+//       (L*pxPerUnit >= m_FadeStartPx). u = visibility of the current level
 //       (1 fully readable, 0 unreadable). As the density drops (camera zooms
 //       out) u -> 0 and the NEXT coarser level (10L) fades in with the SAME
 //       geometry: the 10x10 chunk lines shed their thick border and become the
@@ -256,15 +262,15 @@ void EditorGrid::EmitUniformLevels(float baseSpacing, float pxPerUnit,
 {
     // Active fine level: smallest power of 10 still readable on screen.
     float spacing = baseSpacing;
-    while (spacing < 10000.0f && spacing * pxPerUnit < kCellPxFadeStart)
+    while (spacing < 10000.0f && spacing * pxPerUnit < m_FadeStartPx)
         spacing *= 10.0f;
     const float nextSpacing = spacing * 10.0f;
     const float next2Spacing = nextSpacing * 10.0f;
 
     // u: current level visibility; v: next level visibility (effectively always
     // readable while u is fading, but keep the exact ramp for correctness).
-    const float u = DensityAlpha(spacing * pxPerUnit, kCellPxFadeStart, kCellPxFadeEnd);
-    const float v = DensityAlpha(nextSpacing * pxPerUnit, kCellPxFadeStart, kCellPxFadeEnd);
+    const float u = DensityAlpha(spacing * pxPerUnit, m_FadeStartPx, m_FadeEndPx);
+    const float v = DensityAlpha(nextSpacing * pxPerUnit, m_FadeStartPx, m_FadeEndPx);
     const float fadeIn = (1.0f - u) * v; // next level's share as the current fades
 
     // Spacing L  -> plain fine lines that fade with the level (1.5px).
@@ -394,11 +400,11 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
 
         // Role 1: fine cell boundary of size `spacing`.
         const float minorVis = DensityAlpha(spacing * pxPerUnit,
-                                            kCellPxFadeStart, kCellPxFadeEnd);
+                                            m_FadeStartPx, m_FadeEndPx);
         // Role 2: chunk boundary of the cells spacing/10 below it.
         const float chunkVis = (spacing >= 10.0f)
             ? DensityAlpha((spacing / 10.0f) * pxPerUnit,
-                           kCellPxFadeStart, kCellPxFadeEnd)
+                           m_FadeStartPx, m_FadeEndPx)
             : 0.0f;
 
         const float alpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;

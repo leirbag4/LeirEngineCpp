@@ -30,10 +30,13 @@ class RenderBackend;
 // line is derived from the REAL pixels-per-world-unit of the projection at the
 // line's nearest point to the camera, not from a fixed world distance. A line
 // of level s (spacing 1/10/100/1000) plays two roles at once:
-//   - "fine cell" of size s: visible while a cell of size s is >= ~6px on
-//     screen, faded out below ~3px;
+//   - "fine cell" of size s: visible while a cell of size s is >= ~30px on
+//     screen, faded out below ~15px (Unity-style: the smallest visible square
+//     is ~20px and already ultra faint, so sub-pixel micro-squares never turn
+//     into solid blocks);
 //   - "chunk boundary" of the cells s/10 below it: bright while those sub-cells
 //     are readable, dimming to a plain fine line once they are too small.
+// The two fade thresholds are live-tunable (Test2 panel, SetFadeThresholds).
 // Because both ramps key off pxPerUnit, zooming out makes each level seamlessly
 // hand its chunk role to the next coarser level: near the camera you see 1x1
 // squares inside bright 10x10 chunks; zoom out and the 1u internals fade,
@@ -58,6 +61,15 @@ public:
                 const Leir::Vector3& cameraPos,
                 float viewportWidthPx, float viewportHeightPx,
                 float densityOverride = -1.0f);
+
+    // Live-tunable cell-fade thresholds (Test2 panel): a line's role (fine cell
+    // or chunk boundary) is fully hidden below fadeStartPx of cell size and
+    // fully visible above fadeEndPx. Defaults are Unity-like (15/30 px) so the
+    // smallest visible square is ~20px and already faint — sub-pixel micro
+    // squares never turn into solid blocks and only 2 levels are ever visible.
+    void SetFadeThresholds(float fadeStartPx, float fadeEndPx);
+    float GetFadeStartPx() const { return m_FadeStartPx; }
+    float GetFadeEndPx() const { return m_FadeEndPx; }
 
     // Debug state for the viewport HUD (the "LOD debug" label): how the grid
     // reacts to camera motion. Cam height is the camera's height above the grid
@@ -143,6 +155,9 @@ private:
     float m_DebugFineSpacing = 0.0f;
     float m_DebugChunkSpacing = 0.0f;
     uint32_t m_DebugLineCount = 0;
+
+    float m_FadeStartPx = 15.0f; // below: a line's role is invisible
+    float m_FadeEndPx = 30.0f;   // above: fully visible in that role
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;
