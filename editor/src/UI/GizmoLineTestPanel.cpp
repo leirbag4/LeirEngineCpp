@@ -47,11 +47,12 @@ GizmoLineTestPanel::GizmoLineTestPanel()
     AddField(widthRow, "Width:", m_Width, m_WidthVal,
         [this](float v) { m_WidthVal = std::max(0.0f, v); });
 
-    // Grid LOD knob (manual density, px per world unit): drives the editor
-    // grid's recursive chunk transition (1x1 -> 10x10 -> 100x100 -> ...),
-    // decoupled from the camera so the Unity-style dissolve can be verified.
-    // Lower value = camera farther away (zoom out).
-    makeTitle("-- Grid LOD (manual) --");
+    // Grid LOD knob (px per world unit): -1 = camera-driven (default, real
+    // screen density per line); >= 0 = manual uniform override that simulates
+    // zooming out without touching the camera (lower = farther = coarser
+    // chunks), used to verify the Unity-style dissolve. Both drive the same
+    // recursive model (1x1 -> 10x10 -> 100x100 -> ...).
+    makeTitle("-- Grid LOD (px/unit, -1 = camera) --");
     auto* densityRow = makeRow();
     AddField(densityRow, "px/unit:", m_Density, m_DensityVal,
         [this](float v) { m_DensityVal = v; });

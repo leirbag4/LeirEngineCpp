@@ -24,7 +24,7 @@ public:
     float GetWidth() const { return m_WidthVal; }
     // Manual LOD driver for the editor grid: uniform pixels-per-world-unit
     // override (>= 0) that drives the recursive chunk transition, decoupled
-    // from the camera. -1 disables it and uses the real camera density.
+    // from the camera. -1 (default) = camera-driven (real per-line density).
     float GetGridDensityOverride() const { return m_DensityVal; }
 
     Leir::Vector2 GetMinSize() const override;
@@ -53,5 +53,7 @@ private:
     float m_WidthVal = 3.0f;
     // Manual LOD driver for the editor grid: uniform pxPerUnit (pixels per
     // world unit). Lower value = camera farther away = coarser chunks.
-    float m_DensityVal = 6.0f;
+    // -1 (default) = camera-driven: each line reads the real screen density
+    // at its closest visible point, so zooming the camera drives the LOD.
+    float m_DensityVal = -1.0f;
 };
