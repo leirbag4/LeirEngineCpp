@@ -23,26 +23,36 @@ constexpr float kCornerY[4] = { 1.0f, -1.0f, 1.0f, -1.0f };
 // occlude the lines underneath them (the pipeline depth-tests against them).
 constexpr float kGridY = -0.01f;
 
-// Grid geometry (procedural, Unity-style LOD by distance from the camera).
-// Minor lines every 1u are dim and semi-transparent; chunk lines every 10u are
-// brighter and reach the horizon. Both fade smoothly OUTWARD from the camera
-// (near the camera the fine 1x1 squares are visible inside each 10x10 chunk,
-// and they grow more transparent as they recede / as the camera zooms out).
-constexpr float kMinorSpacing = 1.0f;
-constexpr float kMinorExtent = 60.0f;   // half-window (world units)
+// Recursive LOD by SCREEN DENSITY (pixels per world unit), NOT fixed world
+// distance: every line's alpha/color/width derives from the REAL projection
+// pxPerUnit read at the line's nearest point to the camera. A line of level s
+// (spacing 1/10/100/1000) plays two roles at once:
+//   - fine cell boundary of size s        -> faded once a cell of size s drops
+//     below ~3px on screen (ramp 3..6px);
+//   - chunk boundary of the cells s/10    -> bright while those sub-cells are
+//     readable, dimming to a plain fine line once too small.
+// Zooming out makes each level hand its chunk role to the next coarser level
+// seamlessly: near the camera 1x1 squares inside bright 10x10 chunks; zoom out
+// and the 1u internals vanish leaving clean 10x10 chunks ("1x1 virtual" of the
+// next level); zoom further and 100x100 take over, then 1000x1000, etc.
+constexpr float kMinorMaxAlpha = 0.35f; // role: fine cell of its level
+constexpr float kMajorMaxAlpha = 0.55f; // role: chunk boundary (added)
 constexpr float kMinorWidth = 1.5f;     // px
-constexpr float kMinorMaxAlpha = 0.40f; // never fully opaque (Unity-like)
-constexpr float kMinorFadeStart = 8.0f;
-constexpr float kMinorFadeEnd = 32.0f;
-
-constexpr float kMajorSpacing = 10.0f;
-constexpr float kMajorExtent = 160.0f;  // half-window (world units)
 constexpr float kMajorWidth = 3.0f;     // px
-constexpr float kMajorMaxAlpha = 0.90f;
-constexpr float kMajorFadeStart = 40.0f;
-constexpr float kMajorFadeEnd = 100.0f; // matches the camera far plane
+constexpr float kCellPxFadeStart = 3.0f; // below: line invisible in that role
+constexpr float kCellPxFadeEnd = 6.0f;   // above: fully visible in that role
 
-constexpr float kAxisExtent = 500.0f;   // the axes reach the horizon at any zoom
+// Generation window scales with the spacing so coarse levels cover the horizon
+// without emitting millions of fine lines; capped near 2x the camera far plane
+// (2000) so nothing beyond the visible horizon is ever emitted.
+constexpr float kWindowScale = 60.0f; // per-level half-window = 60 * spacing
+constexpr float kMaxWindow = 4000.0f;
+
+// Level spacings generated (the recursion): 1u fine, 10u chunks, then 100u...
+constexpr float kLevelSpacings[] = { 1.0f, 10.0f, 100.0f, 1000.0f };
+
+// Origin axes reach the horizon at any zoom (>= 2x the far plane).
+constexpr float kAxisExtent = 4000.0f;
 constexpr float kAxisWidth = 2.0f;      // px
 
 const Leir::Vector4 kMinorColor(0.30f, 0.32f, 0.36f, 1.0f);   // base grid lines
@@ -50,16 +60,58 @@ const Leir::Vector4 kMajorColor(0.85f, 0.88f, 0.96f, 1.0f);  // chunk lines, nea
 const Leir::Vector4 kAxisXColor(0.95f, 0.25f, 0.25f, 1.0f);  // red: X axis
 const Leir::Vector4 kAxisZColor(0.30f, 0.55f, 1.0f, 1.0f);   // blue: Z axis
 
-// Smooth distance fade: maxAlpha inside fadeStart, 0 at fadeEnd (smoothstep).
-float FadeAlpha(float dist, float fadeStart, float fadeEnd, float maxAlpha)
+// Smooth density ramp (inverse smoothstep): 0 below pxStart, 1 above pxEnd.
+float DensityAlpha(float px, float pxStart, float pxEnd)
 {
-    if (dist <= fadeStart)
-        return maxAlpha;
-    if (dist >= fadeEnd)
+    if (px <= pxStart)
         return 0.0f;
-    const float t = (dist - fadeStart) / (fadeEnd - fadeStart);
-    const float s = t * t * (3.0f - 2.0f * t);
-    return maxAlpha * (1.0f - s);
+    if (px >= pxEnd)
+        return 1.0f;
+    const float t = (px - pxStart) / (pxEnd - pxStart);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// Pixels that 1 world unit spans on screen at the given ground point (X or Z
+// axis), using the real view-projection. Returns 0 when the point is behind the
+// near plane (the line passes under the camera: nothing useful to read).
+float PxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
+                const glm::vec3& groundPt, bool alongX)
+{
+    const glm::vec4 clip0 = vp * glm::vec4(groundPt, 1.0f);
+    const glm::vec4 clip1 = vp * glm::vec4(groundPt + (alongX ? glm::vec3(1.0f, 0.0f, 0.0f)
+                                                              : glm::vec3(0.0f, 0.0f, 1.0f)), 1.0f);
+    constexpr float kNear = 0.1f; // matches the camera near plane
+    if (clip0.w <= kNear || clip1.w <= kNear)
+        return 0.0f;
+    const glm::vec2 ndc0(clip0.x / clip0.w, clip0.y / clip0.w);
+    const glm::vec2 ndc1(clip1.x / clip1.w, clip1.y / clip1.w);
+    const glm::vec2 px0((ndc0.x * 0.5f + 0.5f) * viewportWidthPx,
+                        (0.5f - ndc0.y * 0.5f) * viewportHeightPx);
+    const glm::vec2 px1((ndc1.x * 0.5f + 0.5f) * viewportWidthPx,
+                        (0.5f - ndc1.y * 0.5f) * viewportHeightPx);
+    return glm::length(px1 - px0);
+}
+
+// Max pixels-per-world-unit across sample points along a grid line (which spans
+// camPerp +/- window on the perpendicular axis). Sampling avoids reading the
+// density at a single point that may sit exactly on the camera plane (pitch ~0,
+// where pxPerUnit is meaningless) or behind it: only points in front of the
+// near plane contribute, and the closest one wins (the largest pxPerUnit along
+// the line). Returns 0 when the whole line is behind the camera.
+float LinePxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
+                    float coord, float camPerp, float window, bool parallelToZ)
+{
+    float best = 0.0f;
+    const float samples[3] = { -window * 0.5f, 0.0f, window * 0.5f };
+    for (float off : samples) {
+        const glm::vec3 pt = parallelToZ
+            ? glm::vec3(coord, 0.0f, camPerp + off)
+            : glm::vec3(camPerp + off, 0.0f, coord);
+        const float px = PxPerUnit(vp, viewportWidthPx, viewportHeightPx, pt, parallelToZ);
+        if (px > best)
+            best = px;
+    }
+    return best;
 }
 
 } // namespace
@@ -113,83 +165,79 @@ void EditorGrid::DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
     m_Lines.push_back(l);
 }
 
-void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos)
+void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
+                               const Leir::Matrix4x4& viewProjection,
+                               float viewportWidthPx, float viewportHeightPx)
 {
-    const float camX = cameraPos.x;
-    const float camZ = cameraPos.z;
-
-    // Minor lines every 1u, parallel to Z at x=k (skipping chunk positions and
-    // the axes so nothing is drawn twice on top of itself).
-    const int minorX0 = (int)std::floor(camX - kMinorExtent);
-    const int minorX1 = (int)std::ceil(camX + kMinorExtent);
-    for (int k = minorX0; k <= minorX1; ++k) {
-        if (k == 0)
-            continue;        // the blue Z axis covers x==0
-        if (k % 10 == 0)
-            continue;        // the chunk line covers x==k
-        const float alpha = FadeAlpha(std::fabs((float)k - camX),
-            kMinorFadeStart, kMinorFadeEnd, kMinorMaxAlpha);
-        if (alpha < 0.02f)
-            continue;
-        Leir::Vector4 c = kMinorColor;
-        c.w = alpha;
-        DrawLine({ (float)k, kGridY, camZ - kMinorExtent },
-                 { (float)k, kGridY, camZ + kMinorExtent }, c, kMinorWidth);
-    }
-    // Minor lines parallel to X at z=k.
-    const int minorZ0 = (int)std::floor(camZ - kMinorExtent);
-    const int minorZ1 = (int)std::ceil(camZ + kMinorExtent);
-    for (int k = minorZ0; k <= minorZ1; ++k) {
-        if (k == 0)
-            continue;        // the red X axis covers z==0
-        if (k % 10 == 0)
-            continue;
-        const float alpha = FadeAlpha(std::fabs((float)k - camZ),
-            kMinorFadeStart, kMinorFadeEnd, kMinorMaxAlpha);
-        if (alpha < 0.02f)
-            continue;
-        Leir::Vector4 c = kMinorColor;
-        c.w = alpha;
-        DrawLine({ camX - kMinorExtent, kGridY, (float)k },
-                 { camX + kMinorExtent, kGridY, (float)k }, c, kMinorWidth);
+    // One pass per recursion level. Each world line belongs to exactly one
+    // level (its FINEST: coords a coarser level also owns are skipped inside
+    // EmitLevel), so nothing is drawn twice on top of itself.
+    for (float spacing : kLevelSpacings) {
+        EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
+                  cameraPos, true);  // lines parallel to Z (x = coord)
+        EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
+                  cameraPos, false); // lines parallel to X (z = coord)
     }
 
-    // Chunk lines every 10u (the 10x10 grouping that remains when you zoom out),
-    // reaching the horizon (fade ends at the camera far plane).
-    const int majorX0 = (int)std::floor((camX - kMajorExtent) / kMajorSpacing);
-    const int majorX1 = (int)std::ceil((camX + kMajorExtent) / kMajorSpacing);
-    for (int k = majorX0; k <= majorX1; ++k) {
-        const float coord = (float)k * kMajorSpacing;
-        if (coord == 0.0f)
-            continue;        // the blue Z axis covers x==0
-        const float alpha = FadeAlpha(std::fabs(coord - camX),
-            kMajorFadeStart, kMajorFadeEnd, kMajorMaxAlpha);
-        if (alpha < 0.02f)
-            continue;
-        Leir::Vector4 c = kMajorColor;
-        c.w = alpha;
-        DrawLine({ coord, kGridY, camZ - kMajorExtent },
-                 { coord, kGridY, camZ + kMajorExtent }, c, kMajorWidth);
-    }
-    const int majorZ0 = (int)std::floor((camZ - kMajorExtent) / kMajorSpacing);
-    const int majorZ1 = (int)std::ceil((camZ + kMajorExtent) / kMajorSpacing);
-    for (int k = majorZ0; k <= majorZ1; ++k) {
-        const float coord = (float)k * kMajorSpacing;
-        if (coord == 0.0f)
-            continue;        // the red X axis covers z==0
-        const float alpha = FadeAlpha(std::fabs(coord - camZ),
-            kMajorFadeStart, kMajorFadeEnd, kMajorMaxAlpha);
-        if (alpha < 0.02f)
-            continue;
-        Leir::Vector4 c = kMajorColor;
-        c.w = alpha;
-        DrawLine({ camX - kMajorExtent, kGridY, coord },
-                 { camX + kMajorExtent, kGridY, coord }, c, kMajorWidth);
-    }
-
-    // Origin axes (opaque, never fade).
+    // Origin axes (opaque, never fade, reach the horizon at any zoom).
     DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
     DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
+}
+
+void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
+                           float viewportWidthPx, float viewportHeightPx,
+                           const Leir::Vector3& cameraPos, bool parallelToZ)
+{
+    // The coordinate that varies along the line (the line is drawn parallel to
+    // the other axis, perpendicular to `coord`). `coord` steps by `spacing`.
+    const float camCoord = parallelToZ ? cameraPos.x : cameraPos.z;
+    const float camPerp = parallelToZ ? cameraPos.z : cameraPos.x;
+    const float window = std::min(kWindowScale * spacing, kMaxWindow);
+    const int i0 = (int)std::floor((camCoord - window) / spacing);
+    const int i1 = (int)std::ceil((camCoord + window) / spacing);
+    const glm::mat4 vp = viewProjection;
+
+    for (int i = i0; i <= i1; ++i) {
+        const float coord = (float)i * spacing;
+        if (coord == 0.0f)
+            continue; // the axis covers the origin line
+        if (i % 10 == 0)
+            continue; // a coarser level owns this line (drawn exactly once)
+
+        // Screen density of 1 world unit at the closest visible part of the
+        // line: sampled along the line so it stays valid even when the line
+        // passes right under the camera (pitch ~0). The closest part wins (the
+        // largest pxPerUnit along the line), so a line is fully visible while
+        // it approaches the camera and fades as it recedes / as you zoom out.
+        const float pxPerUnit = LinePxPerUnit(vp, viewportWidthPx, viewportHeightPx,
+                                              coord, camPerp, window, parallelToZ);
+        if (pxPerUnit <= 0.0f)
+            continue;
+
+        // Role 1: fine cell boundary of size `spacing`.
+        const float minorVis = DensityAlpha(spacing * pxPerUnit,
+                                            kCellPxFadeStart, kCellPxFadeEnd);
+        // Role 2: chunk boundary of the cells spacing/10 below it.
+        const float chunkVis = (spacing >= 10.0f)
+            ? DensityAlpha((spacing / 10.0f) * pxPerUnit,
+                           kCellPxFadeStart, kCellPxFadeEnd)
+            : 0.0f;
+
+        const float alpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
+        if (alpha < 0.02f)
+            continue;
+
+        Leir::Vector4 c = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
+        c.w = alpha;
+        const float width = kMinorWidth + (kMajorWidth - kMinorWidth) * chunkVis;
+
+        if (parallelToZ)
+            DrawLine({ coord, kGridY, camPerp - window },
+                     { coord, kGridY, camPerp + window }, c, width);
+        else
+            DrawLine({ camPerp - window, kGridY, coord },
+                     { camPerp + window, kGridY, coord }, c, width);
+    }
 }
 
 void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
@@ -204,7 +252,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
 
     // Procedural grid, regenerated every frame and recentered on the camera.
     BeginFrame();
-    GenerateLines(cameraPos);
+    GenerateLines(cameraPos, viewProjection, viewportWidthPx, viewportHeightPx);
     if (m_Lines.empty())
         return;
 

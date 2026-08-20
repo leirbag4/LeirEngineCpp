@@ -251,7 +251,7 @@ protected:
         // Camera (will be driven by EditorCamera)
         auto* cameraObj = scene.CreateObject3D("Camera");
         auto& camera = cameraObj->AddComponent<Leir::Camera>();
-        camera.SetPerspective(60.0f, (float)m_ViewportW / (float)m_ViewportH, 0.1f, 100.0f);
+        camera.SetPerspective(60.0f, (float)m_ViewportW / (float)m_ViewportH, 0.1f, 2000.0f);
         camera.SetPrimary(true);
         m_PrimaryCamera = &camera;
 

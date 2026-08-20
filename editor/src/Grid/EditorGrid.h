@@ -24,13 +24,26 @@ class RenderBackend;
 //
 // The lines are GENERATED ON THE CPU every frame, procedurally and centered on
 // the camera's XZ (the window recenters each frame) so the grid is effectively
-// INFINITE and always surrounds the camera. Minor lines every 1u are
-// semi-transparent and fade with the distance from the camera (Unity-style:
-// near the camera the fine 1x1 squares are visible inside each 10x10 chunk and
-// grow more transparent as they recede / as you zoom out); chunk lines every
-// 10u are brighter and reach the horizon. Origin axes (red X / blue Z) are
-// opaque and never fade. Lines are clipped at the near plane and sorted
-// far-to-near so coplanar overlaps never zipper (same as GizmoRenderer).
+// INFINITE and always surrounds the camera.
+//
+// RECURSIVE LOD BY SCREEN DENSITY (Unity-style): the transparency of every
+// line is derived from the REAL pixels-per-world-unit of the projection at the
+// line's nearest point to the camera, not from a fixed world distance. A line
+// of level s (spacing 1/10/100/1000) plays two roles at once:
+//   - "fine cell" of size s: visible while a cell of size s is >= ~6px on
+//     screen, faded out below ~3px;
+//   - "chunk boundary" of the cells s/10 below it: bright while those sub-cells
+//     are readable, dimming to a plain fine line once they are too small.
+// Because both ramps key off pxPerUnit, zooming out makes each level seamlessly
+// hand its chunk role to the next coarser level: near the camera you see 1x1
+// squares inside bright 10x10 chunks; zoom out and the 1u internals fade,
+// leaving clean 10x10 chunks (which now behave as the "1x1" of the next level);
+// zoom further and 100x100 chunks take over, then 1000x1000, etc. Each world
+// line is generated exactly once, by its FINEST level (coords a coarser level
+// also owns are skipped), so nothing is drawn twice on top of itself. Origin
+// axes (red X / blue Z) are opaque and never fade. Lines are clipped at the
+// near plane and sorted far-to-near so coplanar overlaps never zipper (same as
+// GizmoRenderer).
 class EditorGrid {
 public:
     EditorGrid(Leir::RHI::RenderBackend* device,
@@ -86,7 +99,12 @@ private:
     void BeginFrame();
     void DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
                   const Leir::Vector4& color, float widthPx);
-    void GenerateLines(const Leir::Vector3& cameraPos);
+    void GenerateLines(const Leir::Vector3& cameraPos,
+                       const Leir::Matrix4x4& viewProjection,
+                       float viewportWidthPx, float viewportHeightPx);
+    void EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
+                   float viewportWidthPx, float viewportHeightPx,
+                   const Leir::Vector3& cameraPos, bool parallelToZ);
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();
