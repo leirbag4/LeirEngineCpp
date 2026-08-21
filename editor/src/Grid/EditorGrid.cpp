@@ -315,8 +315,17 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         float wFar = std::max(w0, w1);
         if (densityOverride < 0.0f)
             wFar = std::min(wFar, wMax); // camera mode: fade out at this depth
-        if (wFar <= wNear)
-            continue; // behind the near plane or past the fade-out
+        // Strict `wFar < wNear` (NOT <=): a line whose depth is CONSTANT along
+        // its length (wFar == wNear, e.g. lines perpendicular to the view) is
+        // perfectly visible when w < wMax and must NOT be discarded — the
+        // constant-depth guard below draws it as one segment. The old `<=`
+        // killed every such line, so horizontal lines vanished at yaw=0 (their
+        // depth never varies with X), everything vanished at exact pitch -90,
+        // and float noise made lines flicker as w0/w1 flipped between equal
+        // and near-equal while flying. Only lines entirely behind the near
+        // plane or entirely past the fade-out (wFar < wNear) are skipped.
+        if (wFar < wNear)
+            continue;
 
         // Emit one segment of the line, mapped back to world space from its
         // w-window (w is linear along the span). The segment only FADES the

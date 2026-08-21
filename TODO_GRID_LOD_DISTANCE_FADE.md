@@ -142,6 +142,39 @@ cambiar la altura — si se mueve con yaw/pitch, hay un bug de dirección.
 en la línea; rotX=-30/Y=10 = 1u fina + 10u chunk uniforme; girar yaw no cambia
 el readout; rotX≈0.7 rasante = ambas orientaciones consistentes.
 
+### Fix 5 (APLICADO, 2026-08-20) — el descarte de líneas de profundidad constante
+
+**Bug reportado**: "según para dónde miremos las gruesas desaparecen y líneas
+aparecen/desaparecen" + "gruesa que se corta y sigue la de abajo" + parpadeo al
+mover la cámara. En yaw=0 solo se veían líneas **verticales**; en pitch
+exactamente -90 desaparecían TODAS; en rotX=-89 (casi perpendicular) aparecían
+todas (432) — "un pelín inclinado arregla todo".
+
+**Causa raíz**: `EmitLevel` descartaba con `if (wFar <= wNear) continue;`. Cuando
+`wFar == wNear` la línea tiene profundidad **constante a lo largo de sí misma**
+(está perpendicular a la vista), y era descartada aunque estuviera perfectamente
+visible (w < wMax). Ocurre exactamente cuando el forward de la cámara no tiene
+componente en el eje de la línea:
+- horizontales (paralelas a X) con yaw=0: forward_x = 0 → profundidad constante
+  → **siempre descartadas** → solo se veían verticales;
+- verticales con yaw≈90 / pitch -90 exacto: igual → todo desaparece;
+- el parpadeo al volar: el ruido de float hace que `w0`/`w1` alternen entre
+  "exactamente iguales" (descartada) y "levemente distintos" (dibujada);
+- rotX=-89: ninguna línea es perpendicular exacta → profundidad varía → se dibujan.
+
+**Fix**: `if (wFar < wNear)` (estricto). Una línea de profundidad constante y
+visible cae en el guard existente de profundidad constante (un solo segmento,
+`density = scale/w`). Solo se descartan las que están detrás del near plane o
+pasadas del fade-out. Un cambio de una letra, valida todo el caso de
+orientaciones perpendiculares.
+
+**Pendiente (opcional, preguntar al usuario)**: grid invisible al abrir el
+editor (camH≈2, lines=2) — la banda "fina" del nivel 1u se sale al roll-off de
+handoff (`cellRef=289` en la zona muerta [10·fadeStart, 100·fadeStart) sin
+nivel más fino que la reemplace). Fix propuesto: no aplicar el factor de
+handoff `(1 - DensityAlpha(cellRef, 10·fadeStart, 10·fadeEnd))` al nivel más
+fino generado (spacing == 1).
+
 ## Archivos relevantes
 
 - `editor/src/Grid/EditorGrid.cpp` — `EmitLevel` (rol por nivel + fade por
