@@ -27,12 +27,15 @@ constexpr float kGridY = -0.01f;
 constexpr float kNear = 0.1f;
 
 // Recursive LOD by SCREEN DENSITY (pixels per world unit), NOT fixed world
-// distance. Each line FADES ALONG ITS LENGTH: it is subdivided and every
-// segment dissolves with the density at its depth (clip.w, the distance along
-// the camera's forward axis), so a line is bright near the camera and fades
-// toward the horizon — in BOTH orientations (the old single-alpha-per-line
-// model read one density at the nearest visible point and made vertical lines
-// stay bright to the horizon).
+// distance. Each line FADES ALONG ITS LENGTH: the opacity dissolves with the
+// density at the line's view depth (clip.w, the distance along the camera's
+// forward axis), computed PER PIXEL in the FRAGMENT shader from the
+// interpolated depth (fog by depth) — so each line is a SINGLE quad and a line
+// is bright near the camera and fades toward the horizon, in BOTH orientations
+// (the old single-alpha-per-line model read one density at the nearest visible
+// point and made vertical lines stay bright to the horizon; an intermediate
+// CPU-subdivision model was dropped because it multiplied the vertex count
+// ~16x and stuttered).
 // The ROLE of a line (thin/fine vs thick/chunk, i.e. width+color) is chosen
 // ONCE PER LEVEL PER FRAME from the ROTATION-INVARIANT reference density
 // (scale / camera height, the same value the HUD shows), NEVER from the
@@ -57,14 +60,17 @@ constexpr float kMinorMaxAlpha = 0.35f; // role: fine cell of its level
 constexpr float kMajorMaxAlpha = 0.55f; // role: chunk line (added)
 constexpr float kMinorWidth = 1.5f;     // px; the chunk width is m_ChunkWidth
 
-// Per-line subdivision for the along-length fade (segments in w-space).
-constexpr int kSeg = 16;
-
 // Generation window scales with the spacing so coarse levels cover the horizon
 // without emitting millions of fine lines; capped near 2x the camera far plane
 // (2000) so nothing beyond the visible horizon is ever emitted.
 constexpr float kWindowScale = 60.0f; // per-level half-window = 60 * spacing
 constexpr float kMaxWindow = 4000.0f;
+
+// Camera far plane (the editor camera is SetPerspective(60, ..., 0.1f, 2000)).
+// The horizon fade must complete before this depth, otherwise a coarse level
+// whose natural cell-size fade band extends past the far plane reaches the
+// horizon at full alpha and gets hard-clipped into a solid.
+constexpr float kFarPlane = 2000.0f;
 
 // Level spacings generated (the recursion): 1u fine, 10u chunks, then 100u...
 constexpr float kLevelSpacings[] = { 1.0f, 10.0f, 100.0f, 1000.0f };
@@ -160,7 +166,8 @@ void EditorGrid::SetFadeThresholds(float fadeStartPx, float fadeEndPx)
 }
 
 void EditorGrid::DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
-                          const Leir::Vector4& color, float widthPx)
+                          const Leir::Vector4& color, float widthPx,
+                          float spacing)
 {
     if ((b - a).SqrLength() < 1e-12f)
         return; // degenerate segment: normalize() would divide by zero
@@ -171,6 +178,7 @@ void EditorGrid::DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
     l.end = b;
     l.color = color;
     l.width = widthPx;
+    l.spacing = spacing;
     m_Lines.push_back(l);
 }
 
@@ -199,9 +207,10 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
 
     // Origin axes (opaque, never fade, reach the horizon at any zoom). Drawn
     // in camera mode; the manual mode skips them (pure LOD transition demo).
+    // spacing=0 tells the fragment shader to skip the distance fade (opaque).
     if (densityOverride < 0.0f) {
-        DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
-        DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
+        DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth, 0.0f);
+        DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth, 0.0f);
     }
 
     m_DebugLineCount = (uint32_t)m_Lines.size();
@@ -300,9 +309,9 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
     const float scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
 
     // Beyond wMax the cell size is below fadeStartPx (the line is fully faded),
-    // so nothing past it needs emitting; within wFull everything is visible.
+    // so nothing past it needs emitting (the fragment shader handles the rest
+    // of the per-pixel fade).
     const float wMax = scale * spacing / m_FadeStartPx;
-    const float wFull = scale * spacing / m_FadeEndPx;
 
     for (int i = i0; i <= i1; ++i) {
         const float coord = (float)i * spacing;
@@ -330,80 +339,28 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         const float w1 = clip1.w;
         const float wNear = std::max(std::min(w0, w1), kNear);
         float wFar = std::max(w0, w1);
-        if (densityOverride < 0.0f)
-            wFar = std::min(wFar, wMax); // camera mode: fade out at this depth
+        if (densityOverride < 0.0f) {
+            // Camera mode: cap the emitted span at the cell-size fade limit and
+            // the horizon fade end, so entirely-faded lines are skipped here.
+            wFar = std::min(wFar, std::min(wMax, m_HorizonFadeEnd));
+        }
         // Strict `wFar < wNear` (NOT <=): a line whose depth is CONSTANT along
         // its length (wFar == wNear, e.g. lines perpendicular to the view) is
-        // perfectly visible when w < wMax and must NOT be discarded — the
-        // constant-depth guard below draws it as one segment. The old `<=`
-        // killed every such line, so horizontal lines vanished at yaw=0 (their
-        // depth never varies with X), everything vanished at exact pitch -90,
-        // and float noise made lines flicker as w0/w1 flipped between equal
-        // and near-equal while flying. Only lines entirely behind the near
-        // plane or entirely past the fade-out (wFar < wNear) are skipped.
+        // perfectly visible when w < wMax and must NOT be discarded. The old
+        // `<=` killed every such line (horizontal lines vanished at yaw=0,
+        // everything vanished at exact pitch -90) and float noise made lines
+        // flicker while flying. Only lines entirely behind the near plane or
+        // entirely past the fade-out (wFar < wNear) are skipped.
         if (wFar < wNear)
             continue;
 
-        // Emit one segment of the line, mapped back to world space from its
-        // w-window (w is linear along the span). The segment only FADES the
-        // alpha by the density at its midpoint (the line dissolves as it
-        // recedes); the style (width/color) is the per-level role computed
-        // above and is CONSTANT along the line, so a chunk line never turns
-        // into a plain line mid-way or with the view direction.
-        auto emitSegment = [&](float segStartW, float segEndW, float density) {
-            const float fade = DensityAlpha(spacing * density,
-                                            m_FadeStartPx, m_FadeEndPx);
-            const float alpha = role.alpha * fade;
-            if (alpha < 0.02f)
-                return;
-            Leir::Vector4 c = role.color;
-            c.w = alpha;
-            float t0;
-            float t1;
-            if (std::abs(w1 - w0) < 1e-6f) {
-                t0 = 0.0f; // constant-depth line: the span maps to the whole line
-                t1 = 1.0f;
-            } else {
-                t0 = (segStartW - w0) / (w1 - w0);
-                t1 = (segEndW - w0) / (w1 - w0);
-            }
-            const glm::vec3 a = glm::mix(p0, p1, t0);
-            const glm::vec3 b = glm::mix(p0, p1, t1);
-            DrawLine({ a.x, a.y, a.z }, { b.x, b.y, b.z }, c, role.width);
-        };
-
-        if (densityOverride >= 0.0f) {
-            // MANUAL mode (Test2 panel knob): uniform density over the whole
-            // line, decoupled from the camera, so the Unity-style transition
-            // can be verified without touching the camera.
-            emitSegment(wNear, wFar, densityOverride);
-            continue;
-        }
-
-        // Fully-bright shortcut: the whole visible part is beyond fadeEndPx of
-        // cell size -> one draw, no subdivision needed.
-        if (wFar <= wFull) {
-            emitSegment(wNear, wFar, scale / (0.5f * (wNear + wFar)));
-            continue;
-        }
-
-        // Constant-depth line (w does not vary along the span, e.g. a line
-        // parallel to the camera's forward axis — the common horizontal case):
-        // subdivision in w-space is meaningless, draw it at that single depth.
-        if (std::abs(w1 - w0) < 1e-6f) {
-            emitSegment(wNear, wFar, scale / wNear);
-            continue;
-        }
-
-        // Fade along the line: subdivide the visible w-interval so each segment
-        // is styled by the density at ITS depth — near the camera the bright
-        // chunk role, fading out toward the horizon.
-        const float dw = (wFar - wNear) / kSeg;
-        for (int s = 0; s < kSeg; ++s) {
-            const float aW = wNear + (float)s * dw;
-            const float bW = aW + dw;
-            emitSegment(aW, bW, scale / (0.5f * (aW + bW)));
-        }
+        // One quad per line; the FRAGMENT shader fades it per-pixel by the
+        // interpolated view depth (fog by depth), so no CPU subdivision is
+        // needed. color.a = the level's role alpha (the line's max opacity);
+        // `spacing` is carried so the shader can compute the cell-size fade.
+        Leir::Vector4 c = role.color;
+        c.w = role.alpha;
+        DrawLine({ p0.x, p0.y, p0.z }, { p1.x, p1.y, p1.z }, c, role.width, spacing);
     }
 }
 
@@ -443,7 +400,8 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
         glm::vec3 e;
         Leir::Vector4 color;
         float width;
-        float key; // closest clip.w (= -view z) of the clipped segment
+        float spacing; // level spacing (0 = opaque axis): drives the shader fade
+        float key;     // closest clip.w (= -view z) of the clipped segment
     };
     std::vector<DrawnSeg> segs;
     segs.reserve(m_Lines.size());
@@ -469,6 +427,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
         seg.e = eClipped;
         seg.color = line.color;
         seg.width = line.width;
+        seg.spacing = line.spacing;
         seg.key = std::min(clipS.w, clipE.w); // w = -view z: smaller = nearer
         segs.push_back(seg);
     }
@@ -488,6 +447,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
             v.cornerX = kCornerX[c];
             v.cornerY = kCornerY[c];
             v.width = seg.width;
+            v.spacing = seg.spacing;
             m_Quads.push_back(v);
         }
         if (li + 1 < segs.size()) {
@@ -501,6 +461,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
             a3.cornerX = kCornerX[3];
             a3.cornerY = kCornerY[3];
             a3.width = seg.width;
+            a3.spacing = seg.spacing;
             m_Quads.push_back(a3);
 
             GridVertex b0;
@@ -510,6 +471,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
             b0.cornerX = kCornerX[0];
             b0.cornerY = kCornerY[0];
             b0.width = next.width;
+            b0.spacing = next.spacing;
             m_Quads.push_back(b0);
         }
     }
@@ -528,7 +490,14 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
     GridPushConstants push;
     push.viewportWidth = viewportWidthPx;
     push.viewportHeight = viewportHeightPx;
-    graph.PushConstants(m_PipelineLayout, Leir::RHI::ShaderStageMask::Vertex,
+    push.scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
+    push.fadeStart = m_FadeStartPx;
+    push.fadeEnd = m_FadeEndPx;
+    push.horizonStart = m_HorizonFadeStart;
+    push.horizonEnd = m_HorizonFadeEnd;
+    push.overrideDensity = densityOverride;
+    graph.PushConstants(m_PipelineLayout,
+        Leir::RHI::ShaderStageMask::Vertex | Leir::RHI::ShaderStageMask::Fragment,
         0, (uint32_t)sizeof(GridPushConstants), &push);
 
     graph.Draw((uint32_t)m_Quads.size(), 0);
@@ -562,7 +531,7 @@ void EditorGrid::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
         m_SetLayouts = { { 0, m_UBOLayout } };
 
         Leir::RHI::RHIPushConstantRange pushRange{};
-        pushRange.stage = Leir::RHI::ShaderStageMask::Vertex;
+        pushRange.stage = Leir::RHI::ShaderStageMask::Vertex | Leir::RHI::ShaderStageMask::Fragment;
         pushRange.offset = 0;
         pushRange.size = (uint32_t)sizeof(GridPushConstants);
         m_PipelineLayout = m_Device->CreatePipelineLayout({ m_UBOLayout }, { pushRange });
@@ -636,14 +605,14 @@ Leir::RHI::RHIVertexInputBinding EditorGrid::GetBindingDescription()
 {
     Leir::RHI::RHIVertexInputBinding binding;
     binding.binding = 0;
-    binding.stride = sizeof(GridVertex); // 56
+    binding.stride = sizeof(GridVertex); // 64
     binding.inputRate = Leir::RHI::VertexInputRate::Vertex;
     return binding;
 }
 
 std::vector<Leir::RHI::RHIVertexAttribute> EditorGrid::GetAttributeDescriptions()
 {
-    std::vector<Leir::RHI::RHIVertexAttribute> attrs(6);
+    std::vector<Leir::RHI::RHIVertexAttribute> attrs(7);
 
     attrs[0].binding = 0;
     attrs[0].location = 0;
@@ -686,6 +655,13 @@ std::vector<Leir::RHI::RHIVertexAttribute> EditorGrid::GetAttributeDescriptions(
     attrs[5].offset = offsetof(GridVertex, width);
     attrs[5].semantic = "TEXCOORD";
     attrs[5].semanticIndex = 3;
+
+    attrs[6].binding = 0;
+    attrs[6].location = 6;
+    attrs[6].format = Leir::RHI::Format::R32_SFLOAT;
+    attrs[6].offset = offsetof(GridVertex, spacing);
+    attrs[6].semantic = "TEXCOORD";
+    attrs[6].semanticIndex = 4;
 
     return attrs;
 }

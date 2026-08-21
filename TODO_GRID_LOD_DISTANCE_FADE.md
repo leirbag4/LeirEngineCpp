@@ -19,22 +19,28 @@ es el resumen del modelo **actual**.
   - Fuera de bandas no se dibuja. Bordes con smoothstep → crossfade suave.
   - `EmitAllLevels` emite ambos sentidos por nivel y saltea niveles inactivos
     (`levelAlpha < 0.02`).
-- **Fade por segmento**: cada línea se subdivide en hasta `kSeg = 16`
-  segmentos en espacio-`w`; cada segmento disuelve `alpha = role.alpha *
-  DensityAlpha(spacing · density, fadeStart, fadeEnd)`. El estilo es constante
-  a lo largo de la línea (nunca cambia de gruesa a fina a mitad de recorrido).
-  Shortcuts: tramo fully-bright (1 segmento), profundidad constante (1
-  segmento), `wMax` = límite de fade-out.
+- **Fade por pixel (fog by depth, shader)**: cada línea es **UN quad** (sin
+  subdivisión CPU). El fragment shader disuelve la opacidad con la profundidad
+  de vista interpolada (`depth` varying del VS): `alpha = role.alpha *
+  min(fadeCelda, fadeHorizonte)` donde `fadeCelda = smoothstep(fadeStart,
+  fadeEnd, spacing * density)` con `density = (override >= 0) ? override :
+  scale/depth`, y `fadeHorizonte = 1 - smoothstep(horizonStart, horizonEnd,
+  depth)` (knobs del Test2). Los valores vienen por push constants
+  (Vertex|Fragment); `spacing` viaja por vértice (0 = línea opaca, los ejes).
+  El estilo es constante a lo largo de la línea (nunca cambia de gruesa a fina a
+  mitad de recorrido). En CPU solo se saltean las líneas totalmente apagadas
+  (`wFar < wNear`, clamp a `wMax` y `horizonEnd`).
 - **Finos/altos clampados**: el nivel más fino (1u) nunca pierde su banda fina
   y el 10u (su pareja chunk) nunca pierde su banda chunk — no existe 0.1u para
   hacer el handoff. Sin esto el grid desaparecía a cámara muy baja (camH≈2).
 - **Arquitectura**: generación 100% CPU por frame (grid infinito re-centrado en
   el XZ de la cámara) + un solo draw call; la expansión a ancho de píxel
-  constante la hace el vertex shader (`Grid.vert.slang`). Vertex buffer doble
-  buffer, clip near-plane + sort far-to-near en CPU (depth write off).
+  constante y el fade por profundidad los hacen los shaders (`Grid.vert/frag`).
+  Vertex buffer doble buffer, clip near-plane + sort far-to-near en CPU (depth
+  write off). **~300-600 líneas** (1 quad/line) → sin stutter.
 - Knobs en Test2: `px/unit` (modo manual, -1 = cámara), `fadeStart/fadeEnd`,
-  `thickWidth` (default 0.9 px). HUD: LOD fine/chunk, camH, ref px/u, fade,
-  `role 1u/10u/100u/1000u`, lineas.
+  `thickWidth` (default 0.9 px), `horizonStart/horizonEnd`. HUD: LOD
+  fine/chunk, camH, ref px/u, fade, horizon, `role 1u/10u/100u/1000u`, líneas.
 
 ## Historial de fixes (2026-08-20, ver detalle abajo)
 
@@ -47,6 +53,8 @@ es el resumen del modelo **actual**.
    constante) ya no se descartan.
 6. Handoff de banda fina solo para niveles con vecino más fino → grid visible al arrancar (camH≈2).
 7. Roll-off de banda chunk solo para niveles con fino real → chunk 10u visible a cámara baja.
+8. Horizon fade (knobs `horizonStart/horizonEnd`) → las 100u/1000u se desvanecen antes del far plane, sin corte brusco en el horizonte.
+9. **Fog by depth (Fix 9)**: el fade se movió al fragment shader (por pixel, con la profundidad interpolada) → cada línea es 1 quad, sin subdivisión CPU → count ~300-600 (era ~3000 a cámara baja) y sin stutter.
 
 ## Problemas reportados por el usuario (2026-08-20)
 
@@ -261,18 +269,80 @@ fino 10u sí tiene vecino más fino).
 chunk visibles; camH=10 idéntico a antes (`cellRef(10u)=580 < 1500` → el factor
 ya era 1); camH≈38.7 → crossfade 10u fina + 100u chunk intacto.
 
+### Fix 8 (APLICADO, 2026-08-20) — fade de horizonte para niveles gruesos
+
+**Bug**: al superar Y≈30, el nuevo nivel chunk (100u) se veía hasta ultra lejos
+y se cortaba de golpe en el horizonte (sin dissolve), formando un "sólido" de
+líneas convergentes. Causa: el fade por celdas tiene banda `[scale·s/30,
+scale·s/15]` que crece con el spacing; con `scale≈580` el 100u tiene banda
+[1935, 3870], pero el **far plane de la cámara es 2000** → el 100u llegaba al
+far plane con ~93% de alpha y se recortaba (las 1u/10u ya se habían apagado a
+w≈39/387, por eso se veían perfectas).
+
+**Fix (horizon fade, dos knobs nuevos en Test2 — no hardcoding)**: el fade final
+por segmento pasa a `min(fadeCelda, fadeHorizonte)` con `fadeHorizonte =
+1 - DensityAlpha(w, horizonStart, horizonEnd)`. Knobs `horizonStart:`/
+`horizonEnd:` (profundidad de vista absoluta, defaults 1000/1800; deben quedar
+debajo del far plane 2000). Además: clamp de `wFar = min(wFar, wMax,
+horizonEnd)` en modo cámara (concentra los segmentos en las bandas de fade) y
+el shortcut "fully bright" ahora exige `wFar <= wFull && wFar <= horizonStart`.
+El modo manual (px/unit) no aplica el fade horizonte (test de LOD puro).
+
+**Verificación**: Y≈40 (10u fina + 100u chunk) → las 100u se desvanecen
+suavemente antes del horizonte, sin corte brusco ni sólido; 1u/10u idénticas;
+knobs ajustan la banda en vivo (HUD muestra `horizon %.0f..%.0f`).
+
+### Fix 9 (APLICADO, 2026-08-20) — fog by depth: el fade pasa al shader
+
+**Bug**: al arrancar el editor (camH≈2, vista oblicua) el count de líneas era
+**~3091** y el viewport se veía "trabado" (spikes de frame con 60 FPS). Causa:
+el fade por longitud se computaba en CPU **por segmento** (`kSeg=16`); cada
+línea que cruzaba una banda de fade se dividía en 16 quads → ~3091 líneas ×
+(~18.5k vértices y ~1MB de memcpy por frame en Debug). En top-down eran ~220
+(profundidad constante → 1 segmento) — por eso el "300" que se recordaba. El
+cambio se introdujo en `a902d66` (fade por longitud), NO en el Fix 8.
+
+**Fix (fog by depth)**: el fade se movió al **fragment shader** — cada línea es
+**1 quad** (sin subdivisión CPU) y el pixel disuelve su opacidad con la
+profundidad de vista interpolada (`depth` varying = `lerp(clipS.w, clipE.w,
+cornerX)`, consistente en Vulkan/D3D12/WebGPU — no `SV_Position.w`, que en
+SPIR-V es el recíproco):
+- `Grid.vert.slang`: VSOutput + `depth`/`spacingOut`; VSInput + `spacing`
+  (location 6, stride 64); push block ampliado (8 floats).
+- `Grid.frag.slang`: `alpha = color.a * min(smoothstep(fadeStart, fadeEnd,
+  spacing*density), 1 - smoothstep(horizonStart, horizonEnd, depth))` con
+  `density = (overrideDensity >= 0) ? overrideDensity : scale/depth`.
+  `spacing <= 0` (ejes) o modo manual → sin fade de cámara.
+- CPU (`EmitLevel`): eliminados `kSeg`, `wFull`, emitSegment, constant-depth
+  guard y fully-bright shortcut (los subsume el shader). Solo saltea líneas
+  totalmente apagadas (`wFar < wNear`, clamp a `wMax`/`horizonEnd`) y emite 1
+  quad con `color.a = role.alpha` + `spacing`.
+- `Render()`: push de `scale`, fade/horizon, overrideDensity (mask
+  `Vertex|Fragment`); atributo loc 6; fallback de pipeline con push range
+  Vertex|Fragment.
+
+**Resultado**: count ~300-600 (1 quad/line) → sin stutter, fade más liso
+(per-pixel exacto, no 16 pasos). Los knobs siguen igual (ahora alimentan los
+push constants). Verificado por el usuario: 1u/10u/100u suaves, ejes opacos
+(spacing=0), count normal al arrancar.
+
 ## Archivos relevantes
 
 - `editor/src/Grid/EditorGrid.cpp` — `GenerateLines` (entry, unifica manual/
   cámara), `EmitAllLevels` (loop por nivel + debug alphas), `ComputeLevelRole`
-  (rol por bandas, 1× por frame), `EmitLevel` (geometría + fade por segmento),
-  `Render` (expansión a quads + sort far-to-near).
-- `editor/src/Grid/EditorGrid.h` — `Line`, `LevelRole`, `GridVertex`,
-  `DrawLine`, API de fade (`SetFadeThresholds`) + `SetChunkWidth` + readout
+  (rol por bandas, 1× por frame), `EmitLevel` (1 quad por línea + skip de
+  apagadas), `Render` (clip near-plane + sort far-to-near + push constants).
+- `editor/src/Grid/EditorGrid.h` — `Line`, `LevelRole`, `GridVertex` (+spacing,
+  stride 64), `GridPushConstants` (8 floats), `DrawLine`, API de fade
+  (`SetFadeThresholds`) + `SetChunkWidth` + `SetHorizonFade` + readout
   `GetDebugLevelAlpha`.
+- `engine/shaders/Grid.vert.slang` — VSInput +`spacing` (loc 6), VSOutput
+  +`depth`/`spacingOut` (view depth interpolada), push block ampliado.
+- `engine/shaders/Grid.frag.slang` — fade por pixel (fog by depth): `min(fadeCelda,
+  fadeHorizonte)` con smoothsteps, `spacing <= 0` = opaco (ejes).
 - `editor/src/UI/GizmoLineTestPanel.h/.cpp` — panel Test2 (knobs px/unit,
-  fadeStart/fadeEnd/thickWidth).
-- `editor/src/main.cpp` — HUD `GridLodDebug` (+ línea `role`), call a
+  fadeStart/fadeEnd/thickWidth/horizonStart/horizonEnd).
+- `editor/src/main.cpp` — HUD `GridLodDebug` (+ línea `role`/`horizon`), call a
   `m_Grid->Render`.
 
 ## Deuda técnica / pendientes

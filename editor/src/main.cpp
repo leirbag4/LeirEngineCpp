@@ -1,4 +1,4 @@
-﻿#include <LeirEngine/Core/CoreApplication.h>
+#include <LeirEngine/Core/CoreApplication.h>
 #include <LeirEngine/Core/Settings.h>
 #include <LeirEngine/Core/CoreObject.h>
 #include <vector>
@@ -97,8 +97,8 @@ void DeleteNonOwnedSubtree(Leir::UIElement* node)
 // UIElement's dtor only nulls child parent pointers; it does not free children.
 // The editor owns the dock content subtrees, so they are freed here recursively.
 // Children a widget deletes in its own destructor (ScrollView's viewport/
-// scrollbars, UIScrollbar's thumb, ...) are skipped â€” deleting them again would
-// be a double free (crash 0xC0000005 in LeirEngine.dll â†’ 5s shutdown).
+// scrollbars, UIScrollbar's thumb, ...) are skipped — deleting them again would
+// be a double free (crash 0xC0000005 in LeirEngine.dll → 5s shutdown).
 void DeleteUiSubtree(Leir::UIElement* element)
 {
     if (!element)
@@ -277,7 +277,7 @@ protected:
         child->SetParent(cubeObj);
 
         // Sprites
-        // PHASE-1 TEST: the demo sprites are disabled — the screen-center
+        // PHASE-1 TEST: the demo sprites are disabled � the screen-center
         // "TestSprite" quad writes depth and was occluding the gizmo test
         // lines (the blue Z axis had a "gap" exactly over its 200x200 area).
         // Re-enable after the line validation.
@@ -361,7 +361,7 @@ protected:
         // working over it); SetOverlayLayer routes it to the debug batch so it
         // draws ABOVE the RenderTexture viewport quad. Because the viewport
         // panel is a Free-layout element, its ComputeFreeLayout ADDS the
-        // panel's computed x/y into child offsets each frame — so the label's
+        // panel's computed x/y into child offsets each frame � so the label's
         // offset is re-pinned every frame in OnUpdate, never accumulated.
         m_GridLodLabel = new Leir::UILabel();
         m_GridLodLabel->SetName("GridLodDebug");
@@ -369,7 +369,7 @@ protected:
         m_GridLodLabel->SetColor({0.6f, 0.95f, 0.6f, 1.0f});
         m_GridLodLabel->SetOverlayLayer(true);
         m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f}; // top-right
-        m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 80.0f};
+        m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 100.0f};
         m_GridLodLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
         m_ViewportPanel->AddChild(m_GridLodLabel);
 
@@ -579,15 +579,15 @@ protected:
 
         bool cameraControlled = rightDown || middleDown;
 
-        // Bidirectional sync: EditorCamera â†” scene camera
+        // Bidirectional sync: EditorCamera ↔ scene camera
         auto* cameraObj = scene->FindObjectByName("Camera");
         if (cameraObj) {
             if (cameraControlled) {
-                // EditorCamera â†’ escena (durante control)
+                // EditorCamera → escena (durante control)
                 cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
                 cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
             } else {
-                // escena â†’ EditorCamera (panel edits)
+                // escena → EditorCamera (panel edits)
                 auto& t = cameraObj->GetTransform();
                 auto pos = t.GetLocalPosition();
                 auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
@@ -609,7 +609,7 @@ protected:
         // Grid LOD debug HUD: refresh the label text from the grid's debug state
         // and re-pin its offset. The label is a child of the Free-layout viewport
         // panel, whose ComputeFreeLayout adds the panel's absolute x/y to child
-        // offsets every frame — resetting the anchor offset here (right before
+        // offsets every frame � resetting the anchor offset here (right before
         // UpdateLayout) makes the net position stable instead of drifting.
         if (m_GridLodLabel && m_Grid) {
             // Live-tunable fade thresholds from the Test2 panel (fall back to
@@ -618,17 +618,20 @@ protected:
                 m_Grid->SetFadeThresholds(m_GizmoTestPanel->GetGridFadeStartPx(),
                                           m_GizmoTestPanel->GetGridFadeEndPx());
                 m_Grid->SetChunkWidth(m_GizmoTestPanel->GetGridChunkWidth());
+                m_Grid->SetHorizonFade(m_GizmoTestPanel->GetGridHorizonFadeStart(),
+                                       m_GizmoTestPanel->GetGridHorizonFadeEnd());
             }
             m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
-            m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 80.0f};
-            char buf[200];
+            m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 100.0f};
+            char buf[220];
             std::snprintf(buf, sizeof(buf),
-                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nfade %.0f..%.0f px  thick %gpx  lines %u\nrole 1u:%.2f 10u:%.2f 100u:%.2f 1000u:%.2f",
+                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nfade %.0f..%.0f px  thick %gpx  lines %u\nhorizon %.0f..%.0f  role 1u:%.2f 10u:%.2f 100u:%.2f 1000u:%.2f",
                 m_Grid->GetDebugFineSpacing(), m_Grid->GetDebugChunkSpacing(),
                 m_Grid->GetDebugCamHeight(), m_Grid->GetDebugRefPxPerUnit(),
                 m_Grid->GetFadeStartPx(), m_Grid->GetFadeEndPx(),
                 m_Grid->GetChunkWidth(),
                 m_Grid->GetDebugLineCount(),
+                m_Grid->GetHorizonFadeStart(), m_Grid->GetHorizonFadeEnd(),
                 m_Grid->GetDebugLevelAlpha(0), m_Grid->GetDebugLevelAlpha(1),
                 m_Grid->GetDebugLevelAlpha(2), m_Grid->GetDebugLevelAlpha(3));
             m_GridLodLabel->SetText(buf);
@@ -712,7 +715,7 @@ protected:
         }
 
         // 2. UI graph: draws into the native swapchain overlay pass (begun by
-        //    BeginSwapchainOverlay) — no pass records, just draw records.
+        //    BeginSwapchainOverlay) � no pass records, just draw records.
         m_Backend->BeginSwapchainOverlay();
         if (m_UIRenderer && m_Canvas) {
             m_UIGraph.Clear();

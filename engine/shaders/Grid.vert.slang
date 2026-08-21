@@ -17,6 +17,9 @@ struct VSInput {
     [[vk::location(3)]] float cornerX : TEXCOORD1;
     [[vk::location(4)]] float cornerY : TEXCOORD2;
     [[vk::location(5)]] float width : TEXCOORD3;
+    // Level spacing in world units (power of 10). 0 = opaque reference line
+    // (origin axes): the fragment shader skips the distance fade for them.
+    [[vk::location(6)]] float spacing : TEXCOORD4;
 };
 
 struct VSOutput {
@@ -27,6 +30,12 @@ struct VSOutput {
     [[vk::location(1)]] float sidePx : TEXCOORD1;
     // Line width in pixels, interpolated (per-line, uniform across the quad).
     [[vk::location(2)]] float widthPx : TEXCOORD2;
+    // VIEW DEPTH (clip.w) interpolated across the quad — the fragment shader
+    // uses it for the per-pixel distance fade (fog by depth). Explicit varying
+    // (not SV_Position.w) so it is consistent across backends (SPIR-V's
+    // gl_FragCoord.w is the reciprocal).
+    [[vk::location(3)]] float depth : TEXCOORD3;
+    [[vk::location(4)]] float spacingOut : TEXCOORD4;
     float4 position : SV_Position;
 };
 
@@ -35,13 +44,18 @@ cbuffer UniformBufferObject {
     float4x4 viewProjection;
 } ubo;
 
-// Declared only in the vertex stage (the executor pushes with Vertex); the
-// fragment stage is a pass-through.
+// Shared by the vertex AND fragment stages (the executor pushes with
+// Vertex|Fragment). The fragment reads scale + the fade bands to compute the
+// per-pixel distance fade; the layout must match the C++ GridPushConstants.
 struct GridPushConstants {
     float viewportWidth;
     float viewportHeight;
-    float pad0;
-    float pad1;
+    float scale;            // px per unit at depth 1 (vh * 0.5 * f)
+    float fadeStart;        // cell-size fade band (px of cell)
+    float fadeEnd;
+    float horizonStart;     // horizon fade band (view depth, units)
+    float horizonEnd;
+    float overrideDensity;  // >=0: manual mode (uniform density, no horizon fade)
 };
 
 [[vk::push_constant]]
@@ -83,5 +97,7 @@ VSOutput main(VSInput input) {
     output.fragColor = input.color;
     output.sidePx = halfQuad * input.cornerY;
     output.widthPx = input.width;
+    output.depth = w;
+    output.spacingOut = input.spacing;
     return output;
 }

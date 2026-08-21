@@ -32,6 +32,10 @@ public:
     float GetGridFadeEndPx() const { return m_FadeEndVal; }
     // Chunk (thick) line width in pixels for the grid LOD.
     float GetGridChunkWidth() const { return m_ChunkWidthVal; }
+    // Horizon fade band (view depth in world units): grid lines dissolve to
+    // alpha 0 from start to end so nothing reaches the far plane bright.
+    float GetGridHorizonFadeStart() const { return m_HorizonStartVal; }
+    float GetGridHorizonFadeEnd() const { return m_HorizonEndVal; }
 
     Leir::Vector2 GetMinSize() const override;
 
@@ -52,6 +56,8 @@ private:
     UIDragFloatInput* m_FadeStart = nullptr;
     UIDragFloatInput* m_FadeEnd = nullptr;
     UIDragFloatInput* m_ThickWidth = nullptr;
+    UIDragFloatInput* m_HorizonStart = nullptr;
+    UIDragFloatInput* m_HorizonEnd = nullptr;
 
     Leir::Vector3 m_Start = {0.0f, 0.6f, 0.0f};
     Leir::Vector3 m_End = {5.0f, 0.6f, 0.0f};
@@ -72,4 +78,8 @@ private:
     float m_FadeEndVal = 30.0f;
     // Chunk (thick) grid line width in pixels (drag to make chunk lines finer).
     float m_ChunkWidthVal = 0.9f;
+    // Horizon fade band in view depth (world units). Must end below the camera
+    // far plane (2000) so lines dissolve before being clipped at the horizon.
+    float m_HorizonStartVal = 1000.0f;
+    float m_HorizonEndVal = 1800.0f;
 };

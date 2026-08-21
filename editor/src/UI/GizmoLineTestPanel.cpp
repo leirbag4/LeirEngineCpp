@@ -72,6 +72,16 @@ GizmoLineTestPanel::GizmoLineTestPanel()
     auto* thickRow = makeRow();
     AddField(thickRow, "thickWidth:", m_ThickWidth, m_ChunkWidthVal,
         [this](float v) { m_ChunkWidthVal = std::max(0.5f, v); });
+
+    // Horizon fade band (view depth): grid lines dissolve to alpha 0 from
+    // horizonStart to horizonEnd, so coarse chunk lines fade out smoothly
+    // before the camera far plane (2000) instead of reaching it at full
+    // brightness and getting hard-clipped into a solid.
+    auto* horizonRow = makeRow();
+    AddField(horizonRow, "horizonStart:", m_HorizonStart, m_HorizonStartVal,
+        [this](float v) { m_HorizonStartVal = std::max(0.0f, v); });
+    AddField(horizonRow, "horizonEnd:", m_HorizonEnd, m_HorizonEndVal,
+        [this](float v) { m_HorizonEndVal = std::max(0.0f, v); });
 }
 
 GizmoLineTestPanel::~GizmoLineTestPanel() = default;
@@ -107,7 +117,7 @@ void GizmoLineTestPanel::AddField(Leir::UIPanel* parent,
 
 Leir::Vector2 GizmoLineTestPanel::GetMinSize() const
 {
-    return {280.0f, 250.0f};
+    return {280.0f, 340.0f};
 }
 
 void GizmoLineTestPanel::OnLayoutComputed()
