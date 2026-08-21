@@ -1,8 +1,52 @@
-# Grid LOD — Fade por longitud (Estado y plan)
+# Grid LOD — Estado final y plan
 
-Documenta el estado del LOD del grid del editor (`editor/src/Grid/EditorGrid.cpp`):
-ambos fixes (densidad por clip.w + **fade por longitud de línea**) están
-aplicados.
+El LOD del grid del editor (`editor/src/Grid/EditorGrid.cpp`) está terminado y
+validado por el usuario. Abajo queda el historial de los 7 fixes. Este bloque
+es el resumen del modelo **actual**.
+
+## Estado final (modelo actual, 2026-08-20)
+
+- **Densidad por view depth**: `pxPerUnit = scale / w` con `w = clip.w`
+  (profundidad de vista), rotación-correcta en todo pitch (a -90° todos los
+  puntos del piso comparten profundidad = altura de cámara).
+- **Rol por nivel, una vez por frame**: `ComputeLevelRole(spacing, refDensity)`
+  con `refDensity = scale / alturaDeCámara` (invariante a rotación) elige el
+  estilo (ancho/color/alpha) de cada nivel por bandas de `cellRef =
+  spacing * refDensity`:
+  - FINE (fina/delgada): `cellRef ∈ [fadeStart, 10·fadeStart)`.
+  - CHUNK (gruesa): `cellRef ∈ [10·fadeStart, 100·fadeStart)` — UN solo nivel
+    más grueso que el fino, delimita los grupos de 10×.
+  - Fuera de bandas no se dibuja. Bordes con smoothstep → crossfade suave.
+  - `EmitAllLevels` emite ambos sentidos por nivel y saltea niveles inactivos
+    (`levelAlpha < 0.02`).
+- **Fade por segmento**: cada línea se subdivide en hasta `kSeg = 16`
+  segmentos en espacio-`w`; cada segmento disuelve `alpha = role.alpha *
+  DensityAlpha(spacing · density, fadeStart, fadeEnd)`. El estilo es constante
+  a lo largo de la línea (nunca cambia de gruesa a fina a mitad de recorrido).
+  Shortcuts: tramo fully-bright (1 segmento), profundidad constante (1
+  segmento), `wMax` = límite de fade-out.
+- **Finos/altos clampados**: el nivel más fino (1u) nunca pierde su banda fina
+  y el 10u (su pareja chunk) nunca pierde su banda chunk — no existe 0.1u para
+  hacer el handoff. Sin esto el grid desaparecía a cámara muy baja (camH≈2).
+- **Arquitectura**: generación 100% CPU por frame (grid infinito re-centrado en
+  el XZ de la cámara) + un solo draw call; la expansión a ancho de píxel
+  constante la hace el vertex shader (`Grid.vert.slang`). Vertex buffer doble
+  buffer, clip near-plane + sort far-to-near en CPU (depth write off).
+- Knobs en Test2: `px/unit` (modo manual, -1 = cámara), `fadeStart/fadeEnd`,
+  `thickWidth` (default 0.9 px). HUD: LOD fine/chunk, camH, ref px/u, fade,
+  `role 1u/10u/100u/1000u`, lineas.
+
+## Historial de fixes (2026-08-20, ver detalle abajo)
+
+1. Rol chunk por celdas propias (no s/10) → sin banda vacía ni alternancia.
+2. Densidad por clip.w (no euclidiana) + muestreo denso → verticales a pitch rasante.
+3. Bandas de rol (fino + un solo chunk) → sin chunks dobles por cuadrante.
+4. Desacople rol vs. densidad puntual → sin "gruesa que se corta" ni estilos que
+   cambian con la dirección.
+5. `wFar <= wNear` → `wFar < wNear` → las líneas perpendiculares (profundidad
+   constante) ya no se descartan.
+6. Handoff de banda fina solo para niveles con vecino más fino → grid visible al arrancar (camH≈2).
+7. Roll-off de banda chunk solo para niveles con fino real → chunk 10u visible a cámara baja.
 
 ## Problemas reportados por el usuario (2026-08-20)
 
@@ -219,11 +263,23 @@ ya era 1); camH≈38.7 → crossfade 10u fina + 100u chunk intacto.
 
 ## Archivos relevantes
 
-- `editor/src/Grid/EditorGrid.cpp` — `EmitLevel` (rol por nivel + fade por
-  segmento), `GenerateLines`, `Render` (expansión a quads + sort).
-- `editor/src/Grid/EditorGrid.h` — `GridVertex`, `Line`, `DrawLine`, API de fade
-  (`SetFadeThresholds`) + `SetChunkWidth` + readout `GetDebugLevelAlpha`.
+- `editor/src/Grid/EditorGrid.cpp` — `GenerateLines` (entry, unifica manual/
+  cámara), `EmitAllLevels` (loop por nivel + debug alphas), `ComputeLevelRole`
+  (rol por bandas, 1× por frame), `EmitLevel` (geometría + fade por segmento),
+  `Render` (expansión a quads + sort far-to-near).
+- `editor/src/Grid/EditorGrid.h` — `Line`, `LevelRole`, `GridVertex`,
+  `DrawLine`, API de fade (`SetFadeThresholds`) + `SetChunkWidth` + readout
+  `GetDebugLevelAlpha`.
 - `editor/src/UI/GizmoLineTestPanel.h/.cpp` — panel Test2 (knobs px/unit,
   fadeStart/fadeEnd/thickWidth).
 - `editor/src/main.cpp` — HUD `GridLodDebug` (+ línea `role`), call a
   `m_Grid->Render`.
+
+## Deuda técnica / pendientes
+
+- El modo manual (knob `px/unit`, `densityOverride`) se mantiene a propósito:
+  es un andamiaje de testeo útil para verificar la transición LOD sin tocar la
+  cámara. Descartable si sobra.
+- El math del grid (bandas, densidad, fade) no tiene tests automáticos — vive en
+  el editor (no en el target de tests). Diferido; si se quiere, extraer el math
+  puro a un header testeable y agregarlo a `tests/`.

@@ -176,7 +176,7 @@ void EditorGrid::DrawLine(const Leir::Vector3& a, const Leir::Vector3& b,
 
 void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
                                const Leir::Matrix4x4& viewProjection,
-                               float viewportWidthPx, float viewportHeightPx,
+                               float viewportHeightPx,
                                float densityOverride)
 {
     // Debug state for the viewport HUD. Reference px/unit at the point directly
@@ -187,42 +187,87 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
     const glm::mat4 vp = viewProjection;
     m_DebugRefPxPerUnit = viewportHeightPx * 0.5f * ProjectionScale(vp) / m_DebugCamHeight;
 
-    if (densityOverride >= 0.0f) {
-        // MANUAL mode (Test2 panel knob): drive the recursive LOD with a single
-        // uniform pxPerUnit, decoupled from the camera, so the Unity-style
-        // transition can be verified. Identical to camera mode but with every
-        // line reading the same density (EmitLevel's override path), so the
-        // fine (1u) grid and the chunk levels (10u/100u/1000u) crossfade
-        // exactly like the real camera projection. Only the levels whose cells
-        // are still readable on screen emit lines (L, 10L, 100L, ...).
+    // MANUAL mode (Test2 panel knob): drive the LOD with a single uniform
+    // pxPerUnit, decoupled from the camera, so the Unity-style transition can
+    // be verified without touching the camera. Identical to camera mode but
+    // every segment reads the same density (EmitLevel's override path).
+    if (densityOverride >= 0.0f)
         m_DebugRefPxPerUnit = densityOverride;
-        for (float spacing : kLevelSpacings) {
-            EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                      cameraPos, true, densityOverride, densityOverride);  // lines parallel to Z
-            EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                      cameraPos, false, densityOverride, densityOverride); // lines parallel to X
-        }
-        m_DebugLineCount = (uint32_t)m_Lines.size();
-        ComputeDebugSpacing();
-        return;
-    }
+    const float refDensity = m_DebugRefPxPerUnit;
+    EmitAllLevels(refDensity, densityOverride, viewProjection,
+                  viewportHeightPx, cameraPos);
 
-    // CAMERA mode: one pass per recursion level. Each world line belongs to
-    // exactly one level (its FINEST: coords a coarser level also owns are
-    // skipped inside EmitLevel), so nothing is drawn twice on top of itself.
-    for (float spacing : kLevelSpacings) {
-        EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                  cameraPos, true, densityOverride, m_DebugRefPxPerUnit);  // lines parallel to Z (x = coord)
-        EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                  cameraPos, false, densityOverride, m_DebugRefPxPerUnit); // lines parallel to X (z = coord)
+    // Origin axes (opaque, never fade, reach the horizon at any zoom). Drawn
+    // in camera mode; the manual mode skips them (pure LOD transition demo).
+    if (densityOverride < 0.0f) {
+        DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
+        DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
     }
-
-    // Origin axes (opaque, never fade, reach the horizon at any zoom).
-    DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
-    DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
 
     m_DebugLineCount = (uint32_t)m_Lines.size();
     ComputeDebugSpacing();
+}
+
+// Emit every LOD level for both orientations. Each level's ROLE (width/color/
+// alpha) is computed ONCE here, from the rotation-invariant reference density,
+// and reused by every line of that level — never from the per-point density
+// (see ComputeLevelRole). Inactive levels (below the draw threshold) are
+// skipped entirely, so the debug alphas are filled once per frame too.
+void EditorGrid::EmitAllLevels(float refDensity, float densityOverride,
+                               const Leir::Matrix4x4& viewProjection,
+                               float viewportHeightPx,
+                               const Leir::Vector3& cameraPos)
+{
+    for (int li = 0; li < 4; ++li) {
+        const float spacing = kLevelSpacings[li];
+        const LevelRole role = ComputeLevelRole(spacing, refDensity);
+        m_DebugLevelAlphas[li] = role.alpha;
+        if (!role.active)
+            continue; // this level is not part of the current LOD
+        EmitLevel(spacing, viewProjection, viewportHeightPx, cameraPos,
+                  true, densityOverride, role);  // lines parallel to Z (x = coord)
+        EmitLevel(spacing, viewProjection, viewportHeightPx, cameraPos,
+                  false, densityOverride, role); // lines parallel to X (z = coord)
+    }
+}
+
+// ROLE of a level, computed ONCE per frame from the ROTATION-INVARIANT
+// reference density (scale / camera height) — see the model comment at the top
+// of the file. This is the level's width/color/alpha, constant for every line
+// of the level; the per-segment density in EmitLevel only fades each line's
+// alpha. Band model (cellRef = spacing * refDensity):
+//   - FINE (minor, dim/thin): cellRef in [fadeStart, 10*fadeStart).
+//   - CHUNK (major, bright/thick): cellRef in [10*fadeStart, 100*fadeStart),
+//     exactly ONE level coarser than the fine one.
+// Both band edges are smoothstep ramps so the levels crossfade as the camera
+// zooms. The FINEST generated level (1u) never rolls off its fine band (there
+// is no 0.1u grid to hand off to) and its chunk partner (10u) never rolls off
+// its chunk band — otherwise the grid would vanish at very close zoom (camH~2
+// at editor startup).
+EditorGrid::LevelRole EditorGrid::ComputeLevelRole(float spacing, float refDensity) const
+{
+    const float cellRef = spacing * refDensity;
+    const float fineHandoff = (spacing > 1.0f)
+        ? (1.0f - DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
+                               10.0f * m_FadeEndPx))
+        : 1.0f;
+    const float minorVis =
+        DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx) * fineHandoff;
+    const float chunkVis = (spacing >= 10.0f)
+        ? DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
+                       10.0f * m_FadeEndPx)
+          * ((spacing > 10.0f)
+             ? (1.0f - DensityAlpha(cellRef, 100.0f * m_FadeStartPx,
+                                    100.0f * m_FadeEndPx))
+             : 1.0f)
+        : 0.0f;
+
+    LevelRole role;
+    role.alpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
+    role.active = role.alpha >= 0.02f;
+    role.width = kMinorWidth + (m_ChunkWidth - kMinorWidth) * chunkVis;
+    role.color = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
+    return role;
 }
 
 // Derive the active fine/chunk recursion levels from the reference density so
@@ -239,9 +284,9 @@ void EditorGrid::ComputeDebugSpacing()
 }
 
 void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
-                           float viewportWidthPx, float viewportHeightPx,
-                           const Leir::Vector3& cameraPos, bool parallelToZ,
-                           float densityOverride, float refDensity)
+                           float viewportHeightPx, const Leir::Vector3& cameraPos,
+                           bool parallelToZ, float densityOverride,
+                           const LevelRole& role)
 {
     // The coordinate that varies along the line (the line is drawn parallel to
     // the other axis, perpendicular to `coord`). `coord` steps by `spacing`.
@@ -251,55 +296,8 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
     const int i0 = (int)std::floor((camCoord - window) / spacing);
     const int i1 = (int)std::ceil((camCoord + window) / spacing);
     const glm::mat4 vp = viewProjection;
-    (void)viewportWidthPx;
 
     const float scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
-
-    // ROLE of this level, computed ONCE per frame from the ROTATION-INVARIANT
-    // reference density (scale / camera height) — see the model comment at the
-    // top. This is the level's width/color/alpha, constant for every line of
-    // the level; the per-segment density below only fades each line's alpha.
-    const float cellRef = spacing * refDensity;
-    // The fine-band handoff (fade the level out above 10*fadeStart so the next
-    // coarser level takes over as "fine") applies ONLY to levels that HAVE a
-    // finer level below them. The FINEST generated level (1u) never rolls off:
-    // there is no 0.1u grid to take over, so when the camera is very low (e.g.
-    // camH~2 at editor startup, where 1u's cellRef is ~289px > 10*fadeStart)
-    // the 1u grid stays visible instead of the whole grid disappearing
-    // (lines=2, only the axes). It still fades out normally as refDensity
-    // drops below fadeEnd.
-    const float fineHandoff = (spacing > 1.0f)
-        ? (1.0f - DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
-                               10.0f * m_FadeEndPx))
-        : 1.0f;
-    const float minorVis =
-        DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx) * fineHandoff;
-    // The chunk band's upper rolloff (this level is 2+ steps coarser than the
-    // fine one -> invisible) applies only to levels whose fine has a real
-    // finer neighbor. The chunk partner of the FINEST generated level (10u,
-    // whose fine 1u is clamped — there is no 0.1u grid) never rolls off, so
-    // the 10u chunk lines stay visible at very close zoom (camH~2 at startup,
-    // where 10u's cellRef ~2890px > 100*fadeStart used to kill them, leaving
-    // empty space where the thick lines should be).
-    const float chunkVis = (spacing >= 10.0f)
-        ? DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
-                       10.0f * m_FadeEndPx)
-          * ((spacing > 10.0f)
-             ? (1.0f - DensityAlpha(cellRef, 100.0f * m_FadeStartPx,
-                                    100.0f * m_FadeEndPx))
-             : 1.0f)
-        : 0.0f;
-    const float levelAlpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
-
-    int levelIndex = 0;
-    for (float s = spacing; s >= 10.0f; s /= 10.0f)
-        ++levelIndex;
-    m_DebugLevelAlphas[levelIndex] = levelAlpha;
-    if (levelAlpha < 0.02f)
-        return; // this level is not part of the current LOD
-
-    const float levelWidth = kMinorWidth + (m_ChunkWidth - kMinorWidth) * chunkVis;
-    const Leir::Vector4 levelColor = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
 
     // Beyond wMax the cell size is below fadeStartPx (the line is fully faded),
     // so nothing past it needs emitting; within wFull everything is visible.
@@ -355,10 +353,10 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         auto emitSegment = [&](float segStartW, float segEndW, float density) {
             const float fade = DensityAlpha(spacing * density,
                                             m_FadeStartPx, m_FadeEndPx);
-            const float alpha = levelAlpha * fade;
+            const float alpha = role.alpha * fade;
             if (alpha < 0.02f)
                 return;
-            Leir::Vector4 c = levelColor;
+            Leir::Vector4 c = role.color;
             c.w = alpha;
             float t0;
             float t1;
@@ -371,7 +369,7 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
             }
             const glm::vec3 a = glm::mix(p0, p1, t0);
             const glm::vec3 b = glm::mix(p0, p1, t1);
-            DrawLine({ a.x, a.y, a.z }, { b.x, b.y, b.z }, c, levelWidth);
+            DrawLine({ a.x, a.y, a.z }, { b.x, b.y, b.z }, c, role.width);
         };
 
         if (densityOverride >= 0.0f) {
@@ -422,7 +420,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
 
     // Procedural grid, regenerated every frame and recentered on the camera.
     BeginFrame();
-    GenerateLines(cameraPos, viewProjection, viewportWidthPx, viewportHeightPx,
+    GenerateLines(cameraPos, viewProjection, viewportHeightPx,
                   densityOverride);
     if (m_Lines.empty())
         return;

@@ -110,6 +110,18 @@ private:
         float width = 1.0f;
     };
 
+    // Per-level LOD style, computed ONCE per frame from the rotation-invariant
+    // reference density (see EmitAllLevels/ComputeLevelRole): the level's
+    // constant width/color and a visibility alpha. `active` = alpha is above
+    // the draw threshold, so the whole level (both orientations) is skipped
+    // before any line is emitted.
+    struct LevelRole {
+        bool active = false;
+        float alpha = 0.0f;
+        float width = 1.0f;
+        Leir::Vector4 color{ 0.0f, 0.0f, 0.0f, 1.0f };
+    };
+
     // Layout must match Grid.vert.slang's VSInput (stride 56).
     struct GridVertex {
         Leir::Vector3 start; // 0
@@ -146,12 +158,16 @@ private:
     void ComputeDebugSpacing();
     void GenerateLines(const Leir::Vector3& cameraPos,
                        const Leir::Matrix4x4& viewProjection,
-                       float viewportWidthPx, float viewportHeightPx,
+                       float viewportHeightPx,
                        float densityOverride);
+    void EmitAllLevels(float refDensity, float densityOverride,
+                       const Leir::Matrix4x4& viewProjection,
+                       float viewportHeightPx, const Leir::Vector3& cameraPos);
+    LevelRole ComputeLevelRole(float spacing, float refDensity) const;
     void EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
-                   float viewportWidthPx, float viewportHeightPx,
-                   const Leir::Vector3& cameraPos, bool parallelToZ,
-                   float densityOverride, float refDensity);
+                   float viewportHeightPx, const Leir::Vector3& cameraPos,
+                   bool parallelToZ, float densityOverride,
+                   const LevelRole& role);
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();
