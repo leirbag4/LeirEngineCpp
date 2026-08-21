@@ -260,10 +260,20 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
     // top. This is the level's width/color/alpha, constant for every line of
     // the level; the per-segment density below only fades each line's alpha.
     const float cellRef = spacing * refDensity;
+    // The fine-band handoff (fade the level out above 10*fadeStart so the next
+    // coarser level takes over as "fine") applies ONLY to levels that HAVE a
+    // finer level below them. The FINEST generated level (1u) never rolls off:
+    // there is no 0.1u grid to take over, so when the camera is very low (e.g.
+    // camH~2 at editor startup, where 1u's cellRef is ~289px > 10*fadeStart)
+    // the 1u grid stays visible instead of the whole grid disappearing
+    // (lines=2, only the axes). It still fades out normally as refDensity
+    // drops below fadeEnd.
+    const float fineHandoff = (spacing > 1.0f)
+        ? (1.0f - DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
+                               10.0f * m_FadeEndPx))
+        : 1.0f;
     const float minorVis =
-        DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx)
-        * (1.0f - DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
-                               10.0f * m_FadeEndPx));
+        DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx) * fineHandoff;
     const float chunkVis = (spacing >= 10.0f)
         ? DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
                        10.0f * m_FadeEndPx)

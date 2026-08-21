@@ -175,6 +175,28 @@ nivel más fino que la reemplace). Fix propuesto: no aplicar el factor de
 handoff `(1 - DensityAlpha(cellRef, 10·fadeStart, 10·fadeEnd))` al nivel más
 fino generado (spacing == 1).
 
+### Fix 6 (APLICADO, 2026-08-20) — grid invisible a cámara muy baja (arranque)
+
+**Bug**: ni bien se abre el editor (camH≈2, ref 289.11 px/u) solo se veían los
+ejes (lines=2). Causa: la banda "fina" del nivel 1u se sale al roll-off de
+handoff — `cellRef(1u) = 289` cae en la zona muerta [10·fadeStart,
+100·fadeStart) = [150, 1500) donde 1u ya es "demasiado grueso para ser fino"
+pero NO existe nivel más fino (0.1u) que tome el rol → `levelAlpha(1u) ≈ 0.006
+< 0.02` → nivel 1u descartado, y 10u también (`levelAlpha ≈ 0.008`) → grid vacío.
+
+**Fix**: el handoff de la banda fina (el factor `1 - DensityAlpha(cellRef,
+10·fadeStart, 10·fadeEnd)`) solo aplica a niveles que TENGAN un nivel más fino
+debajo. Para el nivel más fino generado (spacing == 1) el factor queda en 1: el
+grid 1u nunca se apaga por estar demasiado cerca; igual se desvanece
+normalmente cuando `refDensity < fadeEnd`. En camH≈2 ahora `levelAlpha(1u) =
+0.35` → el grid 1u se ve apenas se abre el editor. Nota: a esa densidad las
+líneas chunk 10u siguen sin aparecer (su banda chunk también se sale), pero el
+grid fino 1u domina la vista y es lo que se esperaba ver.
+
+**Verificación**: abrir el editor → el grid 1u se ve con la cámara inicial
+(camH≈2); zoom out normal → 1u fina + 10u chunk; seguir a la lejanía → 10u fina
++ 100u chunk (sin regresiones del Fix 5).
+
 ## Archivos relevantes
 
 - `editor/src/Grid/EditorGrid.cpp` — `EmitLevel` (rol por nivel + fade por
