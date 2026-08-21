@@ -173,7 +173,7 @@ private:
 
     float m_FadeStartPx = 15.0f; // below: a line's role is invisible
     float m_FadeEndPx = 30.0f;   // above: fully visible in that role
-    float m_ChunkWidth = 1.5f;   // px, chunk (thick) line width
+    float m_ChunkWidth = 0.9f;   // px, chunk (thick) line width
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;

@@ -71,5 +71,5 @@ private:
     float m_FadeStartVal = 15.0f;
     float m_FadeEndVal = 30.0f;
     // Chunk (thick) grid line width in pixels (drag to make chunk lines finer).
-    float m_ChunkWidthVal = 1.5f;
+    float m_ChunkWidthVal = 0.9f;
 };
