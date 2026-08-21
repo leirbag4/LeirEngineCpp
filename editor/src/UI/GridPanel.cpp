@@ -120,11 +120,15 @@ void GridPanel::ComputeAutoHorizon(float camH, float& outStart, float& outEnd)
     static const Pt pts[] = {
         { 30.0f, 100.0f, 400.0f },
         { 100.0f, 200.0f, 800.0f },
-        { 1000.0f, 400.0f, 2000.0f },
+        { 200.0f, 400.0f, 1400.0f },
+        { 300.0f, 600.0f, 1800.0f },
+        { 500.0f, 800.0f, 2000.0f },
+        { 1000.0f, 900.0f, 2000.0f },
         { 2000.0f, 1000.0f, 2000.0f },
     };
-    const float h = std::clamp(camH, pts[0].h, pts[3].h);
-    for (int i = 0; i + 1 < 4; ++i) {
+    const int n = (int)(sizeof(pts) / sizeof(pts[0]));
+    const float h = std::clamp(camH, pts[0].h, pts[n - 1].h);
+    for (int i = 0; i + 1 < n; ++i) {
         if (h <= pts[i + 1].h) {
             const float t = (h - pts[i].h) / (pts[i + 1].h - pts[i].h);
             outStart = pts[i].start + t * (pts[i + 1].start - pts[i].start);
@@ -132,8 +136,8 @@ void GridPanel::ComputeAutoHorizon(float camH, float& outStart, float& outEnd)
             return;
         }
     }
-    outStart = pts[3].start;
-    outEnd = pts[3].end;
+    outStart = pts[n - 1].start;
+    outEnd = pts[n - 1].end;
 }
 
 void GridPanel::AddField(Leir::UIPanel* parent, const std::string& labelText,

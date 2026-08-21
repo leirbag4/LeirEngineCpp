@@ -42,9 +42,10 @@ public:
                        float density, float horizonStart, float horizonEnd);
 
     // Horizon fade band (view depth, world units) for a given camera height.
-    // Piecewise-linear through the user-tuned breakpoints:
-    //   camH <= 30 -> 100:400, 100 -> 200:800, 1000 -> 400:2000, >= 2000 -> 1000:2000
-    // (clamped at the extremes; end caps at the camera far plane 2000).
+    // Piecewise-linear through the user-tuned breakpoints (camH -> start : end):
+    //   <=30 -> 100:400, 100 -> 200:800, 200 -> 400:1400, 300 -> 600:1800,
+    //   500 -> 800:2000, 1000 -> 900:2000, >=2000 -> 1000:2000
+    // (monotonic; clamped at the extremes; end caps at the camera far plane 2000).
     static void ComputeAutoHorizon(float camH, float& outStart, float& outEnd);
 
     Leir::Vector2 GetMinSize() const override;
@@ -72,5 +73,5 @@ private:
     float m_HorizonStartVal = 1000.0f;
     float m_HorizonEndVal = 1800.0f;
 
-    bool m_Manual = true;
+    bool m_Manual = false; // auto by default: inputs greyed out, horizon auto
 };
