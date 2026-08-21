@@ -36,6 +36,7 @@
 #include <LeirEngine/UI/Dock/DockManager.h>
 #include "UI/UITestPanel.h"
 #include "UI/GizmoLineTestPanel.h"
+#include "UI/GridPanel.h"
 #include "UI/CameraTestPanel.h"
 #include "UI/DebugTextPanel.h"
 #include "UI/TextAreaDebugPanel.h"
@@ -277,7 +278,7 @@ protected:
         child->SetParent(cubeObj);
 
         // Sprites
-        // PHASE-1 TEST: the demo sprites are disabled — the screen-center
+        // PHASE-1 TEST: the demo sprites are disabled ï¿½ the screen-center
         // "TestSprite" quad writes depth and was occluding the gizmo test
         // lines (the blue Z axis had a "gap" exactly over its 200x200 area).
         // Re-enable after the line validation.
@@ -361,7 +362,7 @@ protected:
         // working over it); SetOverlayLayer routes it to the debug batch so it
         // draws ABOVE the RenderTexture viewport quad. Because the viewport
         // panel is a Free-layout element, its ComputeFreeLayout ADDS the
-        // panel's computed x/y into child offsets each frame — so the label's
+        // panel's computed x/y into child offsets each frame ï¿½ so the label's
         // offset is re-pinned every frame in OnUpdate, never accumulated.
         m_GridLodLabel = new Leir::UILabel();
         m_GridLodLabel->SetName("GridLodDebug");
@@ -472,12 +473,18 @@ protected:
         m_GizmoTestPanel->SetName("GizmoTestPanel");
         m_GizmoTestPanel->SetFont(m_FontSmall.get());
 
+        // Grid LOD live knobs + Manual/Auto toggle, "Grid" tab.
+        m_GridPanel = new GridPanel();
+        m_GridPanel->SetName("GridPanel");
+        m_GridPanel->SetFont(m_FontSmall.get());
+
         // Register dockable panels (core ones are not closeable)
         m_DockManager->RegisterPanel("Hierarchy", "Hierarchy", hierarchy, false);
         m_DockManager->RegisterPanel("Viewport", "Viewport", m_ViewportPanel, false);
         m_DockManager->RegisterPanel("Inspector", "Inspector", inspector, false);
         m_DockManager->RegisterPanel("TestPanel", "Test", m_TestPanel, true);
         m_DockManager->RegisterPanel("GizmoTestPanel", "Test2", m_GizmoTestPanel, true);
+        m_DockManager->RegisterPanel("GridPanel", "Grid", m_GridPanel, true);
         m_DockManager->RegisterPanel("CameraTestPanel", "Camera", m_CameraTestPanel, true);
         m_DockManager->RegisterPanel("DebugTextPanel", "Debug Text", m_DebugTextPanel, true);
         m_DockManager->RegisterPanel("TextAreaDebugPanel", "Text Area", m_TextAreaDebugPanel, true);
@@ -609,17 +616,29 @@ protected:
         // Grid LOD debug HUD: refresh the label text from the grid's debug state
         // and re-pin its offset. The label is a child of the Free-layout viewport
         // panel, whose ComputeFreeLayout adds the panel's absolute x/y to child
-        // offsets every frame — resetting the anchor offset here (right before
+        // offsets every frame ï¿½ resetting the anchor offset here (right before
         // UpdateLayout) makes the net position stable instead of drifting.
         if (m_GridLodLabel && m_Grid) {
-            // Live-tunable fade thresholds from the Test2 panel (fall back to
-            // the defaults when the panel is gone).
-            if (m_GizmoTestPanel) {
-                m_Grid->SetFadeThresholds(m_GizmoTestPanel->GetGridFadeStartPx(),
-                                          m_GizmoTestPanel->GetGridFadeEndPx());
-                m_Grid->SetChunkWidth(m_GizmoTestPanel->GetGridChunkWidth());
-                m_Grid->SetHorizonFade(m_GizmoTestPanel->GetGridHorizonFadeStart(),
-                                       m_GizmoTestPanel->GetGridHorizonFadeEnd());
+            // Grid tuning comes from the GridPanel. Manual: the inputs drive the
+            // grid. Auto: the inputs are greyed out (do NOT influence); the grid
+            // uses the cell-fade/width defaults + an AUTO horizon fade computed
+            // from the camera height, which is written back into the inputs so
+            // you can see what auto chose.
+            if (m_GridPanel) {
+                if (m_GridPanel->IsManual()) {
+                    m_Grid->SetFadeThresholds(m_GridPanel->GetGridFadeStartPx(),
+                                              m_GridPanel->GetGridFadeEndPx());
+                    m_Grid->SetChunkWidth(m_GridPanel->GetGridChunkWidth());
+                    m_Grid->SetHorizonFade(m_GridPanel->GetGridHorizonFadeStart(),
+                                           m_GridPanel->GetGridHorizonFadeEnd());
+                } else {
+                    float hs, he;
+                    GridPanel::ComputeAutoHorizon(m_Grid->GetDebugCamHeight(), hs, he);
+                    m_Grid->SetFadeThresholds(15.0f, 30.0f);
+                    m_Grid->SetChunkWidth(0.9f);
+                    m_Grid->SetHorizonFade(hs, he);
+                    m_GridPanel->SetAutoValues(15.0f, 30.0f, 0.9f, -1.0f, hs, he);
+                }
             }
             m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
             m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 100.0f};
@@ -702,7 +721,8 @@ protected:
                 m_Grid->Render(m_SceneGraph, m_PrimaryCamera->GetViewProjectionMatrix(),
                     camPos, (float)m_ViewportRT->GetWidth(),
                     (float)m_ViewportRT->GetHeight(),
-                    m_GizmoTestPanel ? m_GizmoTestPanel->GetGridDensityOverride() : -1.0f);
+                    (m_GridPanel && m_GridPanel->IsManual())
+                        ? m_GridPanel->GetGridDensityOverride() : -1.0f);
             }
             // Gizmos on top of the scene (depth-tested), one draw call for all.
             if (m_Gizmos && m_PrimaryCamera) {
@@ -715,7 +735,7 @@ protected:
         }
 
         // 2. UI graph: draws into the native swapchain overlay pass (begun by
-        //    BeginSwapchainOverlay) — no pass records, just draw records.
+        //    BeginSwapchainOverlay) ï¿½ no pass records, just draw records.
         m_Backend->BeginSwapchainOverlay();
         if (m_UIRenderer && m_Canvas) {
             m_UIGraph.Clear();
@@ -786,6 +806,8 @@ protected:
         m_TestPanel = nullptr;
         DeleteUiSubtree(m_GizmoTestPanel);
         m_GizmoTestPanel = nullptr;
+        DeleteUiSubtree(m_GridPanel);
+        m_GridPanel = nullptr;
         DeleteUiSubtree(m_CameraTestPanel);
         m_CameraTestPanel = nullptr;
         DeleteUiSubtree(m_TextAreaDebugPanel);
@@ -933,6 +955,7 @@ private:
 
     UITestPanel* m_TestPanel = nullptr;
     GizmoLineTestPanel* m_GizmoTestPanel = nullptr;
+    GridPanel* m_GridPanel = nullptr;
     CameraTestPanel* m_CameraTestPanel = nullptr;
     DebugTextPanel* m_DebugTextPanel = nullptr;
     ConsolePanel* m_ConsolePanel = nullptr;

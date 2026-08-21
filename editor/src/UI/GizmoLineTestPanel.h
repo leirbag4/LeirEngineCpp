@@ -22,20 +22,6 @@ public:
     Leir::Vector3 GetEnd() const { return m_End; }
     Leir::Vector4 GetColor() const { return {m_RVal, m_GVal, m_BVal, m_AVal}; }
     float GetWidth() const { return m_WidthVal; }
-    // Manual LOD driver for the editor grid: uniform pixels-per-world-unit
-    // override (>= 0) that drives the recursive chunk transition, decoupled
-    // from the camera. -1 (default) = camera-driven (real per-line density).
-    float GetGridDensityOverride() const { return m_DensityVal; }
-    // Live cell-fade thresholds (px of cell size) for the grid LOD: below
-    // fadeStart a line's role is invisible, above fadeEnd fully visible.
-    float GetGridFadeStartPx() const { return m_FadeStartVal; }
-    float GetGridFadeEndPx() const { return m_FadeEndVal; }
-    // Chunk (thick) line width in pixels for the grid LOD.
-    float GetGridChunkWidth() const { return m_ChunkWidthVal; }
-    // Horizon fade band (view depth in world units): grid lines dissolve to
-    // alpha 0 from start to end so nothing reaches the far plane bright.
-    float GetGridHorizonFadeStart() const { return m_HorizonStartVal; }
-    float GetGridHorizonFadeEnd() const { return m_HorizonEndVal; }
 
     Leir::Vector2 GetMinSize() const override;
 
@@ -52,12 +38,6 @@ private:
     UIDragFloatInput* m_B = nullptr;
     UIDragFloatInput* m_A = nullptr;
     UIDragFloatInput* m_Width = nullptr;
-    UIDragFloatInput* m_Density = nullptr;
-    UIDragFloatInput* m_FadeStart = nullptr;
-    UIDragFloatInput* m_FadeEnd = nullptr;
-    UIDragFloatInput* m_ThickWidth = nullptr;
-    UIDragFloatInput* m_HorizonStart = nullptr;
-    UIDragFloatInput* m_HorizonEnd = nullptr;
 
     Leir::Vector3 m_Start = {0.0f, 0.6f, 0.0f};
     Leir::Vector3 m_End = {5.0f, 0.6f, 0.0f};
@@ -66,20 +46,4 @@ private:
     float m_BVal = 1.0f;
     float m_AVal = 0.5f;
     float m_WidthVal = 3.0f;
-    // Manual LOD driver for the editor grid: uniform pxPerUnit (pixels per
-    // world unit). Lower value = camera farther away = coarser chunks.
-    // -1 (default) = camera-driven: each line reads the real screen density
-    // at its closest visible point, so zooming the camera drives the LOD.
-    float m_DensityVal = -1.0f;
-    // Cell-fade thresholds in pixels (Unity-style defaults): the fine level is
-    // fully hidden below 15px of cell size and fully visible above 30px, so
-    // only 2 levels are ever visible and micro-squares never turn solid.
-    float m_FadeStartVal = 15.0f;
-    float m_FadeEndVal = 30.0f;
-    // Chunk (thick) grid line width in pixels (drag to make chunk lines finer).
-    float m_ChunkWidthVal = 0.9f;
-    // Horizon fade band in view depth (world units). Must end below the camera
-    // far plane (2000) so lines dissolve before being clipped at the horizon.
-    float m_HorizonStartVal = 1000.0f;
-    float m_HorizonEndVal = 1800.0f;
 };

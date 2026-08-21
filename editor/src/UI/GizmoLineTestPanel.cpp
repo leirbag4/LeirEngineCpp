@@ -46,42 +46,6 @@ GizmoLineTestPanel::GizmoLineTestPanel()
     auto* widthRow = makeRow();
     AddField(widthRow, "Width:", m_Width, m_WidthVal,
         [this](float v) { m_WidthVal = std::max(0.0f, v); });
-
-    // Grid LOD knob (px per world unit): -1 = camera-driven (default, real
-    // screen density per line); >= 0 = manual uniform override that simulates
-    // zooming out without touching the camera (lower = farther = coarser
-    // chunks), used to verify the Unity-style dissolve. Both drive the same
-    // recursive model (1x1 -> 10x10 -> 100x100 -> ...).
-    makeTitle("-- Grid LOD (px/unit, -1 = camera) --");
-    auto* densityRow = makeRow();
-    AddField(densityRow, "px/unit:", m_Density, m_DensityVal,
-        [this](float v) { m_DensityVal = v; });
-
-    // Cell-fade thresholds (px of cell size): below fadeStart a line's role is
-    // invisible, above fadeEnd fully visible. Raise these to ~15/30 so the
-    // finest grid fades out before its cells become sub-pixel (Unity keeps the
-    // smallest visible square ~20px, already ultra faint) — only 2 levels are
-    // ever visible at once.
-    auto* fadeRow = makeRow();
-    AddField(fadeRow, "fadeStart:", m_FadeStart, m_FadeStartVal,
-        [this](float v) { m_FadeStartVal = std::max(0.0f, v); });
-    AddField(fadeRow, "fadeEnd:", m_FadeEnd, m_FadeEndVal,
-        [this](float v) { m_FadeEndVal = std::max(0.0f, v); });
-
-    // Chunk (thick) grid line width in pixels. Lower = thinner chunk lines.
-    auto* thickRow = makeRow();
-    AddField(thickRow, "thickWidth:", m_ThickWidth, m_ChunkWidthVal,
-        [this](float v) { m_ChunkWidthVal = std::max(0.5f, v); });
-
-    // Horizon fade band (view depth): grid lines dissolve to alpha 0 from
-    // horizonStart to horizonEnd, so coarse chunk lines fade out smoothly
-    // before the camera far plane (2000) instead of reaching it at full
-    // brightness and getting hard-clipped into a solid.
-    auto* horizonRow = makeRow();
-    AddField(horizonRow, "horizonStart:", m_HorizonStart, m_HorizonStartVal,
-        [this](float v) { m_HorizonStartVal = std::max(0.0f, v); });
-    AddField(horizonRow, "horizonEnd:", m_HorizonEnd, m_HorizonEndVal,
-        [this](float v) { m_HorizonEndVal = std::max(0.0f, v); });
 }
 
 GizmoLineTestPanel::~GizmoLineTestPanel() = default;
@@ -117,7 +81,7 @@ void GizmoLineTestPanel::AddField(Leir::UIPanel* parent,
 
 Leir::Vector2 GizmoLineTestPanel::GetMinSize() const
 {
-    return {280.0f, 340.0f};
+    return {280.0f, 175.0f};
 }
 
 void GizmoLineTestPanel::OnLayoutComputed()
