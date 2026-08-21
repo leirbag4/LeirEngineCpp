@@ -1039,7 +1039,12 @@ VkPipeline VulkanDevice::CreateGraphicsPipeline(
         blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         blend.colorBlendOp = VK_BLEND_OP_ADD;
         blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        // ONE_MINUS_SRC_ALPHA (matching D3D12/WebGPU): keeps the destination
+        // alpha near its base (e.g. a viewport RenderTexture cleared to alpha 1)
+        // when blending faint lines. ZERO overwrote the target alpha with each
+        // line's low alpha, so the UI (which composites the viewport using the
+        // texture's alpha) showed the background through the faded grid -> gray.
+        blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         blend.alphaBlendOp = VK_BLEND_OP_ADD;
     } else {
         blend.blendEnable = VK_FALSE;

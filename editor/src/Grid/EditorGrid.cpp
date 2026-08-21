@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 namespace {
 
@@ -428,7 +429,13 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
         seg.color = line.color;
         seg.width = line.width;
         seg.spacing = line.spacing;
-        seg.key = std::min(clipS.w, clipE.w); // w = -view z: smaller = nearer
+        // Opaque origin axes (spacing == 0) always sort LAST so they are drawn
+        // on top: the far-to-near sort is ascending (near drawn first), so a
+        // small key would let the (farther) grid lines cover them at crossings,
+        // making the red/blue axes look cut into gaps.
+        seg.key = (line.spacing == 0.0f)
+            ? std::numeric_limits<float>::max()
+            : std::min(clipS.w, clipE.w); // w = -view z: smaller = nearer
         segs.push_back(seg);
     }
     std::sort(segs.begin(), segs.end(),

@@ -55,6 +55,7 @@ es el resumen del modelo **actual**.
 7. Roll-off de banda chunk solo para niveles con fino real → chunk 10u visible a cámara baja.
 8. Horizon fade (knobs `horizonStart/horizonEnd`) → las 100u/1000u se desvanecen antes del far plane, sin corte brusco en el horizonte.
 9. **Fog by depth (Fix 9)**: el fade se movió al fragment shader (por pixel, con la profundidad interpolada) → cada línea es 1 quad, sin subdivisión CPU → count ~300-600 (era ~3000 a cámara baja) y sin stutter.
+10. Paridad de backends (Fix 10): Vulkan `dstAlphaBlendFactor` ZERO→ONE_MINUS_SRC_ALPHA (gris por alpha del RT), `.wgsl` del grid actualizados (fog), ejes sort last (spacing==0).
 
 ## Problemas reportados por el usuario (2026-08-20)
 
@@ -326,6 +327,35 @@ SPIR-V es el recíproco):
 push constants). Verificado por el usuario: 1u/10u/100u suaves, ejes opacos
 (spacing=0), count normal al arrancar.
 
+### Fix 10 (APLICADO, 2026-08-21) — paridad de backends: Vulkan gris, WebGPU sin fog, ejes tapados
+
+Reportado por el usuario: D3D12 perfecto, pero **Vulkan** mostraba las líneas
+convergentes como un bloque gris y los ejes rojo/azul tapados con huecos, y
+**WebGPU** no tenía nada de fog. Tres causas raíz:
+
+1. **Vulkan gris — blend de ALPHA inconsistente** (`VulkanDevice.cpp`): el
+   `dstAlphaBlendFactor` era `VK_BLEND_FACTOR_ZERO` mientras D3D12 y WebGPU usan
+   `ONE_MINUS_SRC_ALPHA`. El UI compone el viewport con `texColor * fragColor`
+   (usa el **alpha del RT**); con `ZERO` cada línea tenue sobrescribía el alpha
+   del RT → el viewport quedaba semi-transparente → el fondo oscuro de la UI se
+   filtraba por las líneas desvanecidas → "gris". **Fix**: `dstAlphaBlendFactor =
+   ONE_MINUS_SRC_ALPHA` (igual que D3D12/WebGPU → el alpha del RT queda ~1 →
+   viewport opaco). Se corrige para todos los pipelines blendeados de Vulkan.
+2. **WebGPU sin fog — `.wgsl` viejos** (`engine/shaders/Grid.vert.wgsl` +
+   `Grid.frag.wgsl`): eran de antes del fog (push de 4 floats, sin `spacing`/
+   `depth`, sin fade). El backend WebGPU carga estos `.wgsl` a mano (el runtime
+   NO usa el export WGSL de Slang — ver Deuda técnica). **Fix**: actualizados
+   espejando el `.slang` (spacing loc 6, `depth` varying, push 8 floats,
+   smoothsteps, `spacing<=0` opaco).
+3. **Ejes tapados — sort al revés** (`EditorGrid::Render`): el sort es ascendente
+   por `key = min(clip.w)` → el más cercano se dibuja primero → el más lejano
+   queda arriba. Los ejes (cerca de la cámara) quedaban debajo de las líneas
+   lejanas en los cruces → "huecos". **Fix**: los ejes opacos (`spacing == 0`)
+   reciben `key = FLT_MAX` → se ordenan últimos → siempre arriba.
+
+**Verificación**: los 3 backends con el fog per-pixel suave, sin gris en Vulkan,
+sin huecos en los ejes; count ~300-600.
+
 ## Archivos relevantes
 
 - `editor/src/Grid/EditorGrid.cpp` — `GenerateLines` (entry, unifica manual/
@@ -340,6 +370,10 @@ push constants). Verificado por el usuario: 1u/10u/100u suaves, ejes opacos
   +`depth`/`spacingOut` (view depth interpolada), push block ampliado.
 - `engine/shaders/Grid.frag.slang` — fade por pixel (fog by depth): `min(fadeCelda,
   fadeHorizonte)` con smoothsteps, `spacing <= 0` = opaco (ejes).
+- `engine/shaders/Grid.vert.wgsl` / `Grid.frag.wgsl` — espejos del `.slang` para
+  el backend WebGPU (runtime carga estos a mano; ver Deuda técnica del cableado).
+- `engine/src/Rendering/VulkanDevice.cpp` — `dstAlphaBlendFactor`
+  `ONE_MINUS_SRC_ALPHA` (paridad con D3D12/WebGPU).
 - `editor/src/UI/GizmoLineTestPanel.h/.cpp` — panel Test2 (knobs px/unit,
   fadeStart/fadeEnd/thickWidth/horizonStart/horizonEnd).
 - `editor/src/main.cpp` — HUD `GridLodDebug` (+ línea `role`/`horizon`), call a
@@ -347,6 +381,25 @@ push constants). Verificado por el usuario: 1u/10u/100u suaves, ejes opacos
 
 ## Deuda técnica / pendientes
 
+- **Cablear Slang→WGSL al runtime WebGPU (PENDIENTE, acordado con el usuario)**: el
+  diseño es "escribir el shader una vez en `.slang` y exportarlo por backend"
+  (`ShaderExporter::ExportAll` ya traduce a SPIR-V/DXIL/Metal/WGSL/GLSL450 →
+  `shaders_export/`). Pero el **runtime WebGPU no usa ese export**: carga los
+  `.wgsl` **escritos a mano** en `engine/shaders/` (copiados verbatim por CMake),
+  que se mantienen espejando el `.slang` y **derivan** (por eso el Fix 10 de los
+  `.wgsl` del grid quedó atrasado). Para cerrar el diseño single-source hay que:
+  1. Al arrancar el editor (junto a `WriteRuntimeSidecars`), exportar el WGSL de
+     los shaders a `LEIR_SHADER_DIR` (o que el backend WebGPU lea del export).
+  2. Alinear **entry points**: el backend WebGPU hardcodea `vs_main`/`ps_main`
+     (WebGPUBackend.cpp:1366/1370); el export de Slang usa `main`. O configurar
+     el entry point del pipeline o renombrar en el export.
+  3. Alinear el **group/binding del push**: el backend espera `@group(1)
+     @binding(0)` para el UBO de push; Slang mapearía `register(b1, space0)`
+     distinto. Verificar y alinear.
+  4. Validar que el WGSL exportado compile en wgpu-native (naga): el Grid no usa
+     bindless, así que es buen candidato; otros shaders (UI/Sprite con
+     `binding_array`) tienen casos conocidos que naga no acepta.
+  Mientras tanto, los `.wgsl` a mano se mantienen actualizados a mano.
 - El modo manual (knob `px/unit`, `densityOverride`) se mantiene a propósito:
   es un andamiaje de testeo útil para verificar la transición LOD sin tocar la
   cámara. Descartable si sobra.

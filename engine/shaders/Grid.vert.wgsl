@@ -1,9 +1,11 @@
 // Grid.vert.wgsl - editor ground grid vertex shader (WebGPU backend).
-// Mirrors Grid.vert.slang / Gizmo.vert.wgsl: the grid lines are generated on
-// the CPU (EditorGrid) and each line is a 4-corner triangle strip where every
-// corner carries the full segment + corner selectors. The shader projects both
-// endpoints, takes the screen-space (pixel) perpendicular and expands by
-// width/2 px, giving a perspective-correct constant-pixel-width line.
+// Mirrors Grid.vert.slang: the grid lines are generated on the CPU (EditorGrid)
+// and each line is a 4-corner triangle strip where every corner carries the
+// full segment + corner selectors. The shader projects both endpoints, takes
+// the screen-space (pixel) perpendicular and expands by width/2 px, giving a
+// perspective-correct constant-pixel-width line. It also outputs the VIEW DEPTH
+// (clip.w) interpolated across the quad so the fragment can do the per-pixel
+// distance fade (fog by depth).
 
 struct VSOutput {
     @builtin(position) position: vec4<f32>,
@@ -13,17 +15,26 @@ struct VSOutput {
     @location(1) sidePx: f32,
     // Line width in pixels, interpolated (per-line, uniform across the quad).
     @location(2) widthPx: f32,
+    // View depth (clip.w), linear along the line — the fragment fades by it.
+    @location(3) depth: f32,
+    // Level spacing in world units (0 = opaque reference line / origin axis).
+    @location(4) spacingOut: f32,
 };
 
 struct UniformBufferObject {
     viewProjection: mat4x4<f32>,
 };
 
+// Shared with Grid.frag.wgsl; must match the C++ GridPushConstants (32 bytes).
 struct PushConstants {
     viewportWidth: f32,
     viewportHeight: f32,
-    pad0: f32,
-    pad1: f32,
+    scale: f32,            // px per unit at depth 1 (vh * 0.5 * f)
+    fadeStart: f32,        // cell-size fade band (px of cell)
+    fadeEnd: f32,
+    horizonStart: f32,     // horizon fade band (view depth, units)
+    horizonEnd: f32,
+    overrideDensity: f32,  // >=0: manual mode (uniform density)
 };
 
 @group(0) @binding(0) var<uniform> ubo: UniformBufferObject;
@@ -37,6 +48,7 @@ fn vs_main(
     @location(3) cornerX: f32,
     @location(4) cornerY: f32,
     @location(5) width: f32,
+    @location(6) spacing: f32,
 ) -> VSOutput {
     var out: VSOutput;
 
@@ -75,5 +87,7 @@ fn vs_main(
     out.fragColor = color;
     out.sidePx = halfQuad * cornerY;
     out.widthPx = width;
+    out.depth = w;
+    out.spacingOut = spacing;
     return out;
 }
