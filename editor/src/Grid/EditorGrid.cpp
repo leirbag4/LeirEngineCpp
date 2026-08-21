@@ -274,11 +274,20 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         : 1.0f;
     const float minorVis =
         DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx) * fineHandoff;
+    // The chunk band's upper rolloff (this level is 2+ steps coarser than the
+    // fine one -> invisible) applies only to levels whose fine has a real
+    // finer neighbor. The chunk partner of the FINEST generated level (10u,
+    // whose fine 1u is clamped — there is no 0.1u grid) never rolls off, so
+    // the 10u chunk lines stay visible at very close zoom (camH~2 at startup,
+    // where 10u's cellRef ~2890px > 100*fadeStart used to kill them, leaving
+    // empty space where the thick lines should be).
     const float chunkVis = (spacing >= 10.0f)
         ? DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
                        10.0f * m_FadeEndPx)
-          * (1.0f - DensityAlpha(cellRef, 100.0f * m_FadeStartPx,
-                                 100.0f * m_FadeEndPx))
+          * ((spacing > 10.0f)
+             ? (1.0f - DensityAlpha(cellRef, 100.0f * m_FadeStartPx,
+                                    100.0f * m_FadeEndPx))
+             : 1.0f)
         : 0.0f;
     const float levelAlpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
 

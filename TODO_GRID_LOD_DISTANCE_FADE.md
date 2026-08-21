@@ -197,6 +197,26 @@ grid fino 1u domina la vista y es lo que se esperaba ver.
 (camH≈2); zoom out normal → 1u fina + 10u chunk; seguir a la lejanía → 10u fina
 + 100u chunk (sin regresiones del Fix 5).
 
+### Fix 7 (APLICADO, 2026-08-20) — chunk 10u invisible a cámara muy baja
+
+**Bug**: en la posición inicial del editor (camH≈2) y girando la cámara, las
+líneas **gruesas** (10u) no aparecían — quedaba el vacío donde deberían estar.
+Al subir la cámara aparecían. Mismo patrón que el Fix 6 pero en la banda
+**chunk** del 10u: el roll-off superior `(1 - DensityAlpha(cellRef, 100·fadeStart,
+100·fadeEnd))` asume que el fino puede ser 0.1u (2 pasos más fino), pero 1u es
+lo más fino generado (quedó clampado como fino en el Fix 6) → en camH≈2
+`cellRef(10u) ≈ 2890 > 1500` → `levelAlpha(10u) ≈ 0.008 < 0.02` → nivel
+descartado entero. El umbral estaba en camH≈3.85 (cuando `cellRef(10u) < 1500`).
+
+**Fix**: el roll-off superior de la banda chunk solo aplica a niveles cuyo fino
+tenga vecino más fino real. Para el 10u (pareja chunk del fino clampado 1u) el
+factor queda en 1 — simétrico al Fix 6. El roll-off del 100u se mantiene (su
+fino 10u sí tiene vecino más fino).
+
+**Verificación**: en la posición inicial girando la cámara → 1u fina + 10u
+chunk visibles; camH=10 idéntico a antes (`cellRef(10u)=580 < 1500` → el factor
+ya era 1); camH≈38.7 → crossfade 10u fina + 100u chunk intacto.
+
 ## Archivos relevantes
 
 - `editor/src/Grid/EditorGrid.cpp` — `EmitLevel` (rol por nivel + fade por
