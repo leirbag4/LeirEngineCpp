@@ -30,6 +30,8 @@ public:
     // fadeStart a line's role is invisible, above fadeEnd fully visible.
     float GetGridFadeStartPx() const { return m_FadeStartVal; }
     float GetGridFadeEndPx() const { return m_FadeEndVal; }
+    // Chunk (thick) line width in pixels for the grid LOD.
+    float GetGridChunkWidth() const { return m_ChunkWidthVal; }
 
     Leir::Vector2 GetMinSize() const override;
 
@@ -49,6 +51,7 @@ private:
     UIDragFloatInput* m_Density = nullptr;
     UIDragFloatInput* m_FadeStart = nullptr;
     UIDragFloatInput* m_FadeEnd = nullptr;
+    UIDragFloatInput* m_ThickWidth = nullptr;
 
     Leir::Vector3 m_Start = {0.0f, 0.6f, 0.0f};
     Leir::Vector3 m_End = {5.0f, 0.6f, 0.0f};
@@ -67,4 +70,6 @@ private:
     // only 2 levels are ever visible and micro-squares never turn solid.
     float m_FadeStartVal = 15.0f;
     float m_FadeEndVal = 30.0f;
+    // Chunk (thick) grid line width in pixels (drag to make chunk lines finer).
+    float m_ChunkWidthVal = 1.5f;
 };

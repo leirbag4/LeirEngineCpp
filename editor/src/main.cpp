@@ -369,7 +369,7 @@ protected:
         m_GridLodLabel->SetColor({0.6f, 0.95f, 0.6f, 1.0f});
         m_GridLodLabel->SetOverlayLayer(true);
         m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f}; // top-right
-        m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 64.0f};
+        m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 80.0f};
         m_GridLodLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
         m_ViewportPanel->AddChild(m_GridLodLabel);
 
@@ -617,16 +617,20 @@ protected:
             if (m_GizmoTestPanel) {
                 m_Grid->SetFadeThresholds(m_GizmoTestPanel->GetGridFadeStartPx(),
                                           m_GizmoTestPanel->GetGridFadeEndPx());
+                m_Grid->SetChunkWidth(m_GizmoTestPanel->GetGridChunkWidth());
             }
             m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
-            m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 64.0f};
-            char buf[160];
+            m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 80.0f};
+            char buf[200];
             std::snprintf(buf, sizeof(buf),
-                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nfade %.0f..%.0f px  lines %u",
+                "LOD fine %g / chunk %g\ncamH %.1f  ref %.2f px/u\nfade %.0f..%.0f px  thick %gpx  lines %u\nrole 1u:%.2f 10u:%.2f 100u:%.2f 1000u:%.2f",
                 m_Grid->GetDebugFineSpacing(), m_Grid->GetDebugChunkSpacing(),
                 m_Grid->GetDebugCamHeight(), m_Grid->GetDebugRefPxPerUnit(),
                 m_Grid->GetFadeStartPx(), m_Grid->GetFadeEndPx(),
-                m_Grid->GetDebugLineCount());
+                m_Grid->GetChunkWidth(),
+                m_Grid->GetDebugLineCount(),
+                m_Grid->GetDebugLevelAlpha(0), m_Grid->GetDebugLevelAlpha(1),
+                m_Grid->GetDebugLevelAlpha(2), m_Grid->GetDebugLevelAlpha(3));
             m_GridLodLabel->SetText(buf);
         }
 

@@ -67,6 +67,11 @@ GizmoLineTestPanel::GizmoLineTestPanel()
         [this](float v) { m_FadeStartVal = std::max(0.0f, v); });
     AddField(fadeRow, "fadeEnd:", m_FadeEnd, m_FadeEndVal,
         [this](float v) { m_FadeEndVal = std::max(0.0f, v); });
+
+    // Chunk (thick) grid line width in pixels. Lower = thinner chunk lines.
+    auto* thickRow = makeRow();
+    AddField(thickRow, "thickWidth:", m_ThickWidth, m_ChunkWidthVal,
+        [this](float v) { m_ChunkWidthVal = std::max(0.5f, v); });
 }
 
 GizmoLineTestPanel::~GizmoLineTestPanel() = default;

@@ -63,6 +63,10 @@ CoreApplication::CoreApplication(const char* title, int width, int height, bool 
         createW = (int)std::lround(width * primaryScale);
         createH = (int)std::lround(height * primaryScale);
     }
+    // Defensive: a corrupted settings save (window width/height 0) must never
+    // brick the launch — glfwCreateWindow(0, 0) fails.
+    createW = std::max(createW, 1);
+    createH = std::max(createH, 1);
 
     GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     m_Window = glfwCreateWindow(createW, createH, title, monitor, nullptr);

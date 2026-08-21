@@ -6,6 +6,7 @@
 #include "LeirEngine/RHI/GCommandGraph.h"
 #include "LeirEngine/RHI/RHI.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -27,26 +28,32 @@ class RenderBackend;
 // INFINITE and always surrounds the camera.
 //
 // RECURSIVE LOD BY SCREEN DENSITY (Unity-style): the transparency of every
-// line is derived from the REAL pixels-per-world-unit of the projection at the
-// line's nearest point to the camera, not from a fixed world distance. A line
-// of level s (spacing 1/10/100/1000) plays two roles at once:
-//   - "fine cell" of size s: visible while a cell of size s is >= ~30px on
-//     screen, faded out below ~15px (Unity-style: the smallest visible square
-//     is ~20px and already ultra faint, so sub-pixel micro-squares never turn
-//     into solid blocks);
-//   - "chunk boundary" of the cells s/10 below it: bright while those sub-cells
-//     are readable, dimming to a plain fine line once they are too small.
-// The two fade thresholds are live-tunable (Test2 panel, SetFadeThresholds).
-// Because both ramps key off pxPerUnit, zooming out makes each level seamlessly
-// hand its chunk role to the next coarser level: near the camera you see 1x1
-// squares inside bright 10x10 chunks; zoom out and the 1u internals fade,
-// leaving clean 10x10 chunks (which now behave as the "1x1" of the next level);
-// zoom further and 100x100 chunks take over, then 1000x1000, etc. Each world
-// line is generated exactly once, by its FINEST level (coords a coarser level
-// also owns are skipped), so nothing is drawn twice on top of itself. Origin
-// axes (red X / blue Z) are opaque and never fade. Lines are clipped at the
-// near plane and sorted far-to-near so coplanar overlaps never zipper (same as
-// GizmoRenderer).
+// line fades with the REAL pixels-per-world-unit of the projection at the
+// line's OWN view depth (clip.w), so each line FADES ALONG ITS LENGTH (it is
+// subdivided into segments and each segment dissolves at its depth) — bright
+// near the camera, gone toward the horizon, in both orientations. The ROLE
+// (thin/fine vs thick/chunk, i.e. width+color) is chosen ONCE PER LEVEL PER
+// FRAME from the rotation-invariant reference density (scale / camera height)
+// and never from the per-point density, so styles are stable under yaw/pitch.
+// Only ~2 levels are visible at any zoom, chosen by a level's own cell size at
+// the reference density:
+//   - level 1u = "fine" cell: dim thin line while a 1u cell is >= ~30px on
+//     screen, faded out below ~15px (the smallest visible square is ~20px and
+//     already ultra faint, so sub-pixel micro-squares never become solid);
+//   - the single "chunk" level (one coarser than the fine one): a bright thick
+//     line delimiting 10x groups of the fine cells, staying thick along its
+//     whole length and handing the chunk role to the next coarser level as the
+//     camera zooms out. Levels 2+ steps coarser or finer than fine are not
+//     drawn, so two bright chunks never stack in a quadrant.
+// Because each level fades by its own cell density, zooming out just fades the
+// fine internals inside persistent bright chunks and then the chunks themselves
+// fade as they recede — no handoff gaps and no weak/strong alternation between
+// chunk lines. Only ~2 spacings are visible at any screen location (the current
+// fine level + the chunk grid). Each world line is generated exactly once, by
+// its FINEST level (coords a coarser level also owns are skipped), so nothing
+// is drawn twice on top of itself. Origin axes (red X / blue Z) are opaque and
+// never fade. Lines are clipped at the near plane and sorted far-to-near so
+// coplanar overlaps never zipper (same as GizmoRenderer).
 class EditorGrid {
 public:
     EditorGrid(Leir::RHI::RenderBackend* device,
@@ -71,6 +78,12 @@ public:
     float GetFadeStartPx() const { return m_FadeStartPx; }
     float GetFadeEndPx() const { return m_FadeEndPx; }
 
+    // Live-tunable chunk-line width in pixels (Test2 panel knob). The fine
+    // lines are always kMinorWidth; chunk lines lerp up to this value while
+    // they hold the bright/thick role.
+    void SetChunkWidth(float widthPx) { m_ChunkWidth = std::max(0.5f, widthPx); }
+    float GetChunkWidth() const { return m_ChunkWidth; }
+
     // Debug state for the viewport HUD (the "LOD debug" label): how the grid
     // reacts to camera motion. Cam height is the camera's height above the grid
     // plane; ref px/unit is the pixel density at the point directly below the
@@ -83,6 +96,11 @@ public:
     float GetDebugFineSpacing() const { return m_DebugFineSpacing; }
     float GetDebugChunkSpacing() const { return m_DebugChunkSpacing; }
     uint32_t GetDebugLineCount() const { return m_DebugLineCount; }
+    // Per-level role alpha for the HUD readout (index 0=1u, 1=10u, 2=100u,
+    // 3=1000u). This is the level's visibility alpha (fine 0.35 max / chunk
+    // 0.55 max), computed from the rotation-invariant reference density, so it
+    // is STABLE under yaw/pitch and only changes as the camera zooms.
+    float GetDebugLevelAlpha(int index) const { return m_DebugLevelAlphas[index]; }
 
 private:
     struct Line {
@@ -133,11 +151,7 @@ private:
     void EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
                    float viewportWidthPx, float viewportHeightPx,
                    const Leir::Vector3& cameraPos, bool parallelToZ,
-                   float densityOverride);
-    void EmitUniformLevels(float baseSpacing, float pxPerUnit,
-                           const Leir::Matrix4x4& viewProjection,
-                           float viewportWidthPx, float viewportHeightPx,
-                           const Leir::Vector3& cameraPos);
+                   float densityOverride, float refDensity);
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();
@@ -155,9 +169,11 @@ private:
     float m_DebugFineSpacing = 0.0f;
     float m_DebugChunkSpacing = 0.0f;
     uint32_t m_DebugLineCount = 0;
+    float m_DebugLevelAlphas[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     float m_FadeStartPx = 15.0f; // below: a line's role is invisible
     float m_FadeEndPx = 30.0f;   // above: fully visible in that role
+    float m_ChunkWidth = 1.5f;   // px, chunk (thick) line width
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;

@@ -23,22 +23,42 @@ constexpr float kCornerY[4] = { 1.0f, -1.0f, 1.0f, -1.0f };
 // occlude the lines underneath them (the pipeline depth-tests against them).
 constexpr float kGridY = -0.01f;
 
+// Camera near plane; view depth (clip.w) below this is behind the camera.
+constexpr float kNear = 0.1f;
+
 // Recursive LOD by SCREEN DENSITY (pixels per world unit), NOT fixed world
-// distance: every line's alpha/color/width derives from the REAL projection
-// pxPerUnit read at the line's nearest point to the camera. A line of level s
-// (spacing 1/10/100/1000) plays two roles at once:
-//   - fine cell boundary of size s        -> faded once a cell of size s drops
-//     below ~15px on screen (ramp 15..30px, live-tunable via SetFadeThresholds);
-//   - chunk boundary of the cells s/10    -> bright while those sub-cells are
-//     readable, dimming to a plain fine line once too small.
-// Zooming out makes each level hand its chunk role to the next coarser level
-// seamlessly: near the camera 1x1 squares inside bright 10x10 chunks; zoom out
-// and the 1u internals vanish leaving clean 10x10 chunks ("1x1 virtual" of the
-// next level); zoom further and 100x100 take over, then 1000x1000, etc.
+// distance. Each line FADES ALONG ITS LENGTH: it is subdivided and every
+// segment dissolves with the density at its depth (clip.w, the distance along
+// the camera's forward axis), so a line is bright near the camera and fades
+// toward the horizon — in BOTH orientations (the old single-alpha-per-line
+// model read one density at the nearest visible point and made vertical lines
+// stay bright to the horizon).
+// The ROLE of a line (thin/fine vs thick/chunk, i.e. width+color) is chosen
+// ONCE PER LEVEL PER FRAME from the ROTATION-INVARIANT reference density
+// (scale / camera height, the same value the HUD shows), NEVER from the
+// per-point density — otherwise a single chunk line would change style along
+// its length (thick that becomes thin mid-line) and the whole chunk set would
+// flicker as the camera turns. Only ~2 levels are visible at any zoom, chosen
+// by a level's own cell size at the reference density (cellRef = spacing *
+// refDensity; live-tunable via SetFadeThresholds):
+//   - FINE (minor, dim/thin): cellRef in [fadeStart, 10*fadeStart) — the
+//     smallest readable level (Unity keeps it ~20px, already ultra faint);
+//   - CHUNK (major, bright/thick): cellRef in [10*fadeStart, 100*fadeStart) —
+//     exactly ONE level coarser than the fine one, delimiting its 10x groups.
+// A level finer than fine (cellRef < fadeStart) or 2+ steps coarser
+// (cellRef >= 100*fadeStart) is not drawn. Both band edges use smoothstep
+// ramps so the levels crossfade with zoom: as the fine level recedes it hands
+// off to the chunk role while the NEXT-coarser level takes over — no handoff
+// gaps, no weak/strong alternation between chunk lines, and never two bright
+// chunks stacked in a quadrant (the old per-point model also made EVERY
+// readable coarse level a chunk, so at medium zoom the 10u lines stayed
+// thick-white next to the camera instead of becoming soft 10u + thick 100u).
 constexpr float kMinorMaxAlpha = 0.35f; // role: fine cell of its level
-constexpr float kMajorMaxAlpha = 0.55f; // role: chunk boundary (added)
-constexpr float kMinorWidth = 1.5f;     // px
-constexpr float kMajorWidth = 3.0f;     // px
+constexpr float kMajorMaxAlpha = 0.55f; // role: chunk line (added)
+constexpr float kMinorWidth = 1.5f;     // px; the chunk width is m_ChunkWidth
+
+// Per-line subdivision for the along-length fade (segments in w-space).
+constexpr int kSeg = 16;
 
 // Generation window scales with the spacing so coarse levels cover the horizon
 // without emitting millions of fine lines; capped near 2x the camera far plane
@@ -82,51 +102,18 @@ float ProjectionScale(const glm::mat4& vp)
                      vp[2][1] * vp[2][1]);
 }
 
-// Pixels that 1 world unit spans on screen at the given ground point, using the
-// real view-projection scale but the EUCLIDEAN distance from the camera to the
-// point (NOT the view depth clip.w):
-//   pxPerUnit = (viewportHeightPx * 0.5 * f) / dist(camera, groundPt)
-// Euclidean distance depends only on the camera POSITION, never its
-// orientation, so rotating the camera in place never changes the LOD — this is
-// how professional engines (Unity et al.) drive grid fades. Monotonic with
-// distance, so it never blows up at grazing angles either. Returns 0 when the
-// point is at or behind the near plane.
-float PxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
-                const glm::vec3& cameraPos, const glm::vec3& groundPt)
-{
-    const glm::vec4 clip = vp * glm::vec4(groundPt, 1.0f);
-    constexpr float kNear = 0.1f; // matches the camera near plane
-    if (clip.w <= kNear)
-        return 0.0f;
-    const float dist = glm::length(cameraPos - groundPt);
-    if (dist <= kNear)
-        return 0.0f;
-    const float scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
-    return scale / dist;
-}
-
-// Max pixels-per-world-unit across sample points along a grid line (which spans
-// camPerp +/- window on the perpendicular axis). Sampling avoids reading the
-// density at a single point that may sit exactly on the camera plane (pitch ~0,
-// where pxPerUnit is meaningless) or behind it: only points in front of the
-// near plane contribute, and the closest one wins (the largest pxPerUnit along
-// the line). Returns 0 when the whole line is behind the camera.
-float LinePxPerUnit(const glm::mat4& vp, float viewportWidthPx, float viewportHeightPx,
-                    const glm::vec3& cameraPos,
-                    float coord, float camPerp, float window, bool parallelToZ)
-{
-    float best = 0.0f;
-    const float samples[3] = { -window * 0.5f, 0.0f, window * 0.5f };
-    for (float off : samples) {
-        const glm::vec3 pt = parallelToZ
-            ? glm::vec3(coord, 0.0f, camPerp + off)
-            : glm::vec3(camPerp + off, 0.0f, coord);
-        const float px = PxPerUnit(vp, viewportWidthPx, viewportHeightPx, cameraPos, pt);
-        if (px > best)
-            best = px;
-    }
-    return best;
-}
+// Pixels that 1 world unit spans on screen at view depth w (clip.w, the
+// distance along the camera's forward axis):
+//   pxPerUnit = (viewportHeightPx * 0.5 * f) / w
+// View depth is the TRUE perspective depth (glm's w = -z_view in front of the
+// camera), so it is rotation-correct at every pitch: straight down (-90°) every
+// ground point shares the same depth (= camera height), giving the correct
+// UNIFORM density across the whole viewport, and at grazing pitches the
+// foreshortened cells right in front of the camera get the large density they
+// actually occupy on screen. (The old EUCLIDEAN distance was wrong at grazing
+// angles: it underestimated density near the camera and made vertical lines
+// vanish.) clip.w is LINEAR along a straight grid line, so EmitLevel can
+// subdivide a line's visible w-interval and fade each segment by its own depth.
 
 } // namespace
 
@@ -203,13 +190,18 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
     if (densityOverride >= 0.0f) {
         // MANUAL mode (Test2 panel knob): drive the recursive LOD with a single
         // uniform pxPerUnit, decoupled from the camera, so the Unity-style
-        // transition can be verified. Two levels are active at once — the fine
-        // grid (spacing L) and the chunk grid (spacing 10L) — and L jumps to
-        // 10L as the density drops, so the 10x10 chunks hand their thick border
-        // to 100x100, then 1000x1000, exactly like Unity.
+        // transition can be verified. Identical to camera mode but with every
+        // line reading the same density (EmitLevel's override path), so the
+        // fine (1u) grid and the chunk levels (10u/100u/1000u) crossfade
+        // exactly like the real camera projection. Only the levels whose cells
+        // are still readable on screen emit lines (L, 10L, 100L, ...).
         m_DebugRefPxPerUnit = densityOverride;
-        EmitUniformLevels(1.0f, densityOverride, viewProjection,
-                          viewportWidthPx, viewportHeightPx, cameraPos);
+        for (float spacing : kLevelSpacings) {
+            EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
+                      cameraPos, true, densityOverride, densityOverride);  // lines parallel to Z
+            EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
+                      cameraPos, false, densityOverride, densityOverride); // lines parallel to X
+        }
         m_DebugLineCount = (uint32_t)m_Lines.size();
         ComputeDebugSpacing();
         return;
@@ -220,9 +212,9 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
     // skipped inside EmitLevel), so nothing is drawn twice on top of itself.
     for (float spacing : kLevelSpacings) {
         EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                  cameraPos, true, densityOverride);  // lines parallel to Z (x = coord)
+                  cameraPos, true, densityOverride, m_DebugRefPxPerUnit);  // lines parallel to Z (x = coord)
         EmitLevel(spacing, viewProjection, viewportWidthPx, viewportHeightPx,
-                  cameraPos, false, densityOverride); // lines parallel to X (z = coord)
+                  cameraPos, false, densityOverride, m_DebugRefPxPerUnit); // lines parallel to X (z = coord)
     }
 
     // Origin axes (opaque, never fade, reach the horizon at any zoom).
@@ -235,8 +227,8 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
 
 // Derive the active fine/chunk recursion levels from the reference density so
 // the HUD shows the same LOD numbers the grid actually picks. This mirrors
-// EmitUniformLevels' baseSpacing walk (and EmitLevel's ramp): the fine spacing
-// is the smallest power of 10 whose cells are still readable on screen.
+// EmitLevel's ramp: the fine spacing is the smallest power of 10 whose cells
+// are still readable on screen.
 void EditorGrid::ComputeDebugSpacing()
 {
     float spacing = 1.0f;
@@ -246,124 +238,10 @@ void EditorGrid::ComputeDebugSpacing()
     m_DebugChunkSpacing = spacing * 10.0f;
 }
 
-// Unity-style grid driven by a uniform pxPerUnit (manual LOD knob). Two roles
-// crossfade seamlessly with the density:
-//   L = smallest power of 10 whose cells are still readable on screen
-//       (L*pxPerUnit >= m_FadeStartPx). u = visibility of the current level
-//       (1 fully readable, 0 unreadable). As the density drops (camera zooms
-//       out) u -> 0 and the NEXT coarser level (10L) fades in with the SAME
-//       geometry: the 10x10 chunk lines shed their thick border and become the
-//       plain common lines of the next level, while 100x100 takes the thick
-//       border — exactly Unity's recursive grid. No pop, no overdraw.
-void EditorGrid::EmitUniformLevels(float baseSpacing, float pxPerUnit,
-                                   const Leir::Matrix4x4& viewProjection,
-                                   float viewportWidthPx, float viewportHeightPx,
-                                   const Leir::Vector3& cameraPos)
-{
-    // Active fine level: smallest power of 10 still readable on screen.
-    float spacing = baseSpacing;
-    while (spacing < 10000.0f && spacing * pxPerUnit < m_FadeStartPx)
-        spacing *= 10.0f;
-    const float nextSpacing = spacing * 10.0f;
-    const float next2Spacing = nextSpacing * 10.0f;
-
-    // u: current level visibility; v: next level visibility (effectively always
-    // readable while u is fading, but keep the exact ramp for correctness).
-    const float u = DensityAlpha(spacing * pxPerUnit, m_FadeStartPx, m_FadeEndPx);
-    const float v = DensityAlpha(nextSpacing * pxPerUnit, m_FadeStartPx, m_FadeEndPx);
-    const float fadeIn = (1.0f - u) * v; // next level's share as the current fades
-
-    // Spacing L  -> plain fine lines that fade with the level (1.5px).
-    // Spacing 10L -> old chunk (0.9, 3px) handing the border to the next level's
-    //               fine role (0.35, 1.5px) — a single continuous alpha/width.
-    // Spacing 100L -> the new chunk fading in (0.9, 3px).
-    const float lAlpha = kMinorMaxAlpha * u;
-    const float tenAlpha = (kMinorMaxAlpha + kMajorMaxAlpha) * u + kMinorMaxAlpha * fadeIn;
-    const float hundredAlpha = (kMinorMaxAlpha + kMajorMaxAlpha) * fadeIn;
-    const float lWidth = kMinorWidth;
-    const float tenWidth = kMinorWidth + (kMajorWidth - kMinorWidth) * u;
-    const float hundredWidth = kMajorWidth;
-
-    Leir::Vector4 lColor = kMinorColor; lColor.w = lAlpha;
-    // The 10L line morphs from chunk (near-white) to plain common line (gray)
-    // as it sheds its thick border: blend the color with the same u ramp.
-    Leir::Vector4 tenColor = Leir::Vector4::Lerp(kMajorColor, kMinorColor, 1.0f - u);
-    tenColor.w = std::min(tenAlpha, 1.0f);
-    Leir::Vector4 hundredColor = kMajorColor; hundredColor.w = std::min(hundredAlpha, 1.0f);
-
-    for (bool parallelToZ : { true, false }) {
-        const float camCoord = parallelToZ ? cameraPos.x : cameraPos.z;
-        const float camPerp = parallelToZ ? cameraPos.z : cameraPos.x;
-
-        // Level L: fine lines at spacing L (skip the axes and chunk lines).
-        if (lAlpha >= 0.02f) {
-            const float window = std::min(kWindowScale * spacing, kMaxWindow);
-            const int i0 = (int)std::floor((camCoord - window) / spacing);
-            const int i1 = (int)std::ceil((camCoord + window) / spacing);
-            for (int i = i0; i <= i1; ++i) {
-                const float coord = (float)i * spacing;
-                if (coord == 0.0f)
-                    continue; // the axis covers the origin line
-                if (i % 10 == 0)
-                    continue; // the chunk line covers it
-                if (parallelToZ)
-                    DrawLine({ coord, kGridY, camPerp - window },
-                             { coord, kGridY, camPerp + window }, lColor, lWidth);
-                else
-                    DrawLine({ camPerp - window, kGridY, coord },
-                             { camPerp + window, kGridY, coord }, lColor, lWidth);
-            }
-        }
-
-        // Level 10L: the chunk border (thick while its sub-cells are readable),
-        // smoothly turning into the next level's fine line as density drops.
-        if (tenAlpha >= 0.02f) {
-            const float window = std::min(kWindowScale * nextSpacing, kMaxWindow);
-            const int i0 = (int)std::floor((camCoord - window) / nextSpacing);
-            const int i1 = (int)std::ceil((camCoord + window) / nextSpacing);
-            for (int i = i0; i <= i1; ++i) {
-                const float coord = (float)i * nextSpacing;
-                if (coord == 0.0f)
-                    continue; // the axis covers the origin line
-                if (i % 10 == 0)
-                    continue; // the 100L chunk line covers it
-                if (parallelToZ)
-                    DrawLine({ coord, kGridY, camPerp - window },
-                             { coord, kGridY, camPerp + window }, tenColor, tenWidth);
-                else
-                    DrawLine({ camPerp - window, kGridY, coord },
-                             { camPerp + window, kGridY, coord }, tenColor, tenWidth);
-            }
-        }
-
-        // Level 100L: the next chunk border fading in as the current fades.
-        if (hundredAlpha >= 0.02f) {
-            const float window = std::min(kWindowScale * next2Spacing, kMaxWindow);
-            const int i0 = (int)std::floor((camCoord - window) / next2Spacing);
-            const int i1 = (int)std::ceil((camCoord + window) / next2Spacing);
-            for (int i = i0; i <= i1; ++i) {
-                const float coord = (float)i * next2Spacing;
-                if (coord == 0.0f)
-                    continue; // the axis covers the origin line
-                if (parallelToZ)
-                    DrawLine({ coord, kGridY, camPerp - window },
-                             { coord, kGridY, camPerp + window }, hundredColor, hundredWidth);
-                else
-                    DrawLine({ camPerp - window, kGridY, coord },
-                             { camPerp + window, kGridY, coord }, hundredColor, hundredWidth);
-            }
-        }
-    }
-
-    // Origin axes (opaque, never fade, reach the horizon at any zoom).
-    DrawLine({ -kAxisExtent, kGridY, 0.0f }, { kAxisExtent, kGridY, 0.0f }, kAxisXColor, kAxisWidth);
-    DrawLine({ 0.0f, kGridY, -kAxisExtent }, { 0.0f, kGridY, kAxisExtent }, kAxisZColor, kAxisWidth);
-}
-
 void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
                            float viewportWidthPx, float viewportHeightPx,
                            const Leir::Vector3& cameraPos, bool parallelToZ,
-                           float densityOverride)
+                           float densityOverride, float refDensity)
 {
     // The coordinate that varies along the line (the line is drawn parallel to
     // the other axis, perpendicular to `coord`). `coord` steps by `spacing`.
@@ -373,6 +251,41 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
     const int i0 = (int)std::floor((camCoord - window) / spacing);
     const int i1 = (int)std::ceil((camCoord + window) / spacing);
     const glm::mat4 vp = viewProjection;
+    (void)viewportWidthPx;
+
+    const float scale = viewportHeightPx * 0.5f * ProjectionScale(vp);
+
+    // ROLE of this level, computed ONCE per frame from the ROTATION-INVARIANT
+    // reference density (scale / camera height) — see the model comment at the
+    // top. This is the level's width/color/alpha, constant for every line of
+    // the level; the per-segment density below only fades each line's alpha.
+    const float cellRef = spacing * refDensity;
+    const float minorVis =
+        DensityAlpha(cellRef, m_FadeStartPx, m_FadeEndPx)
+        * (1.0f - DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
+                               10.0f * m_FadeEndPx));
+    const float chunkVis = (spacing >= 10.0f)
+        ? DensityAlpha(cellRef, 10.0f * m_FadeStartPx,
+                       10.0f * m_FadeEndPx)
+          * (1.0f - DensityAlpha(cellRef, 100.0f * m_FadeStartPx,
+                                 100.0f * m_FadeEndPx))
+        : 0.0f;
+    const float levelAlpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
+
+    int levelIndex = 0;
+    for (float s = spacing; s >= 10.0f; s /= 10.0f)
+        ++levelIndex;
+    m_DebugLevelAlphas[levelIndex] = levelAlpha;
+    if (levelAlpha < 0.02f)
+        return; // this level is not part of the current LOD
+
+    const float levelWidth = kMinorWidth + (m_ChunkWidth - kMinorWidth) * chunkVis;
+    const Leir::Vector4 levelColor = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
+
+    // Beyond wMax the cell size is below fadeStartPx (the line is fully faded),
+    // so nothing past it needs emitting; within wFull everything is visible.
+    const float wMax = scale * spacing / m_FadeStartPx;
+    const float wFull = scale * spacing / m_FadeEndPx;
 
     for (int i = i0; i <= i1; ++i) {
         const float coord = (float)i * spacing;
@@ -381,46 +294,90 @@ void EditorGrid::EmitLevel(float spacing, const Leir::Matrix4x4& viewProjection,
         if (i % 10 == 0)
             continue; // a coarser level owns this line (drawn exactly once)
 
-        // Screen density of 1 world unit at the closest visible part of the
-        // line. Normally sampled from the real camera projection (the closest
-        // part wins, so a line is fully visible while it approaches the camera
-        // and fades as it recedes / as you zoom out). The Test2 panel can
-        // OVERRIDE this with a uniform pxPerUnit (>= 0) to drive the LOD
-        // transition manually, simulating the camera zooming out without
-        // touching the camera.
-        float pxPerUnit;
+        const glm::vec3 p0 = parallelToZ
+            ? glm::vec3(coord, kGridY, camPerp - window)
+            : glm::vec3(camPerp - window, kGridY, coord);
+        const glm::vec3 p1 = parallelToZ
+            ? glm::vec3(coord, kGridY, camPerp + window)
+            : glm::vec3(camPerp + window, kGridY, coord);
+
+        // clip.w (view depth) is LINEAR along the straight span, so the part in
+        // front of the near plane is one contiguous w-interval. `scale / w` is
+        // the px-per-unit density at that depth (view depth is rotation-correct
+        // at every pitch: straight down every ground point shares depth = cam
+        // height, giving a uniform density; at grazing pitches the foreshortened
+        // cells right in front get the large density they really occupy).
+        const glm::vec4 clip0 = vp * glm::vec4(p0, 1.0f);
+        const glm::vec4 clip1 = vp * glm::vec4(p1, 1.0f);
+        const float w0 = clip0.w;
+        const float w1 = clip1.w;
+        const float wNear = std::max(std::min(w0, w1), kNear);
+        float wFar = std::max(w0, w1);
+        if (densityOverride < 0.0f)
+            wFar = std::min(wFar, wMax); // camera mode: fade out at this depth
+        if (wFar <= wNear)
+            continue; // behind the near plane or past the fade-out
+
+        // Emit one segment of the line, mapped back to world space from its
+        // w-window (w is linear along the span). The segment only FADES the
+        // alpha by the density at its midpoint (the line dissolves as it
+        // recedes); the style (width/color) is the per-level role computed
+        // above and is CONSTANT along the line, so a chunk line never turns
+        // into a plain line mid-way or with the view direction.
+        auto emitSegment = [&](float segStartW, float segEndW, float density) {
+            const float fade = DensityAlpha(spacing * density,
+                                            m_FadeStartPx, m_FadeEndPx);
+            const float alpha = levelAlpha * fade;
+            if (alpha < 0.02f)
+                return;
+            Leir::Vector4 c = levelColor;
+            c.w = alpha;
+            float t0;
+            float t1;
+            if (std::abs(w1 - w0) < 1e-6f) {
+                t0 = 0.0f; // constant-depth line: the span maps to the whole line
+                t1 = 1.0f;
+            } else {
+                t0 = (segStartW - w0) / (w1 - w0);
+                t1 = (segEndW - w0) / (w1 - w0);
+            }
+            const glm::vec3 a = glm::mix(p0, p1, t0);
+            const glm::vec3 b = glm::mix(p0, p1, t1);
+            DrawLine({ a.x, a.y, a.z }, { b.x, b.y, b.z }, c, levelWidth);
+        };
+
         if (densityOverride >= 0.0f) {
-            pxPerUnit = densityOverride;
-        } else {
-            pxPerUnit = LinePxPerUnit(vp, viewportWidthPx, viewportHeightPx, cameraPos,
-                                      coord, camPerp, window, parallelToZ);
-            if (pxPerUnit <= 0.0f)
-                continue;
+            // MANUAL mode (Test2 panel knob): uniform density over the whole
+            // line, decoupled from the camera, so the Unity-style transition
+            // can be verified without touching the camera.
+            emitSegment(wNear, wFar, densityOverride);
+            continue;
         }
 
-        // Role 1: fine cell boundary of size `spacing`.
-        const float minorVis = DensityAlpha(spacing * pxPerUnit,
-                                            m_FadeStartPx, m_FadeEndPx);
-        // Role 2: chunk boundary of the cells spacing/10 below it.
-        const float chunkVis = (spacing >= 10.0f)
-            ? DensityAlpha((spacing / 10.0f) * pxPerUnit,
-                           m_FadeStartPx, m_FadeEndPx)
-            : 0.0f;
-
-        const float alpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
-        if (alpha < 0.02f)
+        // Fully-bright shortcut: the whole visible part is beyond fadeEndPx of
+        // cell size -> one draw, no subdivision needed.
+        if (wFar <= wFull) {
+            emitSegment(wNear, wFar, scale / (0.5f * (wNear + wFar)));
             continue;
+        }
 
-        Leir::Vector4 c = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
-        c.w = alpha;
-        const float width = kMinorWidth + (kMajorWidth - kMinorWidth) * chunkVis;
+        // Constant-depth line (w does not vary along the span, e.g. a line
+        // parallel to the camera's forward axis — the common horizontal case):
+        // subdivision in w-space is meaningless, draw it at that single depth.
+        if (std::abs(w1 - w0) < 1e-6f) {
+            emitSegment(wNear, wFar, scale / wNear);
+            continue;
+        }
 
-        if (parallelToZ)
-            DrawLine({ coord, kGridY, camPerp - window },
-                     { coord, kGridY, camPerp + window }, c, width);
-        else
-            DrawLine({ camPerp - window, kGridY, coord },
-                     { camPerp + window, kGridY, coord }, c, width);
+        // Fade along the line: subdivide the visible w-interval so each segment
+        // is styled by the density at ITS depth — near the camera the bright
+        // chunk role, fading out toward the horizon.
+        const float dw = (wFar - wNear) / kSeg;
+        for (int s = 0; s < kSeg; ++s) {
+            const float aW = wNear + (float)s * dw;
+            const float bW = aW + dw;
+            emitSegment(aW, bW, scale / (0.5f * (aW + bW)));
+        }
     }
 }
 
