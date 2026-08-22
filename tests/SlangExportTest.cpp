@@ -6,6 +6,8 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 // CI smoke test: run the vendored Slang compiler through the editor's
@@ -63,6 +65,42 @@ int main()
         return 1;
     }
 
-    std::printf("SlangExportTest: OK (%d reflection sidecars)\n", sidecars);
+    // WriteWebShaders drift guard: the web export must always regenerate the
+    // .web.wgsl from the .slang (single-source, LEIR_BINDLESS=0). Generate them
+    // into a temp dir and require all 6 files with the post-processed entries
+    // (vs_main/ps_main) and NO binding_array (the browser/naga variant).
+    const std::string webDir = std::string(LEIR_SHADER_EXPORT_DIR) + "/webwgsl";
+    ShaderExporter::WriteWebShaders(&compiler, webDir);
+    bool webOk = true;
+    int webFiles = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(webDir, ec)) {
+        const std::string name = entry.path().filename().string();
+        if (name.size() <= 9 || name.compare(name.size() - 9, 9, ".web.wgsl") != 0)
+            continue;
+        ++webFiles;
+        std::ifstream f(entry.path());
+        std::stringstream ss;
+        ss << f.rdbuf();
+        const std::string text = ss.str();
+        if (text.find("fn vs_main(") == std::string::npos &&
+            text.find("fn ps_main(") == std::string::npos) {
+            std::fprintf(stderr, "SlangExportTest: FAILED (%s entry missing)\n", name.c_str());
+            webOk = false;
+            break;
+        }
+        if (text.find("binding_array") != std::string::npos) {
+            std::fprintf(stderr, "SlangExportTest: FAILED (%s still bindless)\n", name.c_str());
+            webOk = false;
+            break;
+        }
+    }
+    if (ec || !webOk || webFiles != 6) {
+        std::fprintf(stderr, "SlangExportTest: FAILED (web shaders=%d/6, ok=%d)\n",
+            webFiles, webOk ? 1 : 0);
+        return 1;
+    }
+
+    std::printf("SlangExportTest: OK (%d reflection sidecars, %d web shaders)\n",
+        sidecars, webFiles);
     return 0;
 }

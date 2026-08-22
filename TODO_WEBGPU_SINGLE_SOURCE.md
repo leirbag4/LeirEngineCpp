@@ -113,13 +113,23 @@ industria (Bevy, Unity, Godot) usa `#ifdef BINDLESS` / degradación por-draw.
             cualquier cambio de `.slang`).
       - [x] Borrados los `.web.wgsl` hand-written de `engine/shaders` (ahora
             son salida del generador).
-      - [ ] **Verificar el export web (emscripten)**: el build del WebEngineDemo
-            **COMPILÓ OK** con los `.web.wgsl` generados (2026-08-21, wasm 68.5 MB).
-            Falta la verificación visual en el navegador (servir + abrir).
+      - [x] **Verificar el export web (emscripten)**: el WebEngineDemo renderizó
+            en el navegador con los `.web.wgsl` generados (cubos + física Jolt,
+            verificado por el usuario 2026-08-21). El build compila OK (wasm
+            68.5 MB).
+      - [x] **Regresión desktop Vulkan/D3D12**: el editor con `backend=vulkan` y
+            `d3d12` funciona (verificado por el usuario; el default
+            `LEIR_BINDLESS=1` deja el path SPIR-V/DXIL idéntico a antes).
+      - [x] **SlangExportTest (drift guard)**: extendido para llamar
+            `WriteWebShaders` y validar los 6 `.web.wgsl` (entries `vs_main`/
+            `ps_main`, sin `binding_array`). Pasa: `OK (10 sidecars, 6 web
+            shaders)`.
 
 **ESTADO: single-source COMPLETO** — todos los shaders del engine (Grid/Gizmo/
 Basic/Sprite/UI) se generan desde `.slang` para Vulkan/D3D12 (SPIR-V/DXIL) y
-WebGPU native (WGSL bindless) y web (`.web.wgsl` single-texture).
+WebGPU native (WGSL bindless) y web (`.web.wgsl` single-texture). Los `.web.wgsl`
+commiteados en `engine/shaders` son salida del generador; el `SlangExportTest`
+los regenera/valida en CI (drift guard).
 
 ## Archivos relevantes
 
