@@ -101,20 +101,25 @@ industria (Bevy, Unity, Godot) usa `#ifdef BINDLESS` / degradación por-draw.
 
 ## Pendiente futuro
 
-- [ ] **Etapa C — export web (`.web.wgsl`) generado (opción a)**:
-      - [x] **Generador HECHO**: `ShaderExporter::WriteWebShaders` genera
-            Basic/Sprite/UI `.web.wgsl` desde el `.slang` con `LEIR_BINDLESS=0`
-            + post-procesado (entry, push group, textura única, matriz). El
-            editor los genera al arrancar a `LEIR_SHADER_DIR`. Verificado:
-            `[WebGPU] web WGSL 6/6`, salida correcta (textura única, sin
-            binding_array).
-      - [ ] **Integración del build web**: el WebEngineDemo preloada
-            `engine/shaders@/shaders` (aún los `.web.wgsl` hand-written). Falta
-            que el build web use los GENERADOS: o (a) preloadar el dir generado
-            + generarlos en el build (tool host + slangc), o (b) commitear los
-            generados en `engine/shaders` con check de drift en CI. Decidir.
-      - [ ] Borrar los `.web.wgsl` hand-written de `engine/shaders`.
-      - [ ] Verificar el export web (emscripten, WebEngineDemo/WebDemo).
+- [x] **Etapa C — export web (`.web.wgsl`) generado (HECHA, 2026-08-21)**:
+      - [x] **Generador**: `ShaderExporter::WriteWebShaders` genera Basic/Sprite/
+            UI `.web.wgsl` desde el `.slang` con `LEIR_BINDLESS=0` + post-
+            procesado (entry, push group, textura única, matriz).
+      - [x] **Integración**: el editor escribe los `.web.wgsl` a
+            `engine/shaders` (LEIR_SHADER_SOURCE_DIR) — el dir que el
+            WebEngineDemo preloada como `/shaders`. Se reemplazaron los
+            hand-written por los generados (commit `ec7b288`). El git diff sobre
+            los `.web.wgsl` commiteados es el check de drift (regenerar tras
+            cualquier cambio de `.slang`).
+      - [x] Borrados los `.web.wgsl` hand-written de `engine/shaders` (ahora
+            son salida del generador).
+      - [ ] **Verificar el export web (emscripten)**: el build del WebEngineDemo
+            **COMPILÓ OK** con los `.web.wgsl` generados (2026-08-21, wasm 68.5 MB).
+            Falta la verificación visual en el navegador (servir + abrir).
+
+**ESTADO: single-source COMPLETO** — todos los shaders del engine (Grid/Gizmo/
+Basic/Sprite/UI) se generan desde `.slang` para Vulkan/D3D12 (SPIR-V/DXIL) y
+WebGPU native (WGSL bindless) y web (`.web.wgsl` single-texture).
 
 ## Archivos relevantes
 
