@@ -15,6 +15,8 @@ void UIButton::SetColors(const Vector4& normal, const Vector4& hover, const Vect
 
 Vector2 UIButton::GetMinSize() const
 {
+    if (const auto& o = GetMinSizeOverride(); o.has_value())
+        return *o;
     if (!m_Font || m_Text.empty())
         return {100.0f, 32.0f};
     auto textSize = m_Font->MeasureText(m_Text, 0.0f);

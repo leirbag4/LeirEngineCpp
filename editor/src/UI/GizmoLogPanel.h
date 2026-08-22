@@ -39,7 +39,6 @@ private:
     void ApplyButtonState();
 
     Leir::UIButton* m_Button = nullptr;
-    Leir::UILabel* m_Status = nullptr;
     std::FILE* m_File = nullptr;
     bool m_Recording = false;
 };

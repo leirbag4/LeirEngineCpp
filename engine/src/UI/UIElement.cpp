@@ -53,6 +53,8 @@ void UIElement::RemoveChild(UIElement* child)
 
 Vector2 UIElement::GetMinSize() const
 {
+    if (m_MinSizeOverride.has_value())
+        return *m_MinSizeOverride;
     return {0.0f, 0.0f};
 }
 

@@ -62,16 +62,13 @@ GizmoLogPanel::GizmoLogPanel()
     AddChild(btnRow);
 
     m_Button = new Leir::UIButton();
+    // Fixed + explicit min size: rectangular button, ~40% wider than its text
+    // (no default min-size setter for buttons; this also avoids the Column
+    // layout stretching the button to the panel's full width).
     m_Button->SetSizePolicy(Leir::SizePolicy::Fixed);
+    m_Button->SetMinSize({200.0f, 34.0f});
     m_Button->SetOnClick([this]() { ToggleRecording(); });
     btnRow->AddChild(m_Button);
-
-    m_Status = new Leir::UILabel();
-    m_Status->SetText("");
-    m_Status->SetFontSize(11);
-    m_Status->SetColor({0.6f, 0.6f, 0.6f, 1.0f});
-    m_Status->SetSizePolicy(Leir::SizePolicy::Fixed);
-    AddChild(m_Status);
 
     ApplyButtonState();
 }
@@ -83,11 +80,20 @@ GizmoLogPanel::~GizmoLogPanel()
 
 void GizmoLogPanel::SetFont(Leir::Font* font)
 {
+    // Recursive: children may be nested inside layout wrappers (e.g. the Row
+    // that keeps the button at its natural width).
     for (auto* child : GetChildren()) {
         if (auto* b = dynamic_cast<Leir::UIButton*>(child))
             b->SetFont(font);
         else if (auto* l = dynamic_cast<Leir::UILabel*>(child))
             l->SetFont(font);
+        else if (auto* p = dynamic_cast<Leir::UIPanel*>(child))
+            for (auto* sub : p->GetChildren()) {
+                if (auto* sb = dynamic_cast<Leir::UIButton*>(sub))
+                    sb->SetFont(font);
+                else if (auto* sl = dynamic_cast<Leir::UILabel*>(sub))
+                    sl->SetFont(font);
+            }
     }
 }
 
@@ -140,20 +146,16 @@ void GizmoLogPanel::ApplyButtonState()
     if (!m_Button)
         return;
     if (m_Recording) {
-        m_Button->SetText("stop gizmo log");
+        m_Button->SetText("recording...");
         m_Button->SetColors({0.55f, 0.12f, 0.12f, 1.0f},
                             {0.7f, 0.2f, 0.2f, 1.0f},
                             {0.4f, 0.08f, 0.08f, 1.0f});
         m_Button->SetTextColor({1.0f, 1.0f, 1.0f, 1.0f});
-        if (m_Status)
-            m_Status->SetText("recording -> records/record_gizmo_log.txt");
     } else {
         m_Button->SetText("record gizmo log");
         m_Button->SetColors({0.7f, 0.2f, 0.2f, 1.0f},
                             {0.85f, 0.3f, 0.3f, 1.0f},
                             {0.5f, 0.12f, 0.12f, 1.0f});
         m_Button->SetTextColor({1.0f, 1.0f, 1.0f, 1.0f});
-        if (m_Status)
-            m_Status->SetText("idle");
     }
 }

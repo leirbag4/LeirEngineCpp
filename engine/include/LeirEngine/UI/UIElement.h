@@ -5,6 +5,7 @@
 #include "LeirEngine/Math/Vector4.h"
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace Leir {
 
@@ -81,6 +82,11 @@ public:
     bool IsClipEnabled() const { return m_Clip; }
 
     virtual Vector2 GetMinSize() const;
+    // Optional explicit minimum size override (layout still calls GetMinSize,
+    // which returns this when set — useful for buttons that need extra width).
+    void SetMinSize(const Vector2& minSize) { m_MinSizeOverride = minSize; }
+    bool HasMinSizeOverride() const { return m_MinSizeOverride.has_value(); }
+
     virtual Vector2 GetContentSize() const;
     virtual void ComputeLayout(const Vector2& availableSize);
 
@@ -106,6 +112,9 @@ public:
     bool IsHovered() const { return m_Hovered; }
 
 protected:
+    // Derived GetMinSize() implementations consult this when a caller used
+    // SetMinSize().
+    const std::optional<Vector2>& GetMinSizeOverride() const { return m_MinSizeOverride; }
     virtual void OnLayoutComputed() {}
 
     Rect2D m_Rect;
@@ -124,6 +133,7 @@ protected:
 private:
     UIElement* m_Parent = nullptr;
     std::vector<UIElement*> m_Children;
+    std::optional<Vector2> m_MinSizeOverride;
     Vector2 GetNaturalSize() const;
     void ComputeFreeLayout(const Vector2& availableSize);
     void ComputeRowLayout(const Vector2& availableSize);
