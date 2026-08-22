@@ -19,9 +19,6 @@ constexpr float kConeLenPx = 18.0f;
 constexpr float kConeRadiusPx = 8.0f;
 constexpr float kPlaneSizePx = 34.0f;
 constexpr float kPlaneAlpha = 0.25f;
-// Each translate plane square is offset along its own normal toward the
-// camera (Unity-style), so it is never occluded by another plane at any view.
-constexpr float kPlaneOffsetPx = 6.0f;
 constexpr float kRingRadiusPx = 55.0f;
 constexpr float kRingWidthPx = 2.5f;
 constexpr float kCubeHalfPx = 7.0f;
@@ -305,7 +302,66 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
         }
     }
 
-    // Arrow shafts + tips (translate) / handle cubes (scale).
+    if (!isScale) {
+        // ---- Translate: the plane squares win over the arrow lines ----
+        // When the camera-facing planes reorient, the perpendicular arrow shaft
+        // projects inside the plane's quad with ~0px distance, so testing the
+        // arrows first made them steal the hover (a distance tie). The planes
+        // are tested FIRST, and when the cursor is inside one the NEAREST plane
+        // to the camera wins (a tie across two planes -> pick the front one).
+        // Geometry matches Draw: all three squares SHARE the gizmo-center
+        // corner (no per-square normal offset -> they never cross) and extend
+        // toward the camera in their two in-plane axes.
+        const float s = kPlaneSizePx * g.worldPerPixel;
+        const Leir::Vector3 camPosPlane =
+            f.camera->GetOwner()->GetTransform().GetWorldPosition();
+        const Leir::Vector3 camDirPlane = (camPosPlane - g.center).Normalized();
+        const Ray pickRay = BuildMouseRay(f);
+        Handle bestPlane = Handle::None;
+        float bestPlaneDepth = 1e30f;
+        for (int a = 0; a < 3; ++a) {
+            const Leir::Vector3 n = g.axes[a];
+            const Leir::Vector3 u = g.axes[(a + 1) % 3];
+            const Leir::Vector3 v = g.axes[(a + 2) % 3];
+            const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
+            const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
+            const Leir::Vector3 p0 = g.center; // shared corner
+            const Leir::Vector3 p1 = p0 + u * (s * su);
+            const Leir::Vector3 p2 = p0 + u * (s * su) + v * (s * sv);
+            const Leir::Vector3 p3 = p0 + v * (s * sv);
+            Leir::Vector2 quad[4];
+            quad[0] = toScreen(p0);
+            quad[1] = toScreen(p1);
+            quad[2] = toScreen(p2);
+            quad[3] = toScreen(p3);
+            if (PointInQuadPx(mouse, quad)) {
+                // Depth of the plane at the cursor (ray-plane hit distance to
+                // the camera): the front-most plane wins ties.
+                Leir::Vector3 hit;
+                float depth = 1e30f;
+                if (RayPlane(pickRay, n, g.center, hit))
+                    depth = (hit - camPosPlane).Length();
+                if (depth < bestPlaneDepth) {
+                    bestPlaneDepth = depth;
+                    bestPlane = Handle((int)Handle::PlaneX + a);
+                }
+            } else {
+                float dq = 1e9f;
+                for (int i = 0; i < 4; ++i)
+                    dq = std::min(dq, PointSegmentDistPx(mouse, quad[i], quad[(i + 1) % 4]));
+                if (dq < kPlanePickPx)
+                    consider(Handle((int)Handle::PlaneX + a), dq);
+            }
+        }
+        if (bestPlane != Handle::None) {
+            outScore = 0.0f;
+            return bestPlane;
+        }
+    }
+
+    // Arrow shafts + tips (translate) / handle cubes (scale). Checked AFTER the
+    // planes for translate: a plane the cursor is inside (score 0) always beats
+    // the arrow line projected inside it.
     for (int a = 0; a < 3; ++a) {
         const Leir::Vector3 dir = g.axes[a];
         const Leir::Vector2 s0 = toScreen(g.center);
@@ -316,47 +372,6 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
         const float dTip = (mouse - s1).Length();
         if (dTip < kTipPickPx)
             consider(Handle((int)Handle::AxisX + a), dTip * 0.5f);
-    }
-
-    if (isScale) {
-        outScore = bestScore;
-        return best;
-    }
-
-    // Translate plane squares (one corner at the gizmo center, like a 3-sided
-    // cube corner). Each square blocks its own axis. The squares are offset
-    // toward the camera and extend in their in-plane axes toward it (same
-    // geometry as in Draw) so picking matches the visual and no plane is
-    // occluded by another.
-    const float s = kPlaneSizePx * g.worldPerPixel;
-    const float planeOffset = kPlaneOffsetPx * g.worldPerPixel;
-    const Leir::Vector3 camDirPlane =
-        (f.camera->GetOwner()->GetTransform().GetWorldPosition() - g.center).Normalized();
-    for (int a = 0; a < 3; ++a) {
-        const Leir::Vector3 n = g.axes[a];
-        const Leir::Vector3 u = g.axes[(a + 1) % 3];
-        const Leir::Vector3 v = g.axes[(a + 2) % 3];
-        const float on = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
-        const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
-        const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
-        const Leir::Vector3 p0 = g.center + n * (planeOffset * on);
-        const Leir::Vector3 p1 = p0 + u * (s * su);
-        const Leir::Vector3 p2 = p0 + u * (s * su) + v * (s * sv);
-        const Leir::Vector3 p3 = p0 + v * (s * sv);
-        Leir::Vector2 quad[4];
-        quad[0] = toScreen(p0);
-        quad[1] = toScreen(p1);
-        quad[2] = toScreen(p2);
-        quad[3] = toScreen(p3);
-        if (PointInQuadPx(mouse, quad)) {
-            consider(Handle((int)Handle::PlaneX + a), 0.0f);
-        } else {
-            float dq = 1e9f;
-            for (int i = 0; i < 4; ++i)
-                dq = std::min(dq, PointSegmentDistPx(mouse, quad[i], quad[(i + 1) % 4]));
-            if (dq < kPlanePickPx)
-                consider(Handle((int)Handle::PlaneX + a), dq);
-        }
     }
 
     outScore = bestScore;
@@ -582,22 +597,21 @@ void TransformGizmo::Draw(GizmoRenderer& g, const Leir::Matrix4x4& viewProjectio
             g.DrawCone(base, coneR, tip, c);
         }
         // ---- Translucent plane squares (3-sided cube at the center) ----
-        // Unity-style: each square is offset along its own normal toward the
-        // camera AND extends in its two in-plane axes toward the camera, so the
-        // three squares occupy different octants around the gizmo ("the corner
-        // that faces you") and none occludes another at any view angle.
-        const float planeOffset = kPlaneOffsetPx * s;
+        // Unity-style: the three squares SHARE a common corner at the gizmo
+        // center (they interlock like a 3-sided cube and never cross each
+        // other), and each extends toward the camera in its two in-plane axes
+        // (su/sv signs) so the corner always faces the view.
         const Leir::Vector3 camDirPlane = (camPos - center).Normalized();
         for (int a = 0; a < 3; ++a) {
             const Leir::Vector3 n = gf.axes[a];
             const Leir::Vector3 u = gf.axes[(a + 1) % 3];
             const Leir::Vector3 v = gf.axes[(a + 2) % 3];
-            // Flip the offset direction to whichever side faces the camera.
-            const float on = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
+            // Shared corner at the gizmo center (no per-square normal offset:
+            // that made the squares cross each other near the origin).
+            const Leir::Vector3 p0 = center;
             // Extend toward the camera in each in-plane axis.
             const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
             const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
-            const Leir::Vector3 p0 = center + n * (planeOffset * on);
             const Leir::Vector3 p1 = p0 + u * (planeS * su);
             const Leir::Vector3 p2 = p0 + u * (planeS * su) + v * (planeS * sv);
             const Leir::Vector3 p3 = p0 + v * (planeS * sv);
