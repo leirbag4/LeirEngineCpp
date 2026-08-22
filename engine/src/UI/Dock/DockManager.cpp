@@ -199,7 +199,7 @@ void DockManager::BuildDefaultLayout()
     static const char* kDebugIds[] = {
         "TestPanel", "CameraTestPanel", "DebugTextPanel", "TextAreaDebugPanel",
         "TextAreaWrapPanel",
-        "GridPanel", "ConsolePanel", "DebugPanel",
+        "GridPanel", "ConsolePanel", "DebugPanel", "GizmoLogPanel",
     };
     for (const char* id : kDebugIds)
         if (auto* p = FindPanelById(id))

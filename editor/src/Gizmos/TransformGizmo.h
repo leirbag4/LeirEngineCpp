@@ -59,6 +59,11 @@ public:
     bool IsDragging() const { return m_Drag.active; }
     bool IsOverHandle() const { return m_Hover != Handle::None; }
 
+    // Human-readable names for the gizmo log / DBG panel: the hovered handle
+    // and the dragged handle (e.g. "PlaneX", "AxisY", "RingZ", "Center", "None").
+    const char* GetHoverName() const;
+    const char* GetDragName() const;
+
 private:
     enum class Handle {
         None,

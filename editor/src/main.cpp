@@ -45,6 +45,7 @@
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "UI/ToolbarPanel.h"
+#include "UI/GizmoLogPanel.h"
 #include "Camera/EditorCamera.h"
 #include "Grid/EditorGrid.h"
 #include "Gizmos/GizmoRenderer.h"
@@ -513,6 +514,12 @@ protected:
         m_DebugPanel->SetName("DebugPanel");
         m_DebugPanel->SetFont(m_FontSmall.get());
 
+        // Gizmo/selection recorder (DBG panel): records camera + viewport input
+        // + gizmo/object state to records/record_gizmo_log.txt while armed.
+        m_GizmoLogPanel = new GizmoLogPanel();
+        m_GizmoLogPanel->SetName("GizmoLogPanel");
+        m_GizmoLogPanel->SetFont(m_FontSmall.get());
+
         // Gizmo-line live knobs (color / alpha / width), "Test2" tab.
         m_GizmoTestPanel = new GizmoLineTestPanel();
         m_GizmoTestPanel->SetName("GizmoTestPanel");
@@ -536,6 +543,7 @@ protected:
         m_DockManager->RegisterPanel("TextAreaWrapPanel", "Text Area Wrap", m_TextAreaWrapPanel, true);
         m_DockManager->RegisterPanel("ConsolePanel", "Console", m_ConsolePanel, true);
         m_DockManager->RegisterPanel("DebugPanel", "Debug Panel", m_DebugPanel, true);
+        m_DockManager->RegisterPanel("GizmoLogPanel", "DBG", m_GizmoLogPanel, true);
 
         // Restore a persisted layout, or fall back to the default one
         const std::string& dockJson = Leir::LeirSettings::Get().dock.layout;
@@ -757,6 +765,77 @@ protected:
             m_TransformGizmo.SetSelected(picked);
         }
 
+        // ---- Gizmo/selection recorder (DBG panel) ----
+        // While recording, dump every frame: camera + mouse state + viewport
+        // input events + gizmo tool/space + hovered/dragged handle + selected
+        // object transform. Writes to records/record_gizmo_log.txt.
+        if (m_GizmoLogPanel && m_GizmoLogPanel->IsRecording() && m_PrimaryCamera) {
+            auto* camOwner = m_PrimaryCamera->GetOwner();
+            Leir::Vector3 camPos = camOwner ? camOwner->GetTransform().GetWorldPosition()
+                                            : Leir::Vector3::Zero();
+            Leir::Vector2 mpos = Leir::Mouse::GetPos();
+            Leir::Vector2 mdelta = Leir::Mouse::GetDelta();
+            bool inVp = m_ViewportPanel && m_ViewportPanel->IsInsideViewport(mpos.x, mpos.y);
+
+            char buf[512];
+            std::snprintf(buf, sizeof(buf),
+                "cam=(%.3f,%.3f,%.3f) mouse=(%.1f,%.1f) d=(%.1f,%.1f) inVp=%d "
+                "L:%d%d%d R:%d%d%d M:%d%d%d",
+                camPos.x, camPos.y, camPos.z, mpos.x, mpos.y, mdelta.x, mdelta.y, inVp ? 1 : 0,
+                Leir::Mouse::WasPressed(Leir::PointerButton::Left) ? 1 : 0,
+                Leir::Mouse::IsDown(Leir::PointerButton::Left) ? 1 : 0,
+                Leir::Mouse::WasReleased(Leir::PointerButton::Left) ? 1 : 0,
+                Leir::Mouse::WasPressed(Leir::PointerButton::Right) ? 1 : 0,
+                Leir::Mouse::IsDown(Leir::PointerButton::Right) ? 1 : 0,
+                Leir::Mouse::WasReleased(Leir::PointerButton::Right) ? 1 : 0,
+                Leir::Mouse::WasPressed(Leir::PointerButton::Middle) ? 1 : 0,
+                Leir::Mouse::IsDown(Leir::PointerButton::Middle) ? 1 : 0,
+                Leir::Mouse::WasReleased(Leir::PointerButton::Middle) ? 1 : 0);
+            m_GizmoLogPanel->RecordLine(buf);
+
+            // Only log viewport events (clicks/drags), not UI/panel input.
+            if (inVp) {
+                if (Leir::Mouse::WasPressed(Leir::PointerButton::Left))
+                    m_GizmoLogPanel->RecordLine("EVENT L-DOWN viewport");
+                if (Leir::Mouse::WasReleased(Leir::PointerButton::Left))
+                    m_GizmoLogPanel->RecordLine("EVENT L-UP viewport");
+                if (Leir::Mouse::WasPressed(Leir::PointerButton::Right))
+                    m_GizmoLogPanel->RecordLine("EVENT R-DOWN viewport");
+                if (Leir::Mouse::WasReleased(Leir::PointerButton::Right))
+                    m_GizmoLogPanel->RecordLine("EVENT R-UP viewport");
+                if (Leir::Mouse::WasPressed(Leir::PointerButton::Middle))
+                    m_GizmoLogPanel->RecordLine("EVENT M-DOWN viewport");
+                if (Leir::Mouse::WasReleased(Leir::PointerButton::Middle))
+                    m_GizmoLogPanel->RecordLine("EVENT M-UP viewport");
+                if (mdelta.x != 0.0f || mdelta.y != 0.0f)
+                    m_GizmoLogPanel->RecordLine("EVENT MOVE viewport");
+            }
+
+            // Gizmo + selection state.
+            auto* sel = m_TransformGizmo.GetSelected();
+            if (sel) {
+                auto& t = sel->GetTransform();
+                auto p = t.GetLocalPosition();
+                auto e = Leir::Quaternion::ToEuler(t.GetLocalRotation());
+                auto sc = t.GetLocalScale();
+                const char* tool =
+                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Translate ? "T" :
+                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Rotate ? "R" :
+                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Scale ? "S" : "?";
+                const char* space =
+                    m_TransformGizmo.GetSpace() == TransformGizmo::Space::Global ? "G" : "L";
+                std::snprintf(buf, sizeof(buf),
+                    "SEL '%s' tool=%s space=%s hover=%s drag=%s "
+                    "pos=(%.4f,%.4f,%.4f) rot=(%.2f,%.2f,%.2f) scale=(%.4f,%.4f,%.4f)",
+                    sel->GetName().c_str(), tool, space,
+                    m_TransformGizmo.GetHoverName(), m_TransformGizmo.GetDragName(),
+                    p.x, p.y, p.z, e.x, e.y, e.z, sc.x, sc.y, sc.z);
+                m_GizmoLogPanel->RecordLine(buf);
+            } else {
+                m_GizmoLogPanel->RecordLine("SEL <none>");
+            }
+        }
+
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
 
@@ -939,6 +1018,8 @@ protected:
         m_ConsolePanel = nullptr;
         DeleteUiSubtree(m_DebugPanel);
         m_DebugPanel = nullptr;
+        DeleteUiSubtree(m_GizmoLogPanel); // dtor closes the log file if recording
+        m_GizmoLogPanel = nullptr;
         DeleteUiSubtree(m_Toolbar);
         m_Toolbar = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
@@ -1152,6 +1233,7 @@ private:
     TextAreaDebugPanel* m_TextAreaDebugPanel = nullptr;
     TextAreaWrapPanel* m_TextAreaWrapPanel = nullptr;
     DebugPanel* m_DebugPanel = nullptr;
+    GizmoLogPanel* m_GizmoLogPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
 
 #ifdef LEIR_EDITOR_SLANG

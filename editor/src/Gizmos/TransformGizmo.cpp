@@ -513,6 +513,48 @@ void TransformGizmo::EndDrag()
     m_Hover = Handle::None;
 }
 
+const char* TransformGizmo::GetHoverName() const
+{
+    switch (m_Hover) {
+        case Handle::AxisX:   return "AxisX";
+        case Handle::AxisY:   return "AxisY";
+        case Handle::AxisZ:   return "AxisZ";
+        case Handle::PlaneX:  return "PlaneX";
+        case Handle::PlaneY:  return "PlaneY";
+        case Handle::PlaneZ:  return "PlaneZ";
+        case Handle::RingX:   return "RingX";
+        case Handle::RingY:   return "RingY";
+        case Handle::RingZ:   return "RingZ";
+        case Handle::CubeX:   return "CubeX";
+        case Handle::CubeY:   return "CubeY";
+        case Handle::CubeZ:   return "CubeZ";
+        case Handle::Center:  return "Center";
+        default:              return "None";
+    }
+}
+
+const char* TransformGizmo::GetDragName() const
+{
+    if (!m_Drag.active)
+        return "None";
+    switch (m_Drag.handle) {
+        case Handle::AxisX:   return "AxisX";
+        case Handle::AxisY:   return "AxisY";
+        case Handle::AxisZ:   return "AxisZ";
+        case Handle::PlaneX:  return "PlaneX";
+        case Handle::PlaneY:  return "PlaneY";
+        case Handle::PlaneZ:  return "PlaneZ";
+        case Handle::RingX:   return "RingX";
+        case Handle::RingY:   return "RingY";
+        case Handle::RingZ:   return "RingZ";
+        case Handle::CubeX:   return "CubeX";
+        case Handle::CubeY:   return "CubeY";
+        case Handle::CubeZ:   return "CubeZ";
+        case Handle::Center:  return "Center";
+        default:              return "None";
+    }
+}
+
 void TransformGizmo::DrawRingArc(GizmoRenderer& g, const Leir::Vector3& center,
                                  float radius, const Leir::Vector3& normal,
                                  const Leir::Vector4& color, const Leir::Vector3& camPos,
