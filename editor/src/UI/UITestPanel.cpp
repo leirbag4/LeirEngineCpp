@@ -1,6 +1,7 @@
 #include "UITestPanel.h"
 #include <LeirEngine/Core/Transform.h>
 #include <functional>
+#include <cmath>
 
 UITestPanel::UITestPanel()
 {
@@ -52,22 +53,26 @@ UITestPanel::UITestPanel()
     });
 
     // ---- Rotation (Euler degrees) ----
+    // Editing a field changes only that axis. The other two keep the last
+    // displayed values (m_RotEuler cache) — they are NOT re-derived from the
+    // live quaternion, which would inject an Euler alias (Euler->quat->ToEuler
+    // is not an exact inverse) and make the numbers drift on every edit.
     m_RotTitle = makeTitle("Rotation");
     auto* rotRow = makeRow();
     AddField(rotRow, "X:", m_RotX, [this](float v) {
         if (!m_Target) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.x = v;
-        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        m_RotEuler.x = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(m_RotEuler));
     });
     AddField(rotRow, "Y:", m_RotY, [this](float v) {
         if (!m_Target) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.y = v;
-        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        m_RotEuler.y = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(m_RotEuler));
     });
     AddField(rotRow, "Z:", m_RotZ, [this](float v) {
         if (!m_Target) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation()); euler.z = v;
-        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        m_RotEuler.z = v;
+        m_Target->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(m_RotEuler));
     });
 
     // ---- Scale ----
@@ -122,6 +127,8 @@ void UITestPanel::AddField(Leir::UIPanel* parent, const std::string& labelText, 
 void UITestPanel::SetTargetObject(Leir::Object3D* obj)
 {
     m_Target = obj;
+    if (m_Target)
+        m_RotEuler = Leir::Quaternion::ToEuler(m_Target->GetTransform().GetLocalRotation(), m_RotEuler);
 }
 
 void UITestPanel::Refresh()
@@ -133,10 +140,19 @@ void UITestPanel::Refresh()
         m_PosY->SetValue(pos.y);
         m_PosZ->SetValue(pos.z);
 
-        auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
-        m_RotX->SetValue(euler.x);
-        m_RotY->SetValue(euler.y);
-        m_RotZ->SetValue(euler.z);
+        // Rotation: if the transform's rotation still matches the last values we
+        // wrote, keep showing them exactly (no alias round-trip). Otherwise the
+        // rotation changed externally (gizmo drag, camera sync, code): re-sync
+        // the cache picking the Euler branch closest to the previous display so
+        // the numbers follow smoothly instead of jumping to a far-away branch.
+        auto current = t.GetLocalRotation();
+        auto expected = Leir::Quaternion::Euler(m_RotEuler);
+        if (std::fabs(Leir::Quaternion::Dot(current, expected)) < 0.999999f) {
+            m_RotEuler = Leir::Quaternion::ToEuler(current, m_RotEuler);
+        }
+        m_RotX->SetValue(m_RotEuler.x);
+        m_RotY->SetValue(m_RotEuler.y);
+        m_RotZ->SetValue(m_RotEuler.z);
 
         auto scale = t.GetLocalScale();
         m_ScaleX->SetValue(scale.x);

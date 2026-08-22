@@ -36,6 +36,11 @@ private:
     UIDragFloatInput* m_RotX = nullptr;
     UIDragFloatInput* m_RotY = nullptr;
     UIDragFloatInput* m_RotZ = nullptr;
+    // Last Euler values written/shown. Source of truth for the rotation fields:
+    // editing one axis only touches this cache, and Refresh re-syncs it from the
+    // transform only when the rotation changed externally (gizmo, code, camera),
+    // picking the equivalent branch closest to the current display (no jumps).
+    Leir::Vector3 m_RotEuler = Leir::Vector3::Zero();
 
     Leir::UILabel* m_ScaleTitle = nullptr;
     UIDragFloatInput* m_ScaleX = nullptr;
