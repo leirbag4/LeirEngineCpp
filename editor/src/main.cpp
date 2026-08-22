@@ -675,13 +675,13 @@ protected:
                 cameraObj->GetTransform().SetLocalPosition(m_EditorCamera.GetPosition());
                 cameraObj->GetTransform().SetLocalRotation(m_EditorCamera.GetRotation());
             } else {
-                // escena → EditorCamera (panel edits)
+                // escena → EditorCamera (panel edits). Use the exact inverse of
+                // GetRotation() (roll=0) — Quaternion::ToEuler/glm::eulerAngles
+                // returns an Euler ALIAS (yaw->180-yaw, roll->±180) for
+                // |yaw|>90, which used to corrupt the camera on the readback.
                 auto& t = cameraObj->GetTransform();
-                auto pos = t.GetLocalPosition();
-                auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
-                m_EditorCamera.SetPosition(pos);
-                m_EditorCamera.SetYaw(euler.y);
-                m_EditorCamera.SetPitch(euler.x);
+                m_EditorCamera.SetPosition(t.GetLocalPosition());
+                m_EditorCamera.SetFromRotation(t.GetLocalRotation());
             }
         }
 

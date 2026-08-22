@@ -1,5 +1,20 @@
 #include "CameraTestPanel.h"
 #include <LeirEngine/Core/Transform.h>
+#include <cmath>
+
+namespace {
+// Inverse of Quaternion::Euler(pitch, yaw, 0) — see EditorCamera::SetFromRotation.
+// R = Ry(yaw)*Rx(pitch) => fwd = (-sin(yaw)cos(pitch), sin(pitch), -cos(yaw)cos(pitch)).
+// Avoids glm::eulerAngles which returns an alias (yaw->180-yaw, roll->±180).
+Leir::Vector3 RollZeroEuler(const Leir::Quaternion& rot)
+{
+    const Leir::Vector3 fwd = rot * Leir::Vector3::Forward();
+    return Leir::Vector3(
+        std::asin(Leir::Mathf::Clamp(fwd.y, -1.0f, 1.0f)) * Leir::Mathf::Rad2Deg,
+        std::atan2(-fwd.x, -fwd.z) * Leir::Mathf::Rad2Deg,
+        0.0f);
+}
+} // namespace
 
 CameraTestPanel::CameraTestPanel()
 {
@@ -50,23 +65,23 @@ CameraTestPanel::CameraTestPanel()
         m_Camera->GetTransform().SetLocalPosition(p);
     });
 
-    // ---- Rotation (Euler degrees) ----
+    // ---- Rotation (Euler degrees, roll=0 decomposition) ----
     m_RotTitle = makeTitle("Rotation");
     auto* rotRow = makeRow();
     AddField(rotRow, "X:", m_RotX, [this](float v) {
         if (!m_Camera) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.x = v;
-        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        auto euler = RollZeroEuler(m_Camera->GetTransform().GetLocalRotation()); euler.x = v;
+        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, 0.0f));
     });
     AddField(rotRow, "Y:", m_RotY, [this](float v) {
         if (!m_Camera) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.y = v;
-        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        auto euler = RollZeroEuler(m_Camera->GetTransform().GetLocalRotation()); euler.y = v;
+        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, 0.0f));
     });
     AddField(rotRow, "Z:", m_RotZ, [this](float v) {
         if (!m_Camera) return;
-        auto euler = Leir::Quaternion::ToEuler(m_Camera->GetTransform().GetLocalRotation()); euler.z = v;
-        m_Camera->GetTransform().SetLocalRotation(Leir::Quaternion::Euler(euler.x, euler.y, euler.z));
+        // Camera has no roll; Z edits are ignored.
+        (void)v;
     });
 }
 
@@ -101,7 +116,7 @@ void CameraTestPanel::Refresh()
     m_PosY->SetValue(pos.y);
     m_PosZ->SetValue(pos.z);
 
-    auto euler = Leir::Quaternion::ToEuler(t.GetLocalRotation());
+    auto euler = RollZeroEuler(t.GetLocalRotation());
     m_RotX->SetValue(euler.x);
     m_RotY->SetValue(euler.y);
     m_RotZ->SetValue(euler.z);

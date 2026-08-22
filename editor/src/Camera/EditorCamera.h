@@ -19,6 +19,12 @@ public:
     void SetYaw(float y) { m_Yaw = y; }
     void SetPitch(float p) { m_Pitch = Leir::Mathf::Clamp(p, -89.0f, 89.0f); }
 
+    // Inverse of GetRotation() (which is always Euler(pitch, yaw, 0), roll=0).
+    // Do NOT use Quaternion::ToEuler for this: glm::eulerAngles returns an
+    // equivalent ALIAS (yaw -> 180-yaw, roll -> ±180) once |yaw|>90, which
+    // corrupts the accumulated yaw/pitch on the scene -> editor sync.
+    void SetFromRotation(const Leir::Quaternion& rot);
+
 private:
     Leir::Vector3 m_Position = {0.0f, 2.0f, 4.0f};
     float m_Yaw = 0.0f;
