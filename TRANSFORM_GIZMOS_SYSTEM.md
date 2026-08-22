@@ -1,7 +1,7 @@
 # Transform Gizmo System
 
 Sistema de gizmos de transformación 3D estilo Unity (traslación, rotación, escalado)
-para el editor. Estado: **EN DESARROLLO** (fase 5 en curso).
+para el editor. Estado: **COMPLETO** (verificado por el usuario, ctest 2/2, CI verde).
 
 ## Concepto
 
@@ -92,6 +92,11 @@ EditorApp (main.cpp)
 - [x] **Cuadraditos de plano ocultos entre sí al girar la cámara** (2026-08-22, estilo Unity): el plano rojo (pared YZ) tapaba al verde (suelo XZ) desde ciertos ángulos → el verde no se podía seleccionar. Fix (Unity-style): cada cuadradito de área se (a) offsetea a lo largo de su NORMAL hacia el lado de la cámara (`on = sign(dot(camDir, n))`) Y (b) se extiende en sus dos ejes internos **hacia la cámara** (`su = sign(dot(camDir,u))`, `sv = sign(dot(camDir,v))`), ocupando octantes distintos alrededor del origen ("el rincón que te enfrenta"). Se aplica igual en `Draw` y `Pick` (hit-test coincide con lo visual). El drag sigue usando el plano matemático real (normal del eje bloqueado por `startPos`); el offset es solo visual/picking. Verificado por el usuario (girar cámara: los 3 planos quedan visibles y seleccionables).
 - [x] **Panel DBG + grabador de gizmo/objeto** (2026-08-22, `editor/src/UI/GizmoLogPanel.h/.cpp`): panel dockeable "DBG" con botón rojo "record gizmo log" / "recording...". Mientras graba, escribe a `<configDir>/LeirEngine/records/record_gizmo_log.txt`. **Solo registra EVENTOS DE INPUT REALES** (mouse move/click/wheel, teclado, char) vía hooks del `EventQueue` (`Add*Hook`, que coexisten con el canvas que usa `Set*Hook`): si no hay input, no se escribe nada (como el log de consola). Por cada evento escribe la línea del evento + el estado completo: cámara, gizmo (tool T/R/S, space G/L, hover/drag handle vía `TransformGizmo::GetHoverName()/GetDragName()`) + objeto seleccionado (pos/rot/scale euler). Herramienta de diagnóstico para bugs de picking. `EventQueue` ahora soporta múltiples hooks por tipo (vectores) — `Set*Hook` reemplaza la lista, `Add*Hook` agrega. Registrado como panel dockeable y agregado a `kDebugIds` del default layout.
 - [x] **Bug post-fix: los planos se cruzaban entre sí + hover robado por las flechas** (2026-08-22): (1) el offset PER-CUADRADO por su propia normal (`p0 = center + n*on*off`) hacía que cada plano partiera de una esquina distinta → se entrecruzaban cerca del origen (el azul/pared atravesaba al rojo). Fix: los 3 cuadrados comparten la MISMA esquina en `g.center` (p0 = center, sin offset por normal individual) y solo se extienden hacia la cámara en sus ejes internos → se encastran como cubo de 3 lados sin cruzarse. (2) al reorientarse los planos, la flecha perpendicular se proyectaba dentro del quad con ~0px y ganaba el empate del hover (las flechas se testeban primero). Fix: en `Pick` para Translate los planos se testean PRIMERO; si el cursor está dentro de uno, gana el plano más cercano a la cámara (profundidad del hit rayo↔plano) y retorna directo. Las flechas solo compiten cuando el mouse no está sobre ningún plano.
+
+### Cierre — extras de cámara y atajos (2026-08-22)
+- [x] **Fix del salto de cámara al rotar >90°** (gimbal lock por alias de Euler): `Quaternion::ToEuler` (= `glm::eulerAngles`) devuelve `(160, 80, 180)` para `Euler(-20, 100, 0)` (yaw→180−yaw, roll→±180); el sync inverso `escena→EditorCamera` inyectaba ese roll=180 y corrompía la cámara. Fix: `EditorCamera::SetFromRotation(rot)` — inversa exacta de `GetRotation()` (Ry·Rx, roll=0) vía forward (`pitch=asin(fwd.y)`, `yaw=atan2(−fwd.x,−fwd.z)`). El `CameraTestPanel` usa la misma descomposición (`RollZeroEuler`).
+- [x] **E/Q y paneo (middle mouse) usan el UP de la cámara**: nuevo `EditorCamera::GetUp()` (`rot * Up()`); E sube / Q baja a lo largo del up de cámara; el paneo se mueve sobre el plano UP/RIGHT de la cámara (horizontal en `GetRight()`, vertical en `GetUp()`) — como Unity.
+- [x] **Q togglea Global/Local** (solo Translate/Rotate; en Scale se ignora), con las mismas guardas que W/E/R (no al volar cámara, no escribiendo, no durante drag).
 
 ## Decisiones de diseño
 
