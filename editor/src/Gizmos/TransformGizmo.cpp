@@ -325,8 +325,9 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
 
     // Translate plane squares (one corner at the gizmo center, like a 3-sided
     // cube corner). Each square blocks its own axis. The squares are offset
-    // toward the camera (same as in Draw) so picking matches the visual and no
-    // plane is occluded by another.
+    // toward the camera and extend in their in-plane axes toward it (same
+    // geometry as in Draw) so picking matches the visual and no plane is
+    // occluded by another.
     const float s = kPlaneSizePx * g.worldPerPixel;
     const float planeOffset = kPlaneOffsetPx * g.worldPerPixel;
     const Leir::Vector3 camDirPlane =
@@ -335,13 +336,18 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
         const Leir::Vector3 n = g.axes[a];
         const Leir::Vector3 u = g.axes[(a + 1) % 3];
         const Leir::Vector3 v = g.axes[(a + 2) % 3];
-        const float side = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
-        const Leir::Vector3 off = n * (planeOffset * side);
+        const float on = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
+        const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
+        const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
+        const Leir::Vector3 p0 = g.center + n * (planeOffset * on);
+        const Leir::Vector3 p1 = p0 + u * (s * su);
+        const Leir::Vector3 p2 = p0 + u * (s * su) + v * (s * sv);
+        const Leir::Vector3 p3 = p0 + v * (s * sv);
         Leir::Vector2 quad[4];
-        quad[0] = toScreen(g.center + off);
-        quad[1] = toScreen(g.center + u * s + off);
-        quad[2] = toScreen(g.center + u * s + v * s + off);
-        quad[3] = toScreen(g.center + v * s + off);
+        quad[0] = toScreen(p0);
+        quad[1] = toScreen(p1);
+        quad[2] = toScreen(p2);
+        quad[3] = toScreen(p3);
         if (PointInQuadPx(mouse, quad)) {
             consider(Handle((int)Handle::PlaneX + a), 0.0f);
         } else {
@@ -576,8 +582,10 @@ void TransformGizmo::Draw(GizmoRenderer& g, const Leir::Matrix4x4& viewProjectio
             g.DrawCone(base, coneR, tip, c);
         }
         // ---- Translucent plane squares (3-sided cube at the center) ----
-        // Each square is offset along its own normal TOWARD the camera so it
-        // is never occluded by another plane at any view angle (Unity-style).
+        // Unity-style: each square is offset along its own normal toward the
+        // camera AND extends in its two in-plane axes toward the camera, so the
+        // three squares occupy different octants around the gizmo ("the corner
+        // that faces you") and none occludes another at any view angle.
         const float planeOffset = kPlaneOffsetPx * s;
         const Leir::Vector3 camDirPlane = (camPos - center).Normalized();
         for (int a = 0; a < 3; ++a) {
@@ -585,18 +593,20 @@ void TransformGizmo::Draw(GizmoRenderer& g, const Leir::Matrix4x4& viewProjectio
             const Leir::Vector3 u = gf.axes[(a + 1) % 3];
             const Leir::Vector3 v = gf.axes[(a + 2) % 3];
             // Flip the offset direction to whichever side faces the camera.
-            const float side = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
-            const Leir::Vector3 off = n * (planeOffset * side);
+            const float on = Leir::Vector3::Dot(camDirPlane, n) >= 0.0f ? 1.0f : -1.0f;
+            // Extend toward the camera in each in-plane axis.
+            const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
+            const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
+            const Leir::Vector3 p0 = center + n * (planeOffset * on);
+            const Leir::Vector3 p1 = p0 + u * (planeS * su);
+            const Leir::Vector3 p2 = p0 + u * (planeS * su) + v * (planeS * sv);
+            const Leir::Vector3 p3 = p0 + v * (planeS * sv);
             Leir::Vector4 c = AxisColor(a);
             bool isHover = IsDragging() ? (m_Drag.handle == Handle((int)Handle::PlaneX + a))
                                         : (m_Hover == Handle((int)Handle::PlaneX + a));
             if (isHover)
                 c = Hover(c);
             c.w = kPlaneAlpha;
-            const Leir::Vector3 p0 = center + off;
-            const Leir::Vector3 p1 = center + u * planeS + off;
-            const Leir::Vector3 p2 = center + u * planeS + v * planeS + off;
-            const Leir::Vector3 p3 = center + v * planeS + off;
             g.DrawQuadFilled(p0, p1, p2, p3, c);
         }
     } else if (m_Tool == Tool::Rotate) {
