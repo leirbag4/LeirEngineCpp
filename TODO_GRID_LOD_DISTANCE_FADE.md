@@ -370,36 +370,30 @@ sin huecos en los ejes; count ~300-600.
   +`depth`/`spacingOut` (view depth interpolada), push block ampliado.
 - `engine/shaders/Grid.frag.slang` — fade por pixel (fog by depth): `min(fadeCelda,
   fadeHorizonte)` con smoothsteps, `spacing <= 0` = opaco (ejes).
-- `engine/shaders/Grid.vert.wgsl` / `Grid.frag.wgsl` — espejos del `.slang` para
-  el backend WebGPU (runtime carga estos a mano; ver Deuda técnica del cableado).
+- **`Grid.vert.wgsl`/`Grid.frag.wgsl` YA NO existen a mano**: se generan desde el
+  `.slang` al arrancar el editor (`ShaderExporter::WriteRuntimeWebGpuShaders`,
+  post-procesado: `vs_main`/`ps_main`, push `@group(1)@binding(0)`, inputs 0..6).
+  Ver `TODO_WEBGPU_SINGLE_SOURCE.md`.
 - `engine/src/Rendering/VulkanDevice.cpp` — `dstAlphaBlendFactor`
   `ONE_MINUS_SRC_ALPHA` (paridad con D3D12/WebGPU).
-- `editor/src/UI/GizmoLineTestPanel.h/.cpp` — panel Test2 (knobs px/unit,
-  fadeStart/fadeEnd/thickWidth/horizonStart/horizonEnd).
+- `editor/src/UI/GizmoLineTestPanel.h/.cpp` — panel Test2 (solo la línea de
+  gizmo: R/G/B/Alpha/Width).
+- `editor/src/UI/GridPanel.h/.cpp` — panel "Grid" (knobs px/unit, fadeStart/
+  fadeEnd, thickWidth, horizonStart/horizonEnd + toggle Manual/Auto + auto
+  horizon por altura).
 - `editor/src/main.cpp` — HUD `GridLodDebug` (+ línea `role`/`horizon`), call a
   `m_Grid->Render`.
 
 ## Deuda técnica / pendientes
 
-- **Cablear Slang→WGSL al runtime WebGPU (PENDIENTE, acordado con el usuario)**: el
-  diseño es "escribir el shader una vez en `.slang` y exportarlo por backend"
-  (`ShaderExporter::ExportAll` ya traduce a SPIR-V/DXIL/Metal/WGSL/GLSL450 →
-  `shaders_export/`). Pero el **runtime WebGPU no usa ese export**: carga los
-  `.wgsl` **escritos a mano** en `engine/shaders/` (copiados verbatim por CMake),
-  que se mantienen espejando el `.slang` y **derivan** (por eso el Fix 10 de los
-  `.wgsl` del grid quedó atrasado). Para cerrar el diseño single-source hay que:
-  1. Al arrancar el editor (junto a `WriteRuntimeSidecars`), exportar el WGSL de
-     los shaders a `LEIR_SHADER_DIR` (o que el backend WebGPU lea del export).
-  2. Alinear **entry points**: el backend WebGPU hardcodea `vs_main`/`ps_main`
-     (WebGPUBackend.cpp:1366/1370); el export de Slang usa `main`. O configurar
-     el entry point del pipeline o renombrar en el export.
-  3. Alinear el **group/binding del push**: el backend espera `@group(1)
-     @binding(0)` para el UBO de push; Slang mapearía `register(b1, space0)`
-     distinto. Verificar y alinear.
-  4. Validar que el WGSL exportado compile en wgpu-native (naga): el Grid no usa
-     bindless, así que es buen candidato; otros shaders (UI/Sprite con
-     `binding_array`) tienen casos conocidos que naga no acepta.
-  Mientras tanto, los `.wgsl` a mano se mantienen actualizados a mano.
+- **Cableado Slang→WGSL al runtime WebGPU: el GRID YA ESTÁ HECHO (Fases 0-2,
+  2026-08-21)**. `ShaderExporter::WriteRuntimeWebGpuShaders` genera
+  `Grid.vert/frag.wgsl` desde el `.slang` al arrancar el editor (post-procesado:
+  entry `vs_main`/`ps_main`, push `@group(1)@binding(0)`, locations de inputs
+  0..6). Se eliminaron los `.wgsl` hand-written del grid y su copia del CMake.
+  Queda **pendiente** extender el single-source a los otros shaders
+  (Basic/Sprite/UI/Gizmo) con `#ifdef LEIR_BINDLESS` (native bindless / web
+  single-texture) — ver `TODO_WEBGPU_SINGLE_SOURCE.md`.
 - El modo manual (knob `px/unit`, `densityOverride`) se mantiene a propósito:
   es un andamiaje de testeo útil para verificar la transición LOD sin tocar la
   cámara. Descartable si sobra.

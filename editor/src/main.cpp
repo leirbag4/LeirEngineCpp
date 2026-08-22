@@ -197,6 +197,14 @@ protected:
             auto sidecarLines = ShaderExporter::WriteRuntimeSidecars(m_ShaderCompiler.get());
             for (const auto& line : sidecarLines)
                 Leir::XConsole::Println("{}", line);
+
+            // Single-source WGSL for the WebGPU backend (grid first): generate
+            // Grid.vert/frag.wgsl from the .slang (post-processed for the
+            // backend) so the wgpu-native backend never loads stale hand-written
+            // mirrors. Must run before the grid pipeline is created below.
+            auto wgpuLines = ShaderExporter::WriteRuntimeWebGpuShaders(m_ShaderCompiler.get());
+            for (const auto& line : wgpuLines)
+                Leir::XConsole::Println("{}", line);
         }
 #endif
 

@@ -159,8 +159,6 @@ set(WGSL_SOURCES
     shaders/Sprite.frag.wgsl
     shaders/UI.vert.wgsl
     shaders/UI.frag.wgsl
-    shaders/Grid.vert.wgsl
-    shaders/Grid.frag.wgsl
     shaders/Gizmo.vert.wgsl
     shaders/Gizmo.frag.wgsl
 )

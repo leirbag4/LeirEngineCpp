@@ -73,6 +73,108 @@ std::string ReflectionToJson(const Leir::RHI::ShaderReflection& reflection,
     return j.dump(2);
 }
 
+// ---- WGSL post-processing (single-source Grid shaders -> WebGPU backend) ----
+
+// The WebGPU backend hardcodes the entry points vs_main/ps_main; Slang's WGSL
+// output names the entry after the .slang function (main). Rename it.
+void RenameWgslEntry(std::string& wgsl, Leir::RHI::ShaderStage stage)
+{
+    const std::string from = "fn main(";
+    const std::string to =
+        stage == Leir::RHI::ShaderStage::Vertex ? "fn vs_main(" : "fn ps_main(";
+    const size_t p = wgsl.find(from);
+    if (p != std::string::npos)
+        wgsl.replace(p, from.size(), to);
+}
+
+// Slang emits the push constants as a bare `var<uniform> push_N` with no
+// group/binding. The WebGPU backend emulates push constants as a uniform buffer
+// at group index = the shader's descriptor-set count (1 for the grid's UBO),
+// binding 0. Annotate it so it binds to the backend's push layout.
+void AnnotateWgslPush(std::string& wgsl)
+{
+    const std::string pushVar = "var<uniform> push_";
+    const size_t p = wgsl.find(pushVar);
+    if (p != std::string::npos)
+        wgsl.insert(p, "@group(1) @binding(0) ");
+}
+
+// Slang's WGSL writer assigns VERTEX-INPUT locations from the HLSL semantics
+// (POSITION0/TEXCOORDN/COLOR0), not the explicit vk::location, so they come out
+// reordered (the grid exports start=0, end=5, color=6, cornerX=1, ...). The
+// engine's vertex input state provides them in declaration order, so renumber
+// the fields of the `vertexInput_*` struct to 0..N in declaration order.
+void RenumberVertexInputLocations(std::string& wgsl)
+{
+    const size_t marker = wgsl.find("struct vertexInput_");
+    if (marker == std::string::npos)
+        return;
+    const size_t brace = wgsl.find('{', marker);
+    if (brace == std::string::npos)
+        return;
+    const size_t closeBrace = wgsl.find("};", brace);
+    if (closeBrace == std::string::npos)
+        return;
+
+    const std::string locPrefix = "@location(";
+    int loc = 0;
+    size_t pos = brace;
+    while (pos < closeBrace) {
+        const size_t lp = wgsl.find(locPrefix, pos);
+        if (lp == std::string::npos || lp >= closeBrace)
+            break;
+        const size_t close = wgsl.find(')', lp);
+        if (close == std::string::npos || close >= closeBrace)
+            break;
+        const std::string repl = locPrefix + std::to_string(loc) + ")";
+        wgsl.replace(lp, close - lp + 1, repl);
+        ++loc;
+        pos = lp + repl.size();
+    }
+}
+
+// Slang's WGSL target emits `vector * matrix` (row-vector) for the logical
+// `matrix * vector` because it stores matrices transposed in WGSL. With our GLM
+// column-major UBO the reconstructed WGSL matrix equals the logical one, so
+// `vector * matrix` computes the TRANSPOSE (broken projection — the grid
+// rendered as solid rectangles pointing everywhere). Swap the two operands so
+// it computes `matrix * vector`.
+void FixWgslMatrixMultiply(std::string& wgsl)
+{
+    const std::string op = " * (mat4x4<f32>";
+    size_t p = 0;
+    while ((p = wgsl.find(op, p)) != std::string::npos) {
+        // Matrix expression opens at the '(' right after " * ".
+        const size_t matOpen = p + 3;
+        size_t depth = 0;
+        size_t i = matOpen;
+        for (; i < wgsl.size(); ++i) {
+            if (wgsl[i] == '(') ++depth;
+            else if (wgsl[i] == ')') { if (--depth == 0) break; }
+        }
+        const size_t matEnd = i; // inclusive ')'
+        if (matEnd >= wgsl.size())
+            break;
+
+        // The vector expression's closing ')' is just before the " * ".
+        const size_t vecClose = p - 1;
+        depth = 0;
+        size_t j = vecClose;
+        for (; j > 0; --j) {
+            if (wgsl[j] == ')') ++depth;
+            else if (wgsl[j] == '(') { if (--depth == 0) break; }
+        }
+        if (depth != 0)
+            break;
+        const size_t vecOpen = j; // inclusive '('
+
+        const std::string vecExpr = wgsl.substr(vecOpen, vecClose - vecOpen + 1);
+        const std::string matExpr = wgsl.substr(matOpen, matEnd - matOpen + 1);
+        wgsl.replace(vecOpen, matEnd - vecOpen + 1, matExpr + " * " + vecExpr);
+        p = vecOpen + matExpr.size() + 3 + vecExpr.size();
+    }
+}
+
 } // namespace
 
 std::vector<Leir::RHI::ShaderTarget> AllTargets()
@@ -255,6 +357,60 @@ std::vector<std::string> ShaderExporter::WriteRuntimeSidecars(
 
     lines.push_back(std::string("[Sidecar] ") + std::to_string(ok) + "/" +
         std::to_string(ShaderFiles().size()) + " reflections -> " + kRuntimeShaderDir +
+        (failed ? " (" + std::to_string(failed) + " failed)" : ""));
+    return lines;
+}
+
+std::vector<std::string> ShaderExporter::WriteRuntimeWebGpuShaders(
+    Leir::RHI::IShaderCompiler* compiler)
+{
+    std::vector<std::string> lines;
+    if (!compiler || !compiler->IsAvailable()) {
+        lines.push_back("[WebGPU] shader compiler unavailable");
+        return lines;
+    }
+
+    // Scope: the editor-grid shaders (the WebGPU backend loads these names). The
+    // other shaders still use their hand-maintained .wgsl for now.
+    struct GridFile { const char* name; Leir::RHI::ShaderStage stage; };
+    static const GridFile kGridFiles[] = {
+        { "Grid.vert", Leir::RHI::ShaderStage::Vertex },
+        { "Grid.frag", Leir::RHI::ShaderStage::Fragment },
+    };
+
+    int ok = 0, failed = 0;
+    for (const auto& f : kGridFiles) {
+        const std::string src = std::string(kShaderDir) + "/" + f.name + ".slang";
+        auto result = compiler->Compile(src, Leir::RHI::ShaderTarget::WGSL, f.stage,
+            /*reflect=*/false);
+        if (!result.ok) {
+            ++failed;
+            lines.push_back(std::string("[WebGPU] ") + f.name + " FAILED: " + result.error);
+            continue;
+        }
+        std::string wgsl(reinterpret_cast<const char*>(result.bytecode.data()),
+                         result.bytecode.size());
+        RenameWgslEntry(wgsl, f.stage);
+        AnnotateWgslPush(wgsl);
+        if (f.stage == Leir::RHI::ShaderStage::Vertex) {
+            RenumberVertexInputLocations(wgsl);
+            FixWgslMatrixMultiply(wgsl);
+        }
+
+        const std::string dst = std::string(kRuntimeShaderDir) + "/" + f.name + ".wgsl";
+        std::FILE* fp = std::fopen(dst.c_str(), "wb");
+        if (!fp) {
+            ++failed;
+            lines.push_back(std::string("[WebGPU] cannot write ") + dst);
+            continue;
+        }
+        std::fwrite(wgsl.data(), 1, wgsl.size(), fp);
+        std::fclose(fp);
+        ++ok;
+    }
+
+    lines.push_back(std::string("[WebGPU] grid WGSL ") + std::to_string(ok) + "/" +
+        std::to_string(2) + " -> " + kRuntimeShaderDir +
         (failed ? " (" + std::to_string(failed) + " failed)" : ""));
     return lines;
 }

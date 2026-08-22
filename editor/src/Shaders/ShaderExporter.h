@@ -20,6 +20,14 @@ public:
     // layouts from the shader signature (Plan B, Fase 2). Best-effort.
     static std::vector<std::string> WriteRuntimeSidecars(Leir::RHI::IShaderCompiler* compiler);
 
+    // Compile the editor-grid shaders (Grid.vert/frag.slang) to WGSL and write
+    // them to LEIR_SHADER_DIR, post-processed for the WebGPU backend (entry
+    // points vs_main/ps_main, push uniform @group(1)@binding(0), vertex input
+    // locations 0..6 in declaration order). Single-source: the WebGPU backend
+    // loads these generated files instead of hand-maintained .wgsl mirrors.
+    // Best-effort.
+    static std::vector<std::string> WriteRuntimeWebGpuShaders(Leir::RHI::IShaderCompiler* compiler);
+
     // Serialize one stage's reflection to <outDir>/<name>.reflect.json in the
     // canonical format parsed by Leir::LoadShaderReflectionFromSidecars.
     static bool WriteReflectionSidecar(const std::string& name,
