@@ -205,6 +205,13 @@ protected:
             auto wgpuLines = ShaderExporter::WriteRuntimeWebGpuShaders(m_ShaderCompiler.get());
             for (const auto& line : wgpuLines)
                 Leir::XConsole::Println("{}", line);
+
+            // Web export single-source: generate the .web.wgsl (LEIR_BINDLESS=0)
+            // into the runtime shader dir so they are never hand-maintained.
+            auto webLines = ShaderExporter::WriteWebShaders(m_ShaderCompiler.get(),
+                LEIR_SHADER_DIR);
+            for (const auto& line : webLines)
+                Leir::XConsole::Println("{}", line);
         }
 #endif
 

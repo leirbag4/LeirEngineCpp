@@ -4,7 +4,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 
 namespace {
@@ -87,16 +89,29 @@ void RenameWgslEntry(std::string& wgsl, Leir::RHI::ShaderStage stage)
         wgsl.replace(p, from.size(), to);
 }
 
-// Slang emits the push constants as a bare `var<uniform> push_N` with no
-// group/binding. The WebGPU backend emulates push constants as a uniform buffer
-// at group index = the shader's descriptor-set count (1 for the grid's UBO),
-// binding 0. Annotate it so it binds to the backend's push layout.
-void AnnotateWgslPush(std::string& wgsl)
+// Slang emits the push constants as a bare global `var<uniform> X :` with no
+// group/binding (the variable is named after the .slang push member, e.g.
+// `push_0` or `screenSize_0`). The WebGPU backend emulates push constants as a
+// uniform buffer at group index = the pipeline's descriptor-set count, binding
+// 0. Annotate every bare `var<uniform>` global (those not already carrying an
+// @group annotation, like the UBOs) with the given group.
+void AnnotateWgslPush(std::string& wgsl, uint32_t group)
 {
-    const std::string pushVar = "var<uniform> push_";
-    const size_t p = wgsl.find(pushVar);
-    if (p != std::string::npos)
-        wgsl.insert(p, "@group(1) @binding(0) ");
+    const std::string marker = "var<uniform> ";
+    size_t p = 0;
+    while ((p = wgsl.find(marker, p)) != std::string::npos) {
+        const size_t lineStart = wgsl.rfind('\n', p);
+        const size_t lineBegin = lineStart == std::string::npos ? 0 : lineStart + 1;
+        const size_t groupAt = wgsl.find("@group(", lineBegin);
+        if (groupAt == std::string::npos || groupAt > p) {
+            const std::string annot =
+                "@group(" + std::to_string(group) + ") @binding(0) ";
+            wgsl.insert(p, annot);
+            p += annot.size() + marker.size();
+        } else {
+            p += marker.size();
+        }
+    }
 }
 
 // Slang's WGSL writer assigns VERTEX-INPUT locations from the HLSL semantics
@@ -173,6 +188,99 @@ void FixWgslMatrixMultiply(std::string& wgsl)
         wgsl.replace(vecOpen, matEnd - vecOpen + 1, matExpr + " * " + vecExpr);
         p = vecOpen + matExpr.size() + 3 + vecExpr.size();
     }
+}
+
+// Slang's WGSL emits the bindless table as a plain runtime array of textures/
+// samplers (`array<texture_2d<f32>>`), which is INVALID WGSL — naga rejects an
+// array of resources; only `binding_array` is legal and it needs a size. The
+// WebGPU backend's bindless layout declares bindingArraySize = kBindlessMax
+// (16), so rewrite them to sized binding_arrays.
+void FixWgslBindless(std::string& wgsl)
+{
+    const char* kTexture = "array<texture_2d<f32>>";
+    const char* kTexRepl = "binding_array<texture_2d<f32>, 16>";
+    const char* kSampler = "array<sampler>";
+    const char* kSampRepl = "binding_array<sampler, 16>";
+    for (;;) {
+        const size_t p = wgsl.find(kTexture);
+        if (p == std::string::npos)
+            break;
+        wgsl.replace(p, std::strlen(kTexture), kTexRepl);
+    }
+    for (;;) {
+        const size_t p = wgsl.find(kSampler);
+        if (p == std::string::npos)
+            break;
+        wgsl.replace(p, std::strlen(kSampler), kSampRepl);
+    }
+}
+
+struct WgslShaderPair { const char* vert; const char* frag; };
+
+// Compile the given .slang pairs to WGSL (with the macro defines), post-process
+// for the WebGPU backend and write <name><outExt> into outDir. Returns the
+// number of files written (appends failure lines to `lines`).
+int GenerateWgslPairs(Leir::RHI::IShaderCompiler* compiler,
+    const WgslShaderPair* pairs, int pairCount,
+    const std::string& macroDefines, const std::string& outDir,
+    const std::string& outExt, std::vector<std::string>& lines)
+{
+    int ok = 0, failed = 0;
+    for (int p = 0; p < pairCount; ++p) {
+        const WgslShaderPair& pair = pairs[p];
+        const std::string vertPath = std::string(kShaderDir) + "/" + pair.vert + ".slang";
+        const std::string fragPath = std::string(kShaderDir) + "/" + pair.frag + ".slang";
+
+        // Compile both stages to WGSL with reflection (the reflection gives the
+        // descriptor-set layout used to compute the backend's push group).
+        auto vertRes = compiler->Compile(vertPath, Leir::RHI::ShaderTarget::WGSL,
+            Leir::RHI::ShaderStage::Vertex, /*reflect=*/true, macroDefines);
+        auto fragRes = compiler->Compile(fragPath, Leir::RHI::ShaderTarget::WGSL,
+            Leir::RHI::ShaderStage::Fragment, /*reflect=*/true, macroDefines);
+        if (!vertRes.ok || !fragRes.ok) {
+            ++failed;
+            lines.push_back("[WebGPU] " + std::string(pair.vert) + "/" + pair.frag +
+                " FAILED: " + (!vertRes.ok ? vertRes.error : fragRes.error));
+            continue;
+        }
+
+        // Push group = number of distinct descriptor sets across both stages
+        // (the backend binds the push UBO at group index = setLayouts.size()).
+        uint32_t pushGroup = 0;
+        for (const auto& b : vertRes.reflection.bindings)
+            pushGroup = std::max(pushGroup, b.set + 1);
+        for (const auto& b : fragRes.reflection.bindings)
+            pushGroup = std::max(pushGroup, b.set + 1);
+
+        // Post-process + write each stage.
+        struct StageOut { const char* name; Leir::RHI::ShaderStage stage; std::string text; };
+        StageOut stages[2] = {
+            { pair.vert, Leir::RHI::ShaderStage::Vertex,
+              std::string(vertRes.bytecode.data(), vertRes.bytecode.size()) },
+            { pair.frag, Leir::RHI::ShaderStage::Fragment,
+              std::string(fragRes.bytecode.data(), fragRes.bytecode.size()) },
+        };
+        for (auto& s : stages) {
+            RenameWgslEntry(s.text, s.stage);
+            AnnotateWgslPush(s.text, pushGroup);
+            FixWgslBindless(s.text);
+            if (s.stage == Leir::RHI::ShaderStage::Vertex) {
+                RenumberVertexInputLocations(s.text);
+                FixWgslMatrixMultiply(s.text);
+            }
+            const std::string dst = outDir + "/" + s.name + outExt;
+            std::FILE* fp = std::fopen(dst.c_str(), "wb");
+            if (!fp) {
+                ++failed;
+                lines.push_back("[WebGPU] cannot write " + dst);
+                continue;
+            }
+            std::fwrite(s.text.data(), 1, s.text.size(), fp);
+            std::fclose(fp);
+            ++ok;
+        }
+    }
+    return ok;
 }
 
 } // namespace
@@ -370,47 +478,48 @@ std::vector<std::string> ShaderExporter::WriteRuntimeWebGpuShaders(
         return lines;
     }
 
-    // Scope: the editor-grid shaders (the WebGPU backend loads these names). The
-    // other shaders still use their hand-maintained .wgsl for now.
-    struct GridFile { const char* name; Leir::RHI::ShaderStage stage; };
-    static const GridFile kGridFiles[] = {
-        { "Grid.vert", Leir::RHI::ShaderStage::Vertex },
-        { "Grid.frag", Leir::RHI::ShaderStage::Fragment },
+    // All engine shader pairs, single-source from .slang. Basic/Sprite/UI use
+    // the bindless flag (LEIR_BINDLESS=1 native); Grid/Gizmo have no bindless.
+    static const WgslShaderPair kPairs[] = {
+        { "Grid.vert", "Grid.frag" },
+        { "Gizmo.vert", "Gizmo.frag" },
+        { "Basic.vert", "Basic.frag" },
+        { "Sprite.vert", "Sprite.frag" },
+        { "UI.vert", "UI.frag" },
     };
+    const std::string defines = "LEIR_BINDLESS=1"; // native (bindless) variant
 
-    int ok = 0, failed = 0;
-    for (const auto& f : kGridFiles) {
-        const std::string src = std::string(kShaderDir) + "/" + f.name + ".slang";
-        auto result = compiler->Compile(src, Leir::RHI::ShaderTarget::WGSL, f.stage,
-            /*reflect=*/false);
-        if (!result.ok) {
-            ++failed;
-            lines.push_back(std::string("[WebGPU] ") + f.name + " FAILED: " + result.error);
-            continue;
-        }
-        std::string wgsl(reinterpret_cast<const char*>(result.bytecode.data()),
-                         result.bytecode.size());
-        RenameWgslEntry(wgsl, f.stage);
-        AnnotateWgslPush(wgsl);
-        if (f.stage == Leir::RHI::ShaderStage::Vertex) {
-            RenumberVertexInputLocations(wgsl);
-            FixWgslMatrixMultiply(wgsl);
-        }
+    int ok = GenerateWgslPairs(compiler, kPairs, (int)(sizeof(kPairs) / sizeof(kPairs[0])),
+        defines, kRuntimeShaderDir, ".wgsl", lines);
+    lines.push_back(std::string("[WebGPU] WGSL ") + std::to_string(ok) + "/" +
+        std::to_string((int)(sizeof(kPairs) / sizeof(kPairs[0])) * 2) + " -> " +
+        kRuntimeShaderDir);
+    return lines;
+}
 
-        const std::string dst = std::string(kRuntimeShaderDir) + "/" + f.name + ".wgsl";
-        std::FILE* fp = std::fopen(dst.c_str(), "wb");
-        if (!fp) {
-            ++failed;
-            lines.push_back(std::string("[WebGPU] cannot write ") + dst);
-            continue;
-        }
-        std::fwrite(wgsl.data(), 1, wgsl.size(), fp);
-        std::fclose(fp);
-        ++ok;
+std::vector<std::string> ShaderExporter::WriteWebShaders(
+    Leir::RHI::IShaderCompiler* compiler, const std::string& outDir)
+{
+    std::vector<std::string> lines;
+    if (!compiler || !compiler->IsAvailable()) {
+        lines.push_back("[WebGPU] shader compiler unavailable");
+        return lines;
     }
 
-    lines.push_back(std::string("[WebGPU] grid WGSL ") + std::to_string(ok) + "/" +
-        std::to_string(2) + " -> " + kRuntimeShaderDir +
-        (failed ? " (" + std::to_string(failed) + " failed)" : ""));
+    // Web-demo shaders (the browser WebGPU cannot compile binding_array, so the
+    // single-texture LEIR_BINDLESS=0 variant).
+    static const WgslShaderPair kWebPairs[] = {
+        { "Basic.vert", "Basic.frag" },
+        { "Sprite.vert", "Sprite.frag" },
+        { "UI.vert", "UI.frag" },
+    };
+    std::error_code ec;
+    std::filesystem::create_directories(outDir, ec);
+    const int ok = GenerateWgslPairs(compiler, kWebPairs,
+        (int)(sizeof(kWebPairs) / sizeof(kWebPairs[0])),
+        "LEIR_BINDLESS=0", outDir, ".web.wgsl", lines);
+    lines.push_back(std::string("[WebGPU] web WGSL ") + std::to_string(ok) + "/" +
+        std::to_string((int)(sizeof(kWebPairs) / sizeof(kWebPairs[0])) * 2) + " -> " +
+        outDir);
     return lines;
 }

@@ -64,11 +64,15 @@ public:
 
     // Compile a .slang file. The stage is passed explicitly (derived from the
     // filename by the caller); Slang also reads the [shader("...")] attribute.
+    // `macroDefines` is a ';'-separated list of preprocessor macros in the form
+    // NAME=VALUE (e.g. "LEIR_BINDLESS=0") passed to the Slang session. Empty =
+    // no macros.
     virtual CompileResult Compile(
         const std::string& sourcePath,
         ShaderTarget target,
         ShaderStage stage,
-        bool reflect = true) = 0;
+        bool reflect = true,
+        const std::string& macroDefines = {}) = 0;
 
     // Compile in-memory Slang source (moduleName is used for diagnostics /
     // imports; path is the logical file path for error messages).
@@ -77,7 +81,8 @@ public:
         const std::string& source,
         ShaderTarget target,
         ShaderStage stage,
-        bool reflect = true) = 0;
+        bool reflect = true,
+        const std::string& macroDefines = {}) = 0;
 };
 
 } // namespace RHI

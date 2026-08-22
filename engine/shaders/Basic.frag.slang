@@ -6,9 +6,20 @@ struct PSInput {
 
 // Bindless texture table (set 1): the engine binds its global bindless set
 // here and textures are referenced by index. The count is runtime (unbounded
-// array); Vulkan/D3D12 back it with the backend's bindless table.
+// array); Vulkan/D3D12 back it with the backend's bindless table. The WEB
+// (browser, naga) cannot compile binding_array, so LEIR_BINDLESS=0 degrades to
+// a single texture that the WebGPU backend binds per draw.
+#ifndef LEIR_BINDLESS
+#define LEIR_BINDLESS 1
+#endif
+
+#if LEIR_BINDLESS
 [[vk::binding(0, 1)]]
 Sampler2D textures[];
+#else
+[[vk::binding(0, 1)]]
+Sampler2D tex;
+#endif
 
 struct PushConstants {
     float3 lightDir;
@@ -36,7 +47,11 @@ float4 main(PSInput input) : SV_Target {
     float3 ambient = push.ambientColor;
 
     // The index comes from a push constant: uniform across the draw.
+#if LEIR_BINDLESS
     float4 texColor = textures[push.textureIndex].Sample(input.fragTexCoord);
+#else
+    float4 texColor = tex.Sample(input.fragTexCoord);
+#endif
     float4 baseColor = texColor * push.color;
 
     return float4((ambient + diffuse) * baseColor.rgb, baseColor.a);

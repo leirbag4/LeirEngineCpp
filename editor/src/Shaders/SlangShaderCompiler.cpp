@@ -139,12 +139,13 @@ CompileResult SlangShaderCompiler::Compile(
     const std::string& sourcePath,
     ShaderTarget target,
     ShaderStage stage,
-    bool reflect)
+    bool reflect,
+    const std::string& macroDefines)
 {
     if (!m_GlobalSession)
         return { false, "slang global session unavailable", {}, {} };
 
-    slang::ISession* session = CreateSession(target);
+    slang::ISession* session = CreateSession(target, macroDefines);
     if (!session)
         return { false, "failed to create slang session", {}, {} };
     Slang::ComPtr<slang::ISession> sessionPtr;
@@ -165,7 +166,8 @@ CompileResult SlangShaderCompiler::CompileFromSource(
     const std::string& source,
     ShaderTarget target,
     ShaderStage stage,
-    bool reflect)
+    bool reflect,
+    const std::string& macroDefines)
 {
     if (!m_GlobalSession)
         return { false, "slang global session unavailable", {}, {} };
@@ -180,7 +182,7 @@ CompileResult SlangShaderCompiler::CompileFromSource(
         out.write(source.data(), static_cast<std::streamsize>(source.size()));
     }
 
-    slang::ISession* session = CreateSession(target);
+    slang::ISession* session = CreateSession(target, macroDefines);
     if (!session) {
         std::remove(tempPath.c_str());
         return { false, "failed to create slang session", {}, {} };
@@ -201,8 +203,30 @@ CompileResult SlangShaderCompiler::CompileFromSource(
     return CompileModule(session, module, target, stage, reflect);
 }
 
-slang::ISession* SlangShaderCompiler::CreateSession(ShaderTarget target)
+slang::ISession* SlangShaderCompiler::CreateSession(ShaderTarget target,
+    const std::string& macroDefines)
 {
+    // Parse "NAME=VALUE;NAME2=VALUE2" into Slang preprocessor macros. The name/
+    // value buffers are kept alive in `storage` for the duration of
+    // createSession (Slang copies them into the session).
+    std::vector<std::string> storage;
+    std::vector<slang::PreprocessorMacroDesc> macros;
+    if (!macroDefines.empty()) {
+        std::istringstream ss(macroDefines);
+        std::string item;
+        while (std::getline(ss, item, ';')) {
+            if (item.empty())
+                continue;
+            const size_t eq = item.find('=');
+            storage.push_back(eq == std::string::npos ? item : item.substr(0, eq));
+            storage.push_back(eq == std::string::npos ? "1" : item.substr(eq + 1));
+            slang::PreprocessorMacroDesc m;
+            m.name = storage[storage.size() - 2].c_str();
+            m.value = storage.back().c_str();
+            macros.push_back(m);
+        }
+    }
+
     slang::TargetDesc targetDesc;
     targetDesc.format = ToSlangTarget(target);
     if (const char* profile = TargetProfileName(target))
@@ -211,6 +235,10 @@ slang::ISession* SlangShaderCompiler::CreateSession(ShaderTarget target)
     slang::SessionDesc sessionDesc;
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
+    if (!macros.empty()) {
+        sessionDesc.preprocessorMacros = macros.data();
+        sessionDesc.preprocessorMacroCount = (SlangInt)macros.size();
+    }
 
     slang::ISession* session = nullptr;
     if (SLANG_FAILED(m_GlobalSession->createSession(sessionDesc, &session)))

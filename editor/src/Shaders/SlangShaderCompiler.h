@@ -28,17 +28,20 @@ public:
         const std::string& sourcePath,
         ShaderTarget target,
         ShaderStage stage,
-        bool reflect = true) override;
+        bool reflect = true,
+        const std::string& macroDefines = {}) override;
 
     CompileResult CompileFromSource(
         const std::string& moduleName,
         const std::string& source,
         ShaderTarget target,
         ShaderStage stage,
-        bool reflect = true) override;
+        bool reflect = true,
+        const std::string& macroDefines = {}) override;
 
 private:
-    slang::ISession* CreateSession(ShaderTarget target);
+    slang::ISession* CreateSession(ShaderTarget target,
+        const std::string& macroDefines);
     CompileResult CompileModule(
         slang::ISession* session,
         slang::IModule* module,

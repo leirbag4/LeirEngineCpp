@@ -147,35 +147,9 @@ else()
     message(WARNING "slangc not found — shaders will not be compiled at build time")
 endif()
 
-# WebGPU WGSL sources (Fase 5): the engine loads them at runtime via
-# GetShaderFileExtension() == ".wgsl" when the WebGPU backend is active, so the
-# raw sources are copied verbatim into LEIR_SHADER_DIR next to the compiled
-# SPIR-V/DXIL files. There is no build-time compile step — wgpu-native compiles
-# WGSL at runtime.
-set(WGSL_SOURCES
-    shaders/Basic.vert.wgsl
-    shaders/Basic.frag.wgsl
-    shaders/Sprite.vert.wgsl
-    shaders/Sprite.frag.wgsl
-    shaders/UI.vert.wgsl
-    shaders/UI.frag.wgsl
-    shaders/Gizmo.vert.wgsl
-    shaders/Gizmo.frag.wgsl
-)
-foreach(WGSL ${WGSL_SOURCES})
-    get_filename_component(WGSL_NAME ${WGSL} NAME)
-    set(WGSL_COPY "${SHADER_OUTPUT_DIR}/${WGSL_NAME}")
-    add_custom_command(
-        OUTPUT ${WGSL_COPY}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${WGSL}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/${WGSL} ${WGSL_COPY}
-        COMMENT "Copying ${WGSL_NAME}"
-    )
-    list(APPEND WGSL_OUTPUTS ${WGSL_COPY})
-endforeach()
-add_custom_target(LeirShadersWGSL ALL DEPENDS ${WGSL_OUTPUTS})
-add_dependencies(LeirEngine LeirShadersWGSL)
+# WebGPU WGSL is GENERATED from the .slang at editor startup (single-source,
+# see TODO_WEBGPU_SINGLE_SOURCE.md) — no hand-written .wgsl is copied anymore.
+# The web export (.web.wgsl) is generated in the web build (Etapa C).
 
 # stb headers are fetched via FetchContent; bring them into scope
 include(FetchContent)

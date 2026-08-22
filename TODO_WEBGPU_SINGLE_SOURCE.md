@@ -10,8 +10,8 @@ Decisión de arquitectura (confirmada por el usuario, 2026-08-21):
   mismo patrón del engine). La **web** degrada el bindless a textura única por
   draw (limitación de naga/`binding_array`, experimental en Chrome/Tint, no
   portable hoy). Un solo `.slang` genera ambos via flag `#ifdef`.
-- **Scope actual**: solo el **Grid** (no usa bindless → más simple). Los demás
-  shaders (Basic/Sprite/UI/Gizmo) quedan hand-written por ahora.
+- **Scope**: todos los shaders del engine (Grid/Gizmo/Basic/Sprite/UI) — ver
+  estado abajo. Queda el build web (Etapa C).
 - **Future-proof**: cuando `binding_array` aterrice en la web, se cambia el flag
   web a ON — cero cambio en el motor.
 
@@ -68,25 +68,69 @@ industria (Bevy, Unity, Godot) usa `#ifdef BINDLESS` / degradación por-draw.
 
 **ESTADO: Grid single-source COMPLETO** (todas las fases del grid cerradas).
 
-## Pendiente futuro (fuera de scope ahora)
+## Etapa A (2026-08-21) — Gizmo single-source (HECHA)
 
-- [ ] Extender el single-source a Basic/Sprite/UI/Gizmo con `#ifdef LEIR_BINDLESS`
-      (native bindless / web single-texture).
-- [ ] Alinear entry points y push para esos shaders.
-- [ ] Verificar el export web (emscripten, `.web.wgsl`) con los generados.
+- [x] `WriteRuntimeWebGpuShaders` ahora genera `Gizmo.vert/frag.wgsl` desde el
+      `.slang` (misma post-procesado que el grid: `vs_main`/`ps_main`, push
+      `@group(1)@binding(0)`, inputs 0..5 reordenados, `FixWgslMatrixMultiply`).
+      Gizmo.frag es passthrough (sin push) → solo renombra la entry.
+- [x] Borrados los `Gizmo.vert/frag.wgsl` hand-written + su copia del CMake.
+
+## Etapa B (2026-08-21) — Basic/Sprite/UI single-source con `#ifdef LEIR_BINDLESS` (HECHA)
+
+- [x] `#ifndef LEIR_BINDLESS / #define LEIR_BINDLESS 1` + bloques `#if LEIR_BINDLESS`
+      en `Basic.frag`/`Sprite.frag`/`UI.frag` (default bindless → Vulkan/D3D12
+      no cambian; `LEIR_BINDLESS=0` → textura única para web).
+- [x] **Defines en Compile**: `IShaderCompiler::Compile`/`CompileFromSource` ganan
+      `macroDefines` ("NAME=VALUE;..."); `SlangShaderCompiler::CreateSession` los
+      parsea a `PreprocessorMacroDesc`.
+- [x] `WriteRuntimeWebGpuShaders` reescrito: genera **los 5 pares**
+      (Grid/Gizmo/Basic/Sprite/UI) con `LEIR_BINDLESS=1`, **push group por
+      shader derivado de la reflection** (conteo de sets: Basic=2, UI/Sprite/
+      Grid/Gizmo=1), y post-procesado por etapa.
+- [x] **Fix `FixWgslBindless`**: Slang emite el bindless como `array<texture_2d
+      <f32>>` (inválido en WGSL/naga) → se convierte a `binding_array<..., 16>`
+      (kBindlessMax del backend).
+- [x] **Fix `AnnotateWgslPush`**: generalizado — anota cualquier `var<uniform>`
+      global sin `@group` (UI usa `screenSize_0`, no `push_0`).
+- [x] Borrados los `Basic/Sprite/UI.*.wgsl` hand-written + el bloque de copia
+      WGSL del CMake (ya no hay `.wgsl` a copiar; el runtime los genera).
+- [x] **Verificado por el usuario (2026-08-21)**: editor en wgpu-native con los
+      10 shaders generados (Basic/Sprite/Grid/Gizmo/UI) — "todo perfecto", sin
+      errores de validación wgpu, el usuario pudo volar la cámara.
+
+## Pendiente futuro
+
+- [ ] **Etapa C — export web (`.web.wgsl`) generado (opción a)**:
+      - [x] **Generador HECHO**: `ShaderExporter::WriteWebShaders` genera
+            Basic/Sprite/UI `.web.wgsl` desde el `.slang` con `LEIR_BINDLESS=0`
+            + post-procesado (entry, push group, textura única, matriz). El
+            editor los genera al arrancar a `LEIR_SHADER_DIR`. Verificado:
+            `[WebGPU] web WGSL 6/6`, salida correcta (textura única, sin
+            binding_array).
+      - [ ] **Integración del build web**: el WebEngineDemo preloada
+            `engine/shaders@/shaders` (aún los `.web.wgsl` hand-written). Falta
+            que el build web use los GENERADOS: o (a) preloadar el dir generado
+            + generarlos en el build (tool host + slangc), o (b) commitear los
+            generados en `engine/shaders` con check de drift en CI. Decidir.
+      - [ ] Borrar los `.web.wgsl` hand-written de `engine/shaders`.
+      - [ ] Verificar el export web (emscripten, WebEngineDemo/WebDemo).
 
 ## Archivos relevantes
 
-- `engine/shaders/Grid.vert.slang` / `Grid.frag.slang` — fuente única del grid.
-  (Los `.wgsl` hand-written del grid ya NO existen — se generan al arrancar.)
-- `editor/src/Shaders/ShaderExporter.cpp` — `ExportAll` (traduce a WGSL),
-  `WriteRuntimeSidecars` + `WriteRuntimeWebGpuShaders` (generación del grid en
-  el arranque) + helpers `RenameWgslEntry`/`AnnotateWgslPush`/
-  `RenumberVertexInputLocations`/`FixWgslMatrixMultiply`.
-- `editor/src/Shaders/ShaderExporter.cpp` — `ExportAll` (ya traduce a WGSL) y
-  `WriteRuntimeSidecars` (punto de generación en el arranque).
-- `engine/CMakeLists.txt` — `WGSL_SOURCES` copia verbatim los hand-written.
+- `engine/shaders/*.slang` — fuente única de todos los shaders (Grid/Gizmo/
+  Basic/Sprite/UI). Los `.wgsl` native ya NO existen (se generan al arrancar);
+  los `.web.wgsl` hand-written quedan hasta la Etapa C.
+- `editor/src/Shaders/ShaderExporter.cpp` — `WriteRuntimeSidecars`,
+  `WriteRuntimeWebGpuShaders` (WGSL native, LEIR_BINDLESS=1) y
+  `WriteWebShaders` (`.web.wgsl`, LEIR_BINDLESS=0) + helpers:
+  `GenerateWgslPairs`/`RenameWgslEntry`/`AnnotateWgslPush`/
+  `RenumberVertexInputLocations`/`FixWgslMatrixMultiply`/`FixWgslBindless`.
+- `engine/include/LeirEngine/RHI/IShaderCompiler.h` + `editor/src/Shaders/
+  SlangShaderCompiler.cpp` — `macroDefines` en Compile/CompileFromSource.
+- `engine/CMakeLists.txt` — sin copia de `.wgsl` (se generan en runtime).
 - `engine/src/RHI/WebGPUBackend.cpp` — entry points `vs_main`/`ps_main`
-  (línea 1366/1370), push group = `setLayouts.size()` (línea 1480).
+  (línea 1366/1370), push group = `setLayouts.size()` (línea 1480),
+  `kBindlessMax = 16`.
 - `engine/include/LeirEngine/RHI/WebGPUBackend.h` — `GetShaderFileExtension()`
   → `.wgsl` (native) / `.web.wgsl` (web).

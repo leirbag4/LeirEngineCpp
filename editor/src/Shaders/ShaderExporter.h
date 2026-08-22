@@ -20,13 +20,20 @@ public:
     // layouts from the shader signature (Plan B, Fase 2). Best-effort.
     static std::vector<std::string> WriteRuntimeSidecars(Leir::RHI::IShaderCompiler* compiler);
 
-    // Compile the editor-grid shaders (Grid.vert/frag.slang) to WGSL and write
-    // them to LEIR_SHADER_DIR, post-processed for the WebGPU backend (entry
-    // points vs_main/ps_main, push uniform @group(1)@binding(0), vertex input
-    // locations 0..6 in declaration order). Single-source: the WebGPU backend
-    // loads these generated files instead of hand-maintained .wgsl mirrors.
-    // Best-effort.
+    // Compile the editor-grid + gizmo + Basic/Sprite/UI shaders to WGSL and
+    // write them to LEIR_SHADER_DIR, post-processed for the WebGPU backend
+    // (entries vs_main/ps_main, push @group(N)@binding(0) with N derived from
+    // the reflection, vertex input locations reordered, binding_array size,
+    // matrix multiply fix). Single-source: the WebGPU backend loads these
+    // generated files instead of hand-maintained .wgsl mirrors. Best-effort.
     static std::vector<std::string> WriteRuntimeWebGpuShaders(Leir::RHI::IShaderCompiler* compiler);
+
+    // Compile the web-demo shaders (Basic/Sprite/UI) to WGSL with
+    // LEIR_BINDLESS=0 (single-texture, the browser cannot compile
+    // binding_array) and write <name>.web.wgsl into outDir, post-processed the
+    // same way. Single-source for the web export. Best-effort.
+    static std::vector<std::string> WriteWebShaders(Leir::RHI::IShaderCompiler* compiler,
+        const std::string& outDir);
 
     // Serialize one stage's reflection to <outDir>/<name>.reflect.json in the
     // canonical format parsed by Leir::LoadShaderReflectionFromSidecars.
