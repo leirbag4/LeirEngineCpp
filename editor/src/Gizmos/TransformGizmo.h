@@ -105,6 +105,11 @@ private:
 
     bool RayPlane(const Ray& r, const Leir::Vector3& n, const Leir::Vector3& p,
                   Leir::Vector3& out) const;
+    // Parameter t along the axis line (through `center`, direction `axis`) at
+    // its closest approach to the mouse ray. Robust for any view angle (the
+    // old ray-vs-plane axis drag degenerated when the camera sat IN the plane).
+    bool ClosestPointOnAxis(const Ray& r, const Leir::Vector3& center,
+                            const Leir::Vector3& axis, float& outT) const;
     float PointSegmentDistPx(const Leir::Vector2& p, const Leir::Vector2& a,
                              const Leir::Vector2& b) const;
     bool PointInQuadPx(const Leir::Vector2& p, const Leir::Vector2 quad[4]) const;

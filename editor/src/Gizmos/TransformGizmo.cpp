@@ -185,6 +185,27 @@ bool TransformGizmo::RayPlane(const Ray& r, const Leir::Vector3& n,
     return true;
 }
 
+bool TransformGizmo::ClosestPointOnAxis(const Ray& r, const Leir::Vector3& center,
+                                        const Leir::Vector3& axis, float& outT) const
+{
+    // Closest point between the mouse ray (O + s*D) and the axis line
+    // (C + t*A). Standard line-line closest point; t is the parameter along
+    // the axis from `center`. Robust: never degenerates when the camera lies in
+    // a plane containing the axis (the old ray-vs-plane method always hit the
+    // ray origin there, so the axis drag never moved).
+    const Leir::Vector3 w0 = r.origin - center;
+    const float a = Leir::Vector3::Dot(r.dir, r.dir);
+    const float b = Leir::Vector3::Dot(r.dir, axis);
+    const float c = Leir::Vector3::Dot(axis, axis);
+    const float d = Leir::Vector3::Dot(r.dir, w0);
+    const float e = Leir::Vector3::Dot(axis, w0);
+    const float denom = a * c - b * b;
+    if (std::fabs(denom) < 1e-6f)
+        return false; // ray ~parallel to the axis; caller falls back
+    outT = (a * e - b * d) / denom;
+    return true;
+}
+
 float TransformGizmo::PointSegmentDistPx(const Leir::Vector2& p,
                                          const Leir::Vector2& a,
                                          const Leir::Vector2& b) const
@@ -270,6 +291,17 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
     const float len = kArrowLenPx * g.worldPerPixel;
     const bool isScale = m_Tool == Tool::Scale;
 
+    if (isScale) {
+        // ---- Scale: the center cube takes priority over the arrow shafts
+        // (they overlap near the origin, so checking the arrows first made the
+        // center cube nearly impossible to grab / always showed an axis hover).
+        const float dc = (mouse - toScreen(g.center)).Length();
+        if (dc < kCubePickPx) {
+            outScore = dc;
+            return Handle::Center;
+        }
+    }
+
     // Arrow shafts + tips (translate) / handle cubes (scale).
     for (int a = 0; a < 3; ++a) {
         const Leir::Vector3 dir = g.axes[a];
@@ -284,9 +316,6 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
     }
 
     if (isScale) {
-        const float dc = (mouse - toScreen(g.center)).Length();
-        if (dc < kCubePickPx)
-            consider(Handle::Center, dc);
         outScore = bestScore;
         return best;
     }
@@ -333,13 +362,6 @@ void TransformGizmo::BeginDrag(const Frame& f, const GizmoFrame& g, Handle h)
     if (h >= Handle::AxisX && h <= Handle::AxisZ) {
         const int a = (int)h - (int)Handle::AxisX;
         m_Drag.axisDir = g.axes[a];
-        // Drag plane: contains the axis and faces the camera.
-        Leir::Vector3 n = Leir::Vector3::Cross(m_Drag.axisDir, viewDir);
-        if (n.SqrLength() < 1e-6f)
-            n = Leir::Vector3::Cross(m_Drag.axisDir,
-                std::fabs(m_Drag.axisDir.y) < 0.9f ? Leir::Vector3::Up()
-                                                   : Leir::Vector3::Right());
-        m_Drag.planeNormal = n.Normalized();
     } else if (h >= Handle::PlaneX && h <= Handle::PlaneZ) {
         m_Drag.planeNormal = g.axes[(int)h - (int)Handle::PlaneX]; // blocked axis
     } else if (h >= Handle::RingX && h <= Handle::RingZ) {
@@ -354,27 +376,29 @@ void TransformGizmo::BeginDrag(const Frame& f, const GizmoFrame& g, Handle h)
         m_Drag.planeNormal = viewDir;
     }
 
-    // Grab intersection point / parameter for the drag.
+    // Grab intersection point / parameter for the drag. The anchor is the
+    // object's START position (never the moving center): a plane anchored to
+    // the live center drifts by float error along its blocked axis every frame.
     const Ray ray = BuildMouseRay(f);
     Leir::Vector3 hit;
     if (h >= Handle::PlaneX && h <= Handle::PlaneZ) {
-        if (RayPlane(ray, m_Drag.planeNormal, g.center, hit))
+        if (RayPlane(ray, m_Drag.planeNormal, m_Drag.startPos, hit))
             m_Drag.point0 = hit;
         else
-            m_Drag.point0 = g.center;
+            m_Drag.point0 = m_Drag.startPos;
     } else if (h == Handle::Center) {
-        if (RayPlane(ray, m_Drag.planeNormal, g.center, hit))
-            m_Drag.dist0 = std::max(1e-3f, (hit - g.center).Length());
+        if (RayPlane(ray, m_Drag.planeNormal, m_Drag.startPos, hit))
+            m_Drag.dist0 = std::max(1e-3f, (hit - m_Drag.startPos).Length());
         else
             m_Drag.dist0 = 1.0f;
     } else if (h >= Handle::AxisX && h <= Handle::AxisZ) {
-        if (RayPlane(ray, m_Drag.planeNormal, g.center, hit))
-            m_Drag.t0 = Leir::Vector3::Dot(hit - g.center, m_Drag.axisDir);
+        if (ClosestPointOnAxis(ray, m_Drag.startPos, m_Drag.axisDir, m_Drag.t0))
+            ; // t0 = axis parameter at the grab point
         else
             m_Drag.t0 = 0.0f;
     } else if (h >= Handle::RingX && h <= Handle::RingZ) {
-        if (RayPlane(ray, m_Drag.axisDir, g.center, hit)) {
-            const Leir::Vector3 rel = hit - g.center;
+        if (RayPlane(ray, m_Drag.axisDir, m_Drag.startPos, hit)) {
+            const Leir::Vector3 rel = hit - m_Drag.startPos;
             m_Drag.angle0 = std::atan2(Leir::Vector3::Dot(rel, m_Drag.basis1),
                                        Leir::Vector3::Dot(rel, m_Drag.basis0));
         } else {
@@ -393,10 +417,12 @@ void TransformGizmo::UpdateDrag(const Frame& f, const GizmoFrame& g)
 
     if (m_Drag.handle >= Handle::AxisX && m_Drag.handle <= Handle::AxisZ) {
         // ---- Translate / scale along an axis ----
+        // Closest-point between the mouse ray and the axis line: robust for any
+        // view angle (the camera never sits in the drag plane this way).
         const int a = (int)m_Drag.handle - (int)Handle::AxisX;
-        if (!RayPlane(ray, m_Drag.planeNormal, g.center, hit))
+        float t = m_Drag.t0;
+        if (!ClosestPointOnAxis(ray, m_Drag.startPos, m_Drag.axisDir, t))
             return;
-        const float t = Leir::Vector3::Dot(hit - g.center, m_Drag.axisDir);
         const float delta = t - m_Drag.t0;
         if (m_Tool == Tool::Scale) {
             const float factor = (m_Drag.t0 != 0.0f) ? t / m_Drag.t0 : 1.0f;
@@ -408,9 +434,13 @@ void TransformGizmo::UpdateDrag(const Frame& f, const GizmoFrame& g)
         }
     } else if (m_Drag.handle >= Handle::PlaneX && m_Drag.handle <= Handle::PlaneZ) {
         // ---- Translate in a plane (blocking the perpendicular axis) ----
-        if (!RayPlane(ray, m_Drag.planeNormal, g.center, hit))
+        if (!RayPlane(ray, m_Drag.planeNormal, m_Drag.startPos, hit))
             return;
-        const Leir::Vector3 delta = hit - m_Drag.point0;
+        Leir::Vector3 delta = hit - m_Drag.point0;
+        // Remove any float residue along the blocked axis so the object never
+        // drifts on it (the green square must keep Y exactly at its start).
+        delta = delta - m_Drag.planeNormal *
+            Leir::Vector3::Dot(delta, m_Drag.planeNormal);
         m_Selected->GetTransform().SetWorldPosition(m_Drag.startPos + delta);
     } else if (m_Drag.handle >= Handle::RingX && m_Drag.handle <= Handle::RingZ) {
         // ---- Rotate around a ring's axis (quaternion only, no Euler) ----
@@ -418,9 +448,9 @@ void TransformGizmo::UpdateDrag(const Frame& f, const GizmoFrame& g)
         // applied to the running rotation), never through Euler angles — so
         // there is no gimbal lock regardless of the orientation reached.
         const Leir::Vector3 n = m_Drag.axisDir;
-        if (!RayPlane(ray, n, g.center, hit))
+        if (!RayPlane(ray, n, m_Drag.startPos, hit))
             return;
-        const Leir::Vector3 rel = hit - g.center;
+        const Leir::Vector3 rel = hit - m_Drag.startPos;
         const float angle = std::atan2(Leir::Vector3::Dot(rel, m_Drag.basis1),
                                        Leir::Vector3::Dot(rel, m_Drag.basis0));
         float delta = angle - m_Drag.angle0;
@@ -435,9 +465,9 @@ void TransformGizmo::UpdateDrag(const Frame& f, const GizmoFrame& g)
             m_GizmoRotation = q * m_GizmoRotation;
     } else if (m_Drag.handle == Handle::Center) {
         // ---- Uniform scale ----
-        if (!RayPlane(ray, m_Drag.planeNormal, g.center, hit))
+        if (!RayPlane(ray, m_Drag.planeNormal, m_Drag.startPos, hit))
             return;
-        const float dist = std::max(1e-3f, (hit - g.center).Length());
+        const float dist = std::max(1e-3f, (hit - m_Drag.startPos).Length());
         const float factor = dist / m_Drag.dist0;
         const Leir::Vector3 s = m_Drag.startScale * std::max(0.001f, factor);
         m_Selected->GetTransform().SetLocalScale(s);
@@ -563,18 +593,27 @@ void TransformGizmo::Draw(GizmoRenderer& g, const Leir::Matrix4x4& viewProjectio
         }
     } else if (m_Tool == Tool::Scale) {
         // ---- Axis arrows + handle cubes, always in the object's local axes ----
+        // The handle cubes are oriented by the object's rotation (same as the
+        // translate cones): they rotate with the gizmo frame. Scale is always
+        // local, so the cubes always follow the object's world rotation.
+        const Leir::Quaternion cubeRot =
+            m_Selected->GetTransform().GetWorldRotation();
         for (int a = 0; a < 3; ++a) {
             const Leir::Vector3 dir = gf.axes[a];
             const Leir::Vector3 tip = center + dir * len;
             g.DrawLine(center, tip, colorFor(a), wAxis);
             Leir::Vector4 c = colorFor(a);
-            g.DrawCubeFilled(tip, Leir::Vector3(cubeHalf * 2.0f, cubeHalf * 2.0f, cubeHalf * 2.0f), c);
+            g.DrawCubeFilledOriented(tip,
+                Leir::Vector3(cubeHalf * 2.0f, cubeHalf * 2.0f, cubeHalf * 2.0f),
+                cubeRot, c);
         }
-        // ---- Center cube (uniform scale), grayish ----
+        // ---- Center cube (uniform scale), grayish; also oriented ----
         bool centerHover = IsDragging() ? (m_Drag.handle == Handle::Center)
                                         : (m_Hover == Handle::Center);
         Leir::Vector4 cc = centerHover ? Leir::Vector4(1.0f, 1.0f, 1.0f, 1.0f)
                                        : Leir::Vector4(0.7f, 0.7f, 0.7f, 1.0f);
-        g.DrawCubeFilled(center, Leir::Vector3(centerHalf * 2.0f, centerHalf * 2.0f, centerHalf * 2.0f), cc);
+        g.DrawCubeFilledOriented(center,
+            Leir::Vector3(centerHalf * 2.0f, centerHalf * 2.0f, centerHalf * 2.0f),
+            cubeRot, cc);
     }
 }

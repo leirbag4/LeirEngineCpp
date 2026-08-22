@@ -164,6 +164,13 @@ void GizmoRenderer::DrawQuadFilled(const Leir::Vector3& a, const Leir::Vector3& 
 void GizmoRenderer::DrawCubeFilled(const Leir::Vector3& center, const Leir::Vector3& size,
                                    const Leir::Vector4& color)
 {
+    DrawCubeFilledOriented(center, size, Leir::Quaternion::Identity(), color);
+}
+
+void GizmoRenderer::DrawCubeFilledOriented(const Leir::Vector3& center, const Leir::Vector3& size,
+                                           const Leir::Quaternion& rotation,
+                                           const Leir::Vector4& color)
+{
     const Leir::Vector3 h = size * 0.5f;
     const Leir::Vector3 c0(center.x - h.x, center.y - h.y, center.z - h.z);
     const Leir::Vector3 c1(center.x + h.x, center.y - h.y, center.z - h.z);
@@ -174,6 +181,15 @@ void GizmoRenderer::DrawCubeFilled(const Leir::Vector3& center, const Leir::Vect
     const Leir::Vector3 c6(center.x + h.x, center.y + h.y, center.z + h.z);
     const Leir::Vector3 c7(center.x - h.x, center.y + h.y, center.z + h.z);
 
+    // Rotate the 8 corners around `center` so the cube follows the gizmo's
+    // orientation (the scale handle cubes behave like the translate cones).
+    const Leir::Vector3 corners[8] = {
+        center + rotation * (c0 - center), center + rotation * (c1 - center),
+        center + rotation * (c2 - center), center + rotation * (c3 - center),
+        center + rotation * (c4 - center), center + rotation * (c5 - center),
+        center + rotation * (c6 - center), center + rotation * (c7 - center),
+    };
+
     // Per-face shading so the 3D cube reads correctly even at small sizes.
     const Leir::Vector4 shadeUp = color;
     const Leir::Vector4 shadeDown = color * 0.6f;
@@ -182,12 +198,12 @@ void GizmoRenderer::DrawCubeFilled(const Leir::Vector3& center, const Leir::Vect
     const Leir::Vector4 shadeRight = color * 0.9f;
     const Leir::Vector4 shadeLeft = color * 0.55f;
 
-    DrawQuadFilled(c4, c5, c6, c7, shadeUp);        // +Y
-    DrawQuadFilled(c0, c3, c2, c1, shadeDown);      // -Y
-    DrawQuadFilled(c3, c7, c6, c2, shadeFront);     // +Z
-    DrawQuadFilled(c0, c1, c5, c4, shadeBack);      // -Z
-    DrawQuadFilled(c1, c2, c6, c5, shadeRight);     // +X
-    DrawQuadFilled(c0, c4, c7, c3, shadeLeft);      // -X
+    DrawQuadFilled(corners[4], corners[5], corners[6], corners[7], shadeUp);    // +Y
+    DrawQuadFilled(corners[0], corners[3], corners[2], corners[1], shadeDown);  // -Y
+    DrawQuadFilled(corners[3], corners[7], corners[6], corners[2], shadeFront); // +Z
+    DrawQuadFilled(corners[0], corners[1], corners[5], corners[4], shadeBack);  // -Z
+    DrawQuadFilled(corners[1], corners[2], corners[6], corners[5], shadeRight); // +X
+    DrawQuadFilled(corners[0], corners[4], corners[7], corners[3], shadeLeft);  // -X
 }
 
 void GizmoRenderer::DrawCone(const Leir::Vector3& baseCenter, float baseRadius,

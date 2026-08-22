@@ -54,6 +54,11 @@ public:
     // Filled box (6 faces, mild per-face shading for a readable 3D look).
     void DrawCubeFilled(const Leir::Vector3& center, const Leir::Vector3& size,
                         const Leir::Vector4& color);
+    // Filled box oriented by `rotation` (scale-gizmo handle cubes follow the
+    // object's rotation, like the translate cones do).
+    void DrawCubeFilledOriented(const Leir::Vector3& center, const Leir::Vector3& size,
+                                const Leir::Quaternion& rotation,
+                                const Leir::Vector4& color);
     // Closed cone (base disc + side), used for the translate arrowheads.
     void DrawCone(const Leir::Vector3& baseCenter, float baseRadius,
                   const Leir::Vector3& tip, const Leir::Vector4& color,
