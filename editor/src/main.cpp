@@ -758,6 +758,13 @@ protected:
                 m_TransformGizmo.SetTool(TransformGizmo::Tool::Rotate);
             } else if (Leir::Keyboard::WasPressed(Leir::Key::R)) {
                 m_TransformGizmo.SetTool(TransformGizmo::Tool::Scale);
+            } else if (Leir::Keyboard::WasPressed(Leir::Key::Q) &&
+                       !m_TransformGizmo.IsScaleTool()) {
+                // Toggle Global/Local (translate & rotate only; scale is always local).
+                m_TransformGizmo.SetSpace(
+                    m_TransformGizmo.GetSpace() == TransformGizmo::Space::Global
+                        ? TransformGizmo::Space::Local
+                        : TransformGizmo::Space::Global);
             }
         }
         if (m_Toolbar) {
