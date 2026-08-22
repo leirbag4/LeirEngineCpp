@@ -18,6 +18,13 @@ public:
     void SetZoneRect(const Vector4& rect, const Vector4& color);
     void HideZone();
 
+    // Computes this panel's rect WITHOUT adding its position to the ghost/zone
+    // children: those are positioned in ABSOLUTE screen coordinates by
+    // SetGhostRect/SetZoneRect. The base Free layout would += this panel's
+    // origin onto them every frame (accumulating when the overlay is not at
+    // (0,0)), which would drift the drag ghost.
+    void ComputeLayout(const Vector2& availableSize) override;
+
 private:
     UIPanel* m_Ghost = nullptr;
     UIPanel* m_Zone = nullptr;

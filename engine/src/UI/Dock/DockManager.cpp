@@ -508,6 +508,31 @@ void DockManager::NotifyLayoutChanged()
         m_OnLayoutChanged();
 }
 
+void DockManager::ComputeLayout(const Vector2& availableSize)
+{
+    m_ComputedRect = m_Rect.GetRect(availableSize);
+
+    // Lay out the dock tree with ABSOLUTE rects (set, not +=). The base Free
+    // layout permanently adds this panel's position to every child offset on
+    // each call (ComputeFreeLayout: child->m_Rect.offset.top += m_ComputedRect.y),
+    // which accumulates frame over frame whenever the manager is not at (0,0) —
+    // the dock below the top toolbar (y=30) would slide down 30px every frame.
+    const float innerX = m_ComputedRect.x + m_Padding[0];
+    const float innerY = m_ComputedRect.y + m_Padding[1];
+    const float innerW = m_ComputedRect.z - m_Padding[0] - m_Padding[2];
+    const float innerH = m_ComputedRect.w - m_Padding[1] - m_Padding[3];
+
+    for (auto* child : GetChildren()) {
+        if (!child->IsActive())
+            continue;
+        // The root dock node and the drop overlay both fill the dock area.
+        child->GetRect().anchor = AnchorSet::TopLeft();
+        child->GetRect().offset = {innerX, innerY, innerX + innerW, innerY + innerH};
+        child->ComputeLayout({innerW, innerH});
+    }
+    OnLayoutComputed();
+}
+
 void DockManager::DestroyTree()
 {
     if (m_Root) {

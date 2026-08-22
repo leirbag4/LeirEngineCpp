@@ -63,4 +63,20 @@ void DockDropOverlay::HideZone()
     m_Zone->SetActive(false);
 }
 
+void DockDropOverlay::ComputeLayout(const Vector2& availableSize)
+{
+    m_ComputedRect = m_Rect.GetRect(availableSize);
+    // The ghost/zone are positioned in ABSOLUTE screen coordinates by
+    // SetGhostRect/SetZoneRect. Lay them out directly from their own rects:
+    // the base Free layout would += this panel's origin onto their offsets
+    // EVERY frame (permanent mutation), which accumulates when the overlay is
+    // not at (0,0) and drifts the drag ghost down each frame.
+    for (auto* child : GetChildren()) {
+        if (!child->IsActive())
+            continue;
+        child->ComputeLayout({m_ComputedRect.z, m_ComputedRect.w});
+    }
+    OnLayoutComputed();
+}
+
 } // namespace Leir

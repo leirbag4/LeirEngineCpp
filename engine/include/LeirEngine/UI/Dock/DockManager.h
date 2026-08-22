@@ -73,6 +73,12 @@ public:
     void SetOnLayoutChanged(std::function<void()> cb) { m_OnLayoutChanged = std::move(cb); }
     void NotifyLayoutChanged();
 
+    // Lays out the dock tree with ABSOLUTE rects (set each frame). The base
+    // Free layout would ADD this manager's position to every child offset on
+    // each call, accumulating frame over frame whenever the manager is not at
+    // (0,0) — the dock below the top toolbar would slide down 30px per frame.
+    void ComputeLayout(const Vector2& availableSize) override;
+
     DockManager(const DockManager&) = delete;
     DockManager& operator=(const DockManager&) = delete;
 

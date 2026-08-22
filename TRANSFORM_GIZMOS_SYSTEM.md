@@ -74,6 +74,7 @@ EditorApp (main.cpp)
 - [x] `main.cpp`: crear toolbar + gizmo, `TransformGizmo::Update` en OnUpdate, `Draw` en OnRender tras el grid, click-pick.
 - [x] Build local (MSVC) + SlangExportTest 12/12 (GizmoSolid incluido) + ctest 2/2.
 - [x] Prueba manual: build + launch limpio (D3D12), sin overflow (fixed: BeginFrame limpia m_SolidVerts), sin VUIDs/stderr. Falta verificación visual del usuario.
+- [x] **Fix layout drift al mover el dock bajo la toolbar** (2026-08-22): `ComputeFreeLayout` hace `child->m_Rect.offset.top += m_ComputedRect.y` — MUTACIÓN PERMANENTE del offset del hijo. Antes el DockManager tenía Y computado = 0 (el `+=0` era no-op); al bajarlo a `y=30` sumaba +30 al offset del nodo root del dock **cada frame** → todo se deslizaba hacia abajo hasta desaparecer. Fix: `DockManager::ComputeLayout` override que posiciona sus hijos (root + DockDropOverlay) con rects ABSOLUTAS (set, no `+=`) cada frame; `DockDropOverlay::ComputeLayout` override para no sumar su posición a ghost/zone (que ya son coords absolutas de pantalla). Verificado: rect del dock estable `(0,30,W,H-60)` en frames 0/120/240/360/480.
 
 ## Decisiones de diseño
 
