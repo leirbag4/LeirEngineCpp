@@ -474,10 +474,11 @@ void GizmoRenderer::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
     desc.topology = Leir::RHI::Topology::TriangleStrip;
     desc.polygonMode = Leir::RHI::PolygonMode::Fill;
     desc.cullMode = Leir::RHI::CullMode::None;
-    desc.depthTestEnable = true;
-    desc.depthWriteEnable = false; // gizmo lines only test against the scene,
-                                   // not each other (later-drawn wins overlaps
-                                   // -> no red/white zippering at grazing views)
+    // Gizmos draw ON TOP of the scene (no depth test): transform gizmos must
+    // never be occluded by the object geometry (like Unity's gizmo layer).
+    // depth write off + later-drawn-wins resolves overlaps between gizmo lines.
+    desc.depthTestEnable = false;
+    desc.depthWriteEnable = false;
     desc.blend.enable = true;
     m_Pipeline = m_Device->CreateGraphicsPipeline(desc);
 
@@ -525,7 +526,7 @@ void GizmoRenderer::CreateSolidPipeline(Leir::RHI::RHIRenderPass viewportRenderP
     desc.topology = Leir::RHI::Topology::TriangleList;
     desc.polygonMode = Leir::RHI::PolygonMode::Fill;
     desc.cullMode = Leir::RHI::CullMode::None;
-    desc.depthTestEnable = true;
+    desc.depthTestEnable = false; // gizmos draw on top of the scene
     desc.depthWriteEnable = false; // gizmos never write depth
     desc.blend.enable = true;
     m_SolidPipeline = m_Device->CreateGraphicsPipeline(desc);

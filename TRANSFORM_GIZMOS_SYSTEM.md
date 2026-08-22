@@ -82,6 +82,7 @@ EditorApp (main.cpp)
 - [x] **Rotación usa startPos como ancla del aro** (mismo patrón anti-drift).
 - [x] **Cubos de scale no rotaban con el objeto**: se dibujaban axis-aligned (`DrawCubeFilled`). Fix: nuevo `GizmoRenderer::DrawCubeFilledOriented(center, size, rotation, color)` que rota los 8 corners; los cubos de punta y el central se orientan con la **world rotation del objeto** (scale siempre local).
 - [x] **El cubo central de scale perdía el hover contra las flechas** (siempre se resaltaba una flecha): en `Pick` las flechas se testean primero y el cubo central después; como los ejes nacen en el centro, el mouse sobre el cubo central también quedaba dentro del pick de la flecha. Fix: en scale el cubo central se testea PRIMERO y retorna inmediato (prioridad máxima).
+- [x] **Gizmos tapados por la geometría del objeto** (2026-08-22): ambas pipelines del `GizmoRenderer` (línea + sólida) tenían `depthTestEnable = true` → las flechas/conos/cubos quedaban ocultos detrás del objeto seleccionado. Fix: `depthTestEnable = false` en las dos pipelines (los gizmos se dibujan POR ARRIBA de la escena, como la capa de gizmos de Unity). El grid conserva su depth test (los objetos lo tapan — comportamiento deseado).
 
 ## Decisiones de diseño
 
