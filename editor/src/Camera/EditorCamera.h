@@ -13,6 +13,7 @@ public:
     float GetPitch() const { return m_Pitch; }
     Leir::Vector3 GetForward() const;
     Leir::Vector3 GetRight() const;
+    Leir::Vector3 GetUp() const;
     Leir::Quaternion GetRotation() const;
 
     void SetPosition(const Leir::Vector3& pos) { m_Position = pos; }

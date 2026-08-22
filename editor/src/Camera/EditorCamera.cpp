@@ -19,6 +19,12 @@ Leir::Vector3 EditorCamera::GetRight() const
     return (rot * Leir::Vector3::Right()).Normalized();
 }
 
+Leir::Vector3 EditorCamera::GetUp() const
+{
+    Leir::Quaternion rot = GetRotation();
+    return (rot * Leir::Vector3::Up()).Normalized();
+}
+
 Leir::Quaternion EditorCamera::GetRotation() const
 {
     return Leir::Quaternion::Euler(m_Pitch, m_Yaw, 0.0f);
@@ -43,13 +49,13 @@ void EditorCamera::Update(float deltaTime)
     bool rightDown = Leir::Mouse::IsDown(Leir::PointerButton::Right);
     bool middleDown = Leir::Mouse::IsDown(Leir::PointerButton::Middle);
 
-    // Pan (middle mouse)
+    // Pan (middle mouse): move on the camera's UP/RIGHT plane (not world axes).
     if (middleDown) {
         auto delta = Leir::Mouse::GetDelta();
         if (delta.x != 0.0f || delta.y != 0.0f) {
             float panSpeed = 0.01f;
             Leir::Vector3 r = GetRight();
-            Leir::Vector3 up = Leir::Vector3::Up();
+            Leir::Vector3 up = GetUp();
             m_Position -= r * delta.x * panSpeed;
             m_Position += up * delta.y * panSpeed;
         }
@@ -71,7 +77,7 @@ void EditorCamera::Update(float deltaTime)
 
     Leir::Vector3 forward = GetForward();
     Leir::Vector3 right = GetRight();
-    Leir::Vector3 up = Leir::Vector3::Up();
+    Leir::Vector3 up = GetUp(); // camera up (not world up)
 
     Leir::Vector3 move = Leir::Vector3::Zero();
 
