@@ -51,10 +51,20 @@ GizmoLogPanel::GizmoLogPanel()
     title->SetSizePolicy(Leir::SizePolicy::Fixed);
     AddChild(title);
 
+    // Row wrapper with Content size: lets the button keep its NATURAL width.
+    // A Fixed child inside a Column always stretches to the panel's full width
+    // (ComputeColumnLayout forces childW = innerW), which is why the record
+    // button grew in width; the Row lets it size to its text.
+    auto* btnRow = new Leir::UIPanel();
+    btnRow->SetColor({0.0f, 0.0f, 0.0f, 0.0f});
+    btnRow->SetLayoutMode(Leir::LayoutMode::Row);
+    btnRow->SetSizePolicy(Leir::SizePolicy::Content);
+    AddChild(btnRow);
+
     m_Button = new Leir::UIButton();
-    m_Button->SetSizePolicy(Leir::SizePolicy::Fill);
+    m_Button->SetSizePolicy(Leir::SizePolicy::Fixed);
     m_Button->SetOnClick([this]() { ToggleRecording(); });
-    AddChild(m_Button);
+    btnRow->AddChild(m_Button);
 
     m_Status = new Leir::UILabel();
     m_Status->SetText("");
