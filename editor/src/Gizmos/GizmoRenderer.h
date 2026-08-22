@@ -44,7 +44,23 @@ public:
                     const Leir::Vector4& color, int segments = 32,
                     float widthPx = 1.0f);
 
+    // ---- Solid (filled) primitives ----
+    void DrawTriangle(const Leir::Vector3& a, const Leir::Vector3& b,
+                      const Leir::Vector3& c, const Leir::Vector4& color);
+    void DrawQuadFilled(const Leir::Vector3& a, const Leir::Vector3& b,
+                        const Leir::Vector3& c, const Leir::Vector3& d,
+                        const Leir::Vector4& color);
+    // Wireframe box drawn with LINES (kept for the selection highlight).
+    // Filled box (6 faces, mild per-face shading for a readable 3D look).
+    void DrawCubeFilled(const Leir::Vector3& center, const Leir::Vector3& size,
+                        const Leir::Vector4& color);
+    // Closed cone (base disc + side), used for the translate arrowheads.
+    void DrawCone(const Leir::Vector3& baseCenter, float baseRadius,
+                  const Leir::Vector3& tip, const Leir::Vector4& color,
+                  int segments = 12);
+
     int GetLineCount() const { return (int)m_Lines.size(); }
+    int GetSolidTriangleCount() const { return (int)(m_SolidVerts.size() / 3); }
 
     void Render(Leir::RHI::GCommandGraph& graph,
                 const Leir::Matrix4x4& viewProjection,
@@ -82,21 +98,32 @@ private:
         float pad1 = 0.0f;
     };
 
+    // Solid vertex: position + color only (GizmoSolid.vert.slang, stride 28).
+    struct SolidVertex {
+        Leir::Vector3 position;
+        Leir::Vector4 color;
+    };
+
     static const int kFrames = 2;
     static const uint32_t kMaxLines = 16384;
     // Each line = 4 strip corners + up to 2 degenerate strip-closers.
     static const uint32_t kMaxVertices = kMaxLines * 6;
+    static const uint32_t kMaxSolidVertices = 32768;
 
     void CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
+    void CreateSolidPipeline(Leir::RHI::RHIRenderPass viewportRenderPass);
     void DestroyResources();
 
     static Leir::RHI::RHIVertexInputBinding GetBindingDescription();
     static std::vector<Leir::RHI::RHIVertexAttribute> GetAttributeDescriptions();
+    static Leir::RHI::RHIVertexInputBinding GetSolidBindingDescription();
+    static std::vector<Leir::RHI::RHIVertexAttribute> GetSolidAttributeDescriptions();
 
     Leir::RHI::RenderBackend* m_Device = nullptr;
 
     std::vector<Line> m_Lines;
     std::vector<GizmoVertex> m_Quads;
+    std::vector<SolidVertex> m_SolidVerts;
     bool m_OverflowLogged = false;
 
     Leir::RHI::RHIPipeline m_Pipeline;
@@ -108,6 +135,11 @@ private:
     Leir::RHI::RHIBuffer m_UBOBuffers[kFrames];
     Leir::RHI::RHIDeviceMemory m_UBOMemories[kFrames];
 
+    Leir::RHI::RHIPipeline m_SolidPipeline;
+    Leir::RHI::RHIPipelineLayout m_SolidPipelineLayout;
+
     Leir::RHI::RHIBuffer m_VertexBuffers[kFrames];
     Leir::RHI::RHIDeviceMemory m_VertexMemories[kFrames];
+    Leir::RHI::RHIBuffer m_SolidVertexBuffers[kFrames];
+    Leir::RHI::RHIDeviceMemory m_SolidVertexMemories[kFrames];
 };

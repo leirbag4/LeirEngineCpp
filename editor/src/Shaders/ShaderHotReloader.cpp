@@ -34,6 +34,8 @@ void ShaderHotReloader::BuildEntries()
         { "Grid.frag", Leir::RHI::ShaderStage::Fragment },
         { "Gizmo.vert", Leir::RHI::ShaderStage::Vertex },
         { "Gizmo.frag", Leir::RHI::ShaderStage::Fragment },
+        { "GizmoSolid.vert", Leir::RHI::ShaderStage::Vertex },
+        { "GizmoSolid.frag", Leir::RHI::ShaderStage::Fragment },
     };
     for (const auto& def : kFiles) {
         Entry entry;

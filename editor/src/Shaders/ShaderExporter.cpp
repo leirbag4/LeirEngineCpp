@@ -315,6 +315,8 @@ const std::vector<ShaderExporter::ShaderFile>& ShaderExporter::ShaderFiles()
         { "Grid.frag", Leir::RHI::ShaderStage::Fragment },
         { "Gizmo.vert", Leir::RHI::ShaderStage::Vertex },
         { "Gizmo.frag", Leir::RHI::ShaderStage::Fragment },
+        { "GizmoSolid.vert", Leir::RHI::ShaderStage::Vertex },
+        { "GizmoSolid.frag", Leir::RHI::ShaderStage::Fragment },
     };
     return files;
 }
@@ -483,6 +485,7 @@ std::vector<std::string> ShaderExporter::WriteRuntimeWebGpuShaders(
     static const WgslShaderPair kPairs[] = {
         { "Grid.vert", "Grid.frag" },
         { "Gizmo.vert", "Gizmo.frag" },
+        { "GizmoSolid.vert", "GizmoSolid.frag" },
         { "Basic.vert", "Basic.frag" },
         { "Sprite.vert", "Sprite.frag" },
         { "UI.vert", "UI.frag" },

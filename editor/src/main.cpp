@@ -44,9 +44,11 @@
 #include "UI/ConsolePanel.h"
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
+#include "UI/ToolbarPanel.h"
 #include "Camera/EditorCamera.h"
 #include "Grid/EditorGrid.h"
 #include "Gizmos/GizmoRenderer.h"
+#include "Gizmos/TransformGizmo.h"
 
 #ifdef LEIR_EDITOR_SLANG
 #include "Shaders/SlangShaderCompiler.h"
@@ -71,6 +73,7 @@
 
 namespace {
     const float kBottomBarHeight = 30.0f;
+    const float kTopToolbarHeight = 30.0f;
 }
 
 // Forward decl (mutually recursive helpers).
@@ -361,13 +364,33 @@ protected:
 
         // ---- Editor Layout (dock system) ----
         // The dock manager is the full-screen root. It leaves the bottom 30px
-        // free for the status bar.
+        // free for the status bar and the top 30px for the (non-dockable)
+        // transform tool toolbar.
         m_DockManager = new Leir::DockManager();
         m_DockManager->SetName("EditorDock");
         m_DockManager->SetFont(m_FontSmall.get());
         m_DockManager->GetRect().anchor = Leir::AnchorSet::Stretch();
-        m_DockManager->GetRect().offset = {0.0f, 0.0f, 0.0f, -kBottomBarHeight};
+        m_DockManager->GetRect().offset = {0.0f, kTopToolbarHeight, 0.0f, -kBottomBarHeight};
         m_Canvas->AddChild(m_DockManager);
+
+        // Transform toolbar: a NON-dockable sibling of the DockManager pinned to
+        // the top, spanning the full width (Unity/Godot-style tool menu).
+        m_Toolbar = new ToolbarPanel();
+        m_Toolbar->SetName("TransformToolbar");
+        m_Toolbar->SetFont(m_FontSmall.get());
+        m_Toolbar->GetRect().anchor = {0.0f, 0.0f, 1.0f, 0.0f};
+        m_Toolbar->GetRect().offset = {0.0f, 0.0f, 0.0f, kTopToolbarHeight};
+        m_Toolbar->SetOnToolChanged([this](ToolbarPanel::Tool t) {
+            m_TransformGizmo.SetTool(static_cast<TransformGizmo::Tool>(t));
+            m_Toolbar->SetScaleMode(m_TransformGizmo.IsScaleTool());
+        });
+        m_Toolbar->SetOnSpaceChanged([this](ToolbarPanel::Space s) {
+            m_TransformGizmo.SetSpace(static_cast<TransformGizmo::Space>(s));
+        });
+        m_Canvas->AddChild(m_Toolbar);
+
+        m_TransformGizmo.SetTool(TransformGizmo::Tool::Translate);
+        m_TransformGizmo.SetSpace(TransformGizmo::Space::Global);
 
         // Viewport panel (rendered from the shared RenderTexture)
         m_ViewportPanel = new Leir::UIViewportPanel();
@@ -434,6 +457,10 @@ protected:
         inspector->AddChild(m_InspectorTransformPanel);
 
         m_InspectorTransformPanel->SetTargetObject(
+            dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
+
+        // Default selection for the transform gizmo: the Cube.
+        m_TransformGizmo.SetSelected(
             dynamic_cast<Leir::Object3D*>(scene.FindObjectByName("Cube")));
 
         // Bottom bar (sibling of the dock, pinned to the bottom)
@@ -681,6 +708,55 @@ protected:
         // Keep the viewport render target in sync with the actual layout size
         UpdateViewportRenderTarget();
 
+        // ---- Transform gizmo: input + shortcuts ----
+        // W/E/R switch the active tool (translate/rotate/scale) like Unity. The
+        // shortcuts are suppressed while flying the camera (right/middle held:
+        // W/E are also WASD/QE camera keys), while typing in a text input, or
+        // while a gizmo drag is active.
+        auto* focus = m_Canvas ? m_Canvas->GetFocus() : nullptr;
+        const bool typing = focus && dynamic_cast<Leir::UITextInput*>(focus) != nullptr;
+        if (!typing && !rightDown && !middleDown && !m_TransformGizmo.IsDragging()) {
+            if (Leir::Keyboard::WasPressed(Leir::Key::W)) {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Translate);
+            } else if (Leir::Keyboard::WasPressed(Leir::Key::E)) {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Rotate);
+            } else if (Leir::Keyboard::WasPressed(Leir::Key::R)) {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Scale);
+            }
+        }
+        if (m_Toolbar) {
+            m_Toolbar->SetTool(static_cast<ToolbarPanel::Tool>(m_TransformGizmo.GetTool()));
+            m_Toolbar->SetSpace(static_cast<ToolbarPanel::Space>(m_TransformGizmo.GetSpace()));
+            m_Toolbar->SetScaleMode(m_TransformGizmo.IsScaleTool());
+        }
+
+        // Gizmo handles its own hover/drag. Picks (left press) that land on a
+        // handle are consumed; otherwise the click is object selection.
+        // Update runs every frame so the gizmo renders even when the mouse is
+        // not over the viewport; press-to-drag is gated to inViewport below.
+        bool consumed = false;
+        if (m_PrimaryCamera && m_ViewportPanel) {
+            TransformGizmo::Frame gframe;
+            gframe.camera = m_PrimaryCamera;
+            const auto& cr = m_ViewportPanel->GetComputedRect();
+            gframe.viewportRect = cr;
+            gframe.contentScale = GetContentScale();
+            gframe.mousePos = Leir::Mouse::GetPos();
+            gframe.leftPressed = inViewport && Leir::Mouse::WasPressed(Leir::PointerButton::Left);
+            gframe.leftDown = Leir::Mouse::IsDown(Leir::PointerButton::Left);
+            gframe.leftReleased = Leir::Mouse::WasReleased(Leir::PointerButton::Left);
+            consumed = m_TransformGizmo.Update(gframe);
+        }
+
+        // Click-pick selection: left click in the viewport that did NOT hit a
+        // gizmo handle selects the object under the cursor (or deselects when
+        // clicking empty space).
+        if (inViewport && !consumed &&
+            Leir::Mouse::WasPressed(Leir::PointerButton::Left) && m_PrimaryCamera) {
+            Leir::Object3D* picked = PickObjectAtCursor(scene);
+            m_TransformGizmo.SetSelected(picked);
+        }
+
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
 
@@ -780,6 +856,31 @@ protected:
                 m_GizmoTestPanel->GetEnd(), m_GizmoTestPanel->GetColor(),
                 m_GizmoTestPanel->GetWidth());
         }
+
+        // Selection highlight: violet wireframe around the selected object's
+        // world-space AABB (interim feedback until the outline shader phase).
+        if (m_TransformGizmo.GetSelected()) {
+            auto* sel = m_TransformGizmo.GetSelected();
+            const auto& bmin = sel->GetBoundsMin();
+            const auto& bmax = sel->GetBoundsMax();
+            Leir::Matrix4x4 m = sel->GetTransform().GetLocalToWorldMatrix();
+            Leir::Vector3 mn(1e30f, 1e30f, 1e30f), mx(-1e30f, -1e30f, -1e30f);
+            for (int x = 0; x < 2; ++x) for (int y = 0; y < 2; ++y) for (int z = 0; z < 2; ++z) {
+                Leir::Vector3 c(x ? bmax.x : bmin.x, y ? bmax.y : bmin.y, z ? bmax.z : bmin.z);
+                Leir::Vector3 w = m.MultiplyPoint3x4(c);
+                mn.x = std::min(mn.x, w.x); mn.y = std::min(mn.y, w.y); mn.z = std::min(mn.z, w.z);
+                mx.x = std::max(mx.x, w.x); mx.y = std::max(mx.y, w.y); mx.z = std::max(mx.z, w.z);
+            }
+            Leir::Vector3 center = (mn + mx) * 0.5f;
+            Leir::Vector3 size = mx - mn;
+            m_Gizmos->DrawBox(center, size, {0.8f, 0.45f, 1.0f, 1.0f}, 2.0f);
+        }
+
+        // Transform gizmo (translate/rotate/scale handles) on the selection.
+        m_TransformGizmo.Draw(*m_Gizmos,
+            m_PrimaryCamera ? m_PrimaryCamera->GetViewProjectionMatrix()
+                            : Leir::Matrix4x4::Identity(),
+            (float)m_ViewportRT->GetWidth(), (float)m_ViewportRT->GetHeight());
     }
 
     void OnShutdown() override
@@ -838,6 +939,8 @@ protected:
         m_ConsolePanel = nullptr;
         DeleteUiSubtree(m_DebugPanel);
         m_DebugPanel = nullptr;
+        DeleteUiSubtree(m_Toolbar);
+        m_Toolbar = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         Leir::XConsole::Debug("[Timing] UI subtrees freed: {:.1f} ms", elapsedMs());
         // Destroy the ground grid and gizmos before the viewport RT they target.
@@ -888,6 +991,71 @@ private:
             : Leir::RHI::ShaderTarget::SpirV;
     }
 #endif
+
+    // Raycast the viewport cursor against scene objects (world-space AABB of
+    // their mesh bounds). Returns the nearest hit, or nullptr (empty click ->
+    // deselect). Minimal object picking for the gizmo phase.
+    Leir::Object3D* PickObjectAtCursor(Leir::Scene* scene)
+    {
+        if (!scene || !m_ViewportPanel || !m_PrimaryCamera)
+            return nullptr;
+        const auto& cr = m_ViewportPanel->GetComputedRect();
+        const float vw = std::max(cr.z, 1.0f);
+        const float vh = std::max(cr.w, 1.0f);
+        Leir::Vector2 mp = Leir::Mouse::GetPos();
+        const float ndcX = ((mp.x - cr.x) / vw) * 2.0f - 1.0f;
+        const float ndcY = 1.0f - ((mp.y - cr.y) / vh) * 2.0f;
+        const Leir::Matrix4x4 invVP = m_PrimaryCamera->GetViewProjectionMatrix().Inverse();
+        auto unproj = [&](float z) -> Leir::Vector3 {
+            const Leir::Vector4 c = invVP * Leir::Vector4(ndcX, ndcY, z, 1.0f);
+            return Leir::Vector3(c.x / c.w, c.y / c.w, c.z / c.w);
+        };
+        const Leir::Vector3 origin = unproj(-1.0f);
+        const Leir::Vector3 dir = (unproj(1.0f) - origin).Normalized();
+
+        float bestT = 1e30f;
+        Leir::Object3D* best = nullptr;
+        for (const auto& objPtr : scene->GetObjects()) {
+            Leir::Object3D* obj = dynamic_cast<Leir::Object3D*>(objPtr.get());
+            if (!obj)
+                continue;
+            if (!obj->GetComponent<Leir::MeshRenderer>())
+                continue;
+            const auto& bmin = obj->GetBoundsMin();
+            const auto& bmax = obj->GetBoundsMax();
+            // World-space AABB: transform the 8 corners of the local bounds.
+            Leir::Matrix4x4 m = obj->GetTransform().GetLocalToWorldMatrix();
+            Leir::Vector3 mn(1e30f, 1e30f, 1e30f), mx(-1e30f, -1e30f, -1e30f);
+            for (int x = 0; x < 2; ++x) for (int y = 0; y < 2; ++y) for (int z = 0; z < 2; ++z) {
+                Leir::Vector3 c(x ? bmax.x : bmin.x, y ? bmax.y : bmin.y, z ? bmax.z : bmin.z);
+                Leir::Vector3 w = m.MultiplyPoint3x4(c);
+                mn.x = std::min(mn.x, w.x); mn.y = std::min(mn.y, w.y); mn.z = std::min(mn.z, w.z);
+                mx.x = std::max(mx.x, w.x); mx.y = std::max(mx.y, w.y); mx.z = std::max(mx.z, w.z);
+            }
+            // Slab ray/AABB intersection.
+            float tmin = -1e30f, tmax = 1e30f;
+            bool ok = true;
+            auto axis = [&](float o, float d, float lo, float hi, int i) {
+                (void)i;
+                if (std::fabs(d) < 1e-12f) {
+                    if (o < lo || o > hi) ok = false;
+                    return;
+                }
+                float t1 = (lo - o) / d, t2 = (hi - o) / d;
+                if (t1 > t2) std::swap(t1, t2);
+                tmin = std::max(tmin, t1);
+                tmax = std::min(tmax, t2);
+                if (tmin > tmax) ok = false;
+            };
+            axis(origin.x, dir.x, mn.x, mx.x, 0);
+            axis(origin.y, dir.y, mn.y, mx.y, 1);
+            axis(origin.z, dir.z, mn.z, mx.z, 2);
+            if (!ok || tmax < 0.0f)
+                continue;
+            if (tmin < bestT) { bestT = tmin; best = obj; }
+        }
+        return best;
+    }
 
     void UpdateViewportRenderTarget()
     {
@@ -961,6 +1129,10 @@ private:
     Leir::DockManager* m_DockManager = nullptr;
     Leir::UIPanel* m_HierarchyPanel = nullptr;
     Leir::UIPanel* m_InspectorPanel = nullptr;
+    ToolbarPanel* m_Toolbar = nullptr;
+
+    // Transform gizmo system (toolbar + gizmos + selection)
+    TransformGizmo m_TransformGizmo;
 
     // Viewport system
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;

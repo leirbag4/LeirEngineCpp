@@ -99,6 +99,8 @@ if(SLANGC)
         shaders/Grid.frag.slang
         shaders/Gizmo.vert.slang
         shaders/Gizmo.frag.slang
+        shaders/GizmoSolid.vert.slang
+        shaders/GizmoSolid.frag.slang
     )
     foreach(SHADER ${SHADER_SOURCES})
         get_filename_component(SHADER_NAME ${SHADER} NAME)

@@ -1,4 +1,4 @@
-#include <LeirEngine/Core/Log.h>
+﻿#include <LeirEngine/Core/Log.h>
 #include <LeirEngine/RHI/IShaderCompiler.h>
 
 #include "ShaderExporter.h"
@@ -12,7 +12,7 @@
 
 // CI smoke test: run the vendored Slang compiler through the editor's
 // ShaderExporter on all 5 targets. Fails (non-zero exit) unless every target
-// produced all 8 shaders. Exercises link + runtime loading + codegen of the
+// produced all 12 shaders. Exercises link + runtime loading + codegen of the
 // vendored libslang on every platform (Windows DLL, Linux .so, macOS .dylib).
 int main()
 {
@@ -28,14 +28,14 @@ int main()
     bool anyFailure = false;
     for (const auto& line : lines) {
         std::printf("%s\n", line.c_str());
-        if (line.find("/10 shaders") != std::string::npos)
+        if (line.find("/12 shaders") != std::string::npos)
             ++fullTargets;
         if (line.find("FAILED") != std::string::npos ||
             line.find("failed") != std::string::npos)
             anyFailure = true;
     }
 
-    // Expect one "N/10 shaders" line per target: SPIR-V, Metal, WGSL, GLSL 450
+    // Expect one "N/12 shaders" line per target: SPIR-V, Metal, WGSL, GLSL 450
     // everywhere; DXIL additionally on Windows (it needs the external dxc,
     // which only the Windows Vulkan SDK provides).
 #ifdef _WIN32
@@ -50,7 +50,7 @@ int main()
     }
 
     // ExportAll must also emit one reflection sidecar per shader (the SpirV
-    // pass writes <name>.reflect.json next to the bytecode) — the engine
+    // pass writes <name>.reflect.json next to the bytecode) â€” the engine
     // derives its pipeline layouts from these at runtime (Plan B, Fase 2).
     int sidecars = 0;
     std::error_code ec;
@@ -60,8 +60,8 @@ int main()
         if (name.size() > 13 && name.compare(name.size() - 13, 13, ".reflect.json") == 0)
             ++sidecars;
     }
-    if (ec || sidecars != 10) {
-        std::fprintf(stderr, "SlangExportTest: FAILED (reflection sidecars=%d/10)\n", sidecars);
+    if (ec || sidecars != 12) {
+        std::fprintf(stderr, "SlangExportTest: FAILED (reflection sidecars=%d/12)\n", sidecars);
         return 1;
     }
 

@@ -4,6 +4,7 @@ add_executable(LeirEngineEditor
 src/Camera/EditorCamera.cpp
 src/Grid/EditorGrid.cpp
 src/Gizmos/GizmoRenderer.cpp
+    src/Gizmos/TransformGizmo.cpp
     src/UI/UIDragFloatInput.cpp
     src/UI/UITestPanel.cpp
     src/UI/GizmoLineTestPanel.cpp
@@ -15,6 +16,7 @@ src/Gizmos/GizmoRenderer.cpp
     src/UI/ConsolePanel.cpp
     src/UI/InspectorTransformPanel.cpp
     src/UI/DebugPanel.cpp
+    src/UI/ToolbarPanel.cpp
 )
 
 # ---- Shader tooling (Plan A, TODO_RHI_SLANG.md §5) ----

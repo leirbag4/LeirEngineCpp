@@ -36,15 +36,22 @@ GizmoRenderer::GizmoRenderer(Leir::RHI::RenderBackend* device,
     // CPU writes frame N's buffer while the GPU reads frame N-1's, so there is
     // no sync stall.
     const uint32_t vbSize = kMaxVertices * (uint32_t)sizeof(GizmoVertex);
+    const uint32_t solidVbSize = kMaxSolidVertices * (uint32_t)sizeof(SolidVertex);
     for (int f = 0; f < kFrames; ++f) {
         m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
             Leir::RHI::BufferUsage::Vertex,
             Leir::RHI::MemoryProperty::HostVisible | Leir::RHI::MemoryProperty::HostCoherent,
             m_VertexMemories[f]);
+        m_SolidVertexBuffers[f] = m_Device->CreateBuffer(solidVbSize,
+            Leir::RHI::BufferUsage::Vertex,
+            Leir::RHI::MemoryProperty::HostVisible | Leir::RHI::MemoryProperty::HostCoherent,
+            m_SolidVertexMemories[f]);
     }
     m_Quads.reserve(4096);
+    m_SolidVerts.reserve(4096);
 
     CreatePipeline(viewportRenderPass);
+    CreateSolidPipeline(viewportRenderPass);
 }
 
 GizmoRenderer::~GizmoRenderer()
@@ -55,6 +62,7 @@ GizmoRenderer::~GizmoRenderer()
 void GizmoRenderer::BeginFrame()
 {
     m_Lines.clear();
+    m_SolidVerts.clear();
     m_OverflowLogged = false;
 }
 
@@ -130,11 +138,102 @@ void GizmoRenderer::DrawSphere(const Leir::Vector3& center, float radius,
     DrawCircle(center, radius, Leir::Vector3::Forward(), color, segments, widthPx);
 }
 
+void GizmoRenderer::DrawTriangle(const Leir::Vector3& a, const Leir::Vector3& b,
+                                 const Leir::Vector3& c, const Leir::Vector4& color)
+{
+    if (m_SolidVerts.size() + 3 > kMaxSolidVertices) {
+        if (!m_OverflowLogged) {
+            Leir::XConsole::Debug("Gizmo solid vertex overflow (dropping)");
+            m_OverflowLogged = true;
+        }
+        return;
+    }
+    SolidVertex va; va.position = a; va.color = color; m_SolidVerts.push_back(va);
+    SolidVertex vb; vb.position = b; vb.color = color; m_SolidVerts.push_back(vb);
+    SolidVertex vc; vc.position = c; vc.color = color; m_SolidVerts.push_back(vc);
+}
+
+void GizmoRenderer::DrawQuadFilled(const Leir::Vector3& a, const Leir::Vector3& b,
+                                   const Leir::Vector3& c, const Leir::Vector3& d,
+                                   const Leir::Vector4& color)
+{
+    DrawTriangle(a, b, c, color);
+    DrawTriangle(a, c, d, color);
+}
+
+void GizmoRenderer::DrawCubeFilled(const Leir::Vector3& center, const Leir::Vector3& size,
+                                   const Leir::Vector4& color)
+{
+    const Leir::Vector3 h = size * 0.5f;
+    const Leir::Vector3 c0(center.x - h.x, center.y - h.y, center.z - h.z);
+    const Leir::Vector3 c1(center.x + h.x, center.y - h.y, center.z - h.z);
+    const Leir::Vector3 c2(center.x + h.x, center.y - h.y, center.z + h.z);
+    const Leir::Vector3 c3(center.x - h.x, center.y - h.y, center.z + h.z);
+    const Leir::Vector3 c4(center.x - h.x, center.y + h.y, center.z - h.z);
+    const Leir::Vector3 c5(center.x + h.x, center.y + h.y, center.z - h.z);
+    const Leir::Vector3 c6(center.x + h.x, center.y + h.y, center.z + h.z);
+    const Leir::Vector3 c7(center.x - h.x, center.y + h.y, center.z + h.z);
+
+    // Per-face shading so the 3D cube reads correctly even at small sizes.
+    const Leir::Vector4 shadeUp = color;
+    const Leir::Vector4 shadeDown = color * 0.6f;
+    const Leir::Vector4 shadeFront = color * 0.8f;
+    const Leir::Vector4 shadeBack = color * 0.5f;
+    const Leir::Vector4 shadeRight = color * 0.9f;
+    const Leir::Vector4 shadeLeft = color * 0.55f;
+
+    DrawQuadFilled(c4, c5, c6, c7, shadeUp);        // +Y
+    DrawQuadFilled(c0, c3, c2, c1, shadeDown);      // -Y
+    DrawQuadFilled(c3, c7, c6, c2, shadeFront);     // +Z
+    DrawQuadFilled(c0, c1, c5, c4, shadeBack);      // -Z
+    DrawQuadFilled(c1, c2, c6, c5, shadeRight);     // +X
+    DrawQuadFilled(c0, c4, c7, c3, shadeLeft);      // -X
+}
+
+void GizmoRenderer::DrawCone(const Leir::Vector3& baseCenter, float baseRadius,
+                             const Leir::Vector3& tip, const Leir::Vector4& color,
+                             int segments)
+{
+    if (segments < 3)
+        segments = 3;
+    if (baseRadius <= 0.0f || (tip - baseCenter).SqrLength() < 1e-12f)
+        return;
+
+    const Leir::Vector3 axis = (tip - baseCenter).Normalized();
+    Leir::Vector3 b0 = Leir::Vector3::Cross(axis,
+        std::fabs(axis.y) < 0.9f ? Leir::Vector3::Up() : Leir::Vector3::Right());
+    b0.Normalize();
+    const Leir::Vector3 b1 = Leir::Vector3::Cross(axis, b0);
+
+    // Side (triangle fan base circle -> tip). Winding picked so the front face
+    // is visible from outside (cull is disabled, but keep it correct anyway).
+    for (int i = 0; i < segments; ++i) {
+        const float a0 = (float)i / (float)segments * 2.0f * kPi;
+        const float a1 = (float)(i + 1) / (float)segments * 2.0f * kPi;
+        const Leir::Vector3 p0 = baseCenter + (b0 * (std::cos(a0) * baseRadius)) +
+                                 (b1 * (std::sin(a0) * baseRadius));
+        const Leir::Vector3 p1 = baseCenter + (b0 * (std::cos(a1) * baseRadius)) +
+                                 (b1 * (std::sin(a1) * baseRadius));
+        DrawTriangle(p0, tip, p1, color);
+    }
+    // Base disc (fan from center).
+    for (int i = 0; i < segments; ++i) {
+        const float a0 = (float)i / (float)segments * 2.0f * kPi;
+        const float a1 = (float)(i + 1) / (float)segments * 2.0f * kPi;
+        const Leir::Vector3 p0 = baseCenter + (b0 * (std::cos(a0) * baseRadius)) +
+                                 (b1 * (std::sin(a0) * baseRadius));
+        const Leir::Vector3 p1 = baseCenter + (b0 * (std::cos(a1) * baseRadius)) +
+                                 (b1 * (std::sin(a1) * baseRadius));
+        DrawTriangle(p0, p1, baseCenter, color);
+    }
+}
+
 void GizmoRenderer::Render(Leir::RHI::GCommandGraph& graph,
                            const Leir::Matrix4x4& viewProjection,
                            float viewportWidthPx, float viewportHeightPx)
 {
-    if (!m_Device || !m_Pipeline.IsValid() || m_Lines.empty())
+    if (!m_Device || !m_Pipeline.IsValid() ||
+        (m_Lines.empty() && m_SolidVerts.empty()))
         return;
 
     const uint32_t frame = m_Device->GetCurrentFrameIndex();
@@ -243,25 +342,39 @@ void GizmoRenderer::Render(Leir::RHI::GCommandGraph& graph,
             m_Quads.push_back(b0);
         }
     }
-    if (m_Quads.empty())
-        return;
 
     const uint32_t vbBytes = (uint32_t)(m_Quads.size() * sizeof(GizmoVertex));
-    m_Device->MapMemory(m_VertexMemories[frame], 0, vbBytes, &data);
-    std::memcpy(data, m_Quads.data(), vbBytes);
-    m_Device->UnmapMemory(m_VertexMemories[frame]);
+    if (!m_Quads.empty()) {
+        m_Device->MapMemory(m_VertexMemories[frame], 0, vbBytes, &data);
+        std::memcpy(data, m_Quads.data(), vbBytes);
+        m_Device->UnmapMemory(m_VertexMemories[frame]);
 
-    graph.BindPipeline(m_Pipeline);
-    graph.BindDescriptorSets(m_PipelineLayout, 0, { m_UBOSets[frame] });
-    graph.BindVertexBuffer(m_VertexBuffers[frame]);
+        graph.BindPipeline(m_Pipeline);
+        graph.BindDescriptorSets(m_PipelineLayout, 0, { m_UBOSets[frame] });
+        graph.BindVertexBuffer(m_VertexBuffers[frame]);
 
-    GizmoPushConstants push;
-    push.viewportWidth = viewportWidthPx;
-    push.viewportHeight = viewportHeightPx;
-    graph.PushConstants(m_PipelineLayout, Leir::RHI::ShaderStageMask::Vertex,
-        0, (uint32_t)sizeof(GizmoPushConstants), &push);
+        GizmoPushConstants push;
+        push.viewportWidth = viewportWidthPx;
+        push.viewportHeight = viewportHeightPx;
+        graph.PushConstants(m_PipelineLayout, Leir::RHI::ShaderStageMask::Vertex,
+            0, (uint32_t)sizeof(GizmoPushConstants), &push);
 
-    graph.Draw((uint32_t)m_Quads.size(), 0);
+        graph.Draw((uint32_t)m_Quads.size(), 0);
+    }
+
+    // ---- Solid (filled) geometry: plain triangles, same UBO set, its own
+    // pipeline (GizmoSolid). Depth-tested against the scene, depth write off.
+    if (!m_SolidVerts.empty() && m_SolidPipeline.IsValid()) {
+        const uint32_t solidBytes = (uint32_t)(m_SolidVerts.size() * sizeof(SolidVertex));
+        m_Device->MapMemory(m_SolidVertexMemories[frame], 0, solidBytes, &data);
+        std::memcpy(data, m_SolidVerts.data(), solidBytes);
+        m_Device->UnmapMemory(m_SolidVertexMemories[frame]);
+
+        graph.BindPipeline(m_SolidPipeline);
+        graph.BindDescriptorSets(m_SolidPipelineLayout, 0, { m_UBOSets[frame] });
+        graph.BindVertexBuffer(m_SolidVertexBuffers[frame]);
+        graph.Draw((uint32_t)m_SolidVerts.size(), 0);
+    }
 }
 
 void GizmoRenderer::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
@@ -358,6 +471,85 @@ void GizmoRenderer::CreatePipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
     Leir::XConsole::Println("Gizmo renderer pipeline created ({})", ext);
 }
 
+void GizmoRenderer::CreateSolidPipeline(Leir::RHI::RHIRenderPass viewportRenderPass)
+{
+    const std::string shaderDir = LEIR_SHADER_DIR;
+    const std::string ext = m_Device->GetShaderFileExtension();
+    const std::string vertPath = shaderDir + "/GizmoSolid.vert" + ext;
+    const std::string fragPath = shaderDir + "/GizmoSolid.frag" + ext;
+
+    // Reuse the same UBO (set 0, binding 0 = viewProjection) as the line
+    // pipeline: GizmoSolid declares the identical cbuffer, so the descriptor
+    // set layout/pool/sets are shared (no extra descriptors needed).
+    m_SolidPipelineLayout = m_Device->CreatePipelineLayout({ m_UBOLayout }, {});
+
+    auto vertCode = Leir::Shader::ReadFile(vertPath);
+    auto fragCode = Leir::Shader::ReadFile(fragPath);
+    if (vertCode.empty() || fragCode.empty()) {
+        Leir::XConsole::PrintWarning("GizmoSolid shaders not found ({} / {})", vertPath, fragPath);
+        return;
+    }
+    Leir::RHI::RHIShaderModule vertMod = m_Device->CreateShaderModule(vertCode);
+    Leir::RHI::RHIShaderModule fragMod = m_Device->CreateShaderModule(fragCode);
+
+    Leir::RHI::RHIShaderStageInfo stages[2];
+    stages[0].stage = Leir::RHI::ShaderStage::Vertex;
+    stages[0].module = vertMod;
+    stages[0].entryPoint = "main";
+    stages[1].stage = Leir::RHI::ShaderStage::Fragment;
+    stages[1].module = fragMod;
+    stages[1].entryPoint = "main";
+
+    Leir::RHI::RHIPipelineDesc desc{};
+    desc.layout = m_SolidPipelineLayout;
+    desc.renderPass = viewportRenderPass;
+    desc.stages = { stages[0], stages[1] };
+    desc.vertexBinding = GetSolidBindingDescription();
+    desc.vertexAttributes = GetSolidAttributeDescriptions();
+    desc.topology = Leir::RHI::Topology::TriangleList;
+    desc.polygonMode = Leir::RHI::PolygonMode::Fill;
+    desc.cullMode = Leir::RHI::CullMode::None;
+    desc.depthTestEnable = true;
+    desc.depthWriteEnable = false; // gizmos never write depth
+    desc.blend.enable = true;
+    m_SolidPipeline = m_Device->CreateGraphicsPipeline(desc);
+
+    m_Device->DestroyShaderModule(vertMod);
+    m_Device->DestroyShaderModule(fragMod);
+
+    Leir::XConsole::Println("Gizmo solid pipeline created ({})", ext);
+}
+
+Leir::RHI::RHIVertexInputBinding GizmoRenderer::GetSolidBindingDescription()
+{
+    Leir::RHI::RHIVertexInputBinding binding;
+    binding.binding = 0;
+    binding.stride = sizeof(SolidVertex); // 28
+    binding.inputRate = Leir::RHI::VertexInputRate::Vertex;
+    return binding;
+}
+
+std::vector<Leir::RHI::RHIVertexAttribute> GizmoRenderer::GetSolidAttributeDescriptions()
+{
+    std::vector<Leir::RHI::RHIVertexAttribute> attrs(2);
+
+    attrs[0].binding = 0;
+    attrs[0].location = 0;
+    attrs[0].format = Leir::RHI::Format::R32G32B32_SFLOAT;
+    attrs[0].offset = offsetof(SolidVertex, position);
+    attrs[0].semantic = "POSITION";
+    attrs[0].semanticIndex = 0;
+
+    attrs[1].binding = 0;
+    attrs[1].location = 1;
+    attrs[1].format = Leir::RHI::Format::R32G32B32A32_SFLOAT;
+    attrs[1].offset = offsetof(SolidVertex, color);
+    attrs[1].semantic = "COLOR";
+    attrs[1].semanticIndex = 0;
+
+    return attrs;
+}
+
 Leir::RHI::RHIVertexInputBinding GizmoRenderer::GetBindingDescription()
 {
     Leir::RHI::RHIVertexInputBinding binding;
@@ -422,6 +614,10 @@ void GizmoRenderer::DestroyResources()
         m_Device->DestroyPipeline(m_Pipeline);
     if (m_PipelineLayout.IsValid())
         m_Device->DestroyPipelineLayout(m_PipelineLayout);
+    if (m_SolidPipeline.IsValid())
+        m_Device->DestroyPipeline(m_SolidPipeline);
+    if (m_SolidPipelineLayout.IsValid())
+        m_Device->DestroyPipelineLayout(m_SolidPipelineLayout);
     for (auto& entry : m_SetLayouts) {
         if (entry.layout.IsValid())
             m_Device->DestroyDescriptorSetLayout(entry.layout);
@@ -438,5 +634,9 @@ void GizmoRenderer::DestroyResources()
             m_Device->DestroyBuffer(m_VertexBuffers[i]);
         if (m_VertexMemories[i].IsValid())
             m_Device->DestroyMemory(m_VertexMemories[i]);
+        if (m_SolidVertexBuffers[i].IsValid())
+            m_Device->DestroyBuffer(m_SolidVertexBuffers[i]);
+        if (m_SolidVertexMemories[i].IsValid())
+            m_Device->DestroyMemory(m_SolidVertexMemories[i]);
     }
 }
