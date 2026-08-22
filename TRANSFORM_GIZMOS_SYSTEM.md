@@ -40,6 +40,12 @@ EditorApp (main.cpp)
 ### Fase 0 — Documento de registro
 - [x] `TRANSFORM_GIZMOS_SYSTEM.md` creado con plan + checkboxes.
 
+### Fase 0b — Picking de planos por RAYCAST 3D (fix del hover inestable al reorientar)
+- [x] **Bug**: al reorientarse los planos hacia la cámara (estilo Unity), el hover se volvía inestable — el verde no se agarraba y se seleccionaba el rojo / la flecha / nada. **Causa raíz**: el `Pick` usaba **point-in-polygon proyectado a pantalla** (`PointInQuadPx`) + desempate con `RayPlane` contra el **plano infinito**. Al reorientarse, los 3 quads (que comparten la esquina en `g.center`) se **superponen en pantalla** y el winding proyectado se invierte → el test fallaba o elegía el quad equivocado; cuando el mouse caía en un hueco, la flecha robaba el hover.
+- [x] **Fix**: nuevo `TransformGizmo::RayQuadHit` — intersecta el rayo del mouse con el **quad finito 3D real** (paralelogramo `p0 + u*(p1-p0) + v*(p3-p0)`, `u,v ∈ [0,1]`), no con el plano infinito. El `Pick` de translate usa ese raycast contra la **misma geometría exacta del Draw** (esquina compartida en `g.center`, `su/sv` hacia cámara — los planos NO se separan). Gana el quad de menor profundidad (más cercano a la cámara). Eliminado `PointInQuadPx` y `kPlanePickPx` (sin uso).
+- [x] **Por qué funciona**: los 3 quads 3D viven en planos distintos (XZ/YZ/XY) y solo se tocan en las aristas — no se superponen en 3D. El raycast al quad real es estable en cualquier orientación; la profundidad del hit decide cuál está delante en el punto exacto del mouse.
+- [x] Verificado por el usuario: mismo setup (cámara `pos 1.56,1.216,-1.08` rot `165.59,42.8,180`), el plano verde se agarra estable con el mouse encima (`hover=PlaneY` sostenido) y el click lo arrastra. ctest 2/2.
+
 ### Fase 1 — Infraestructura de render (sólidos)
 - [x] `engine/shaders/GizmoSolid.vert.slang` + `.frag.slang` (triángulos rellenos, color por vértice, UBO viewProjection, blend alpha, depthTest on / depthWrite off).
 - [x] `GizmoRenderer` extendido: 2º pipeline + 2º vertex buffer (sólidos).

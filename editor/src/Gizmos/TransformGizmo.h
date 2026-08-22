@@ -110,6 +110,10 @@ private:
 
     bool RayPlane(const Ray& r, const Leir::Vector3& n, const Leir::Vector3& p,
                   Leir::Vector3& out) const;
+    // Ray vs a parallelogram quad (origin p0, edges p1-p0 and p3-p0). Returns
+    // the 3D hit point when the ray lands inside the quad (u,v in [0,1]).
+    bool RayQuadHit(const Ray& r, const Leir::Vector3& p0, const Leir::Vector3& p1,
+                    const Leir::Vector3& p3, Leir::Vector3& out) const;
     // Parameter t along the axis line (through `center`, direction `axis`) at
     // its closest approach to the mouse ray. Robust for any view angle (the
     // old ray-vs-plane axis drag degenerated when the camera sat IN the plane).
@@ -117,7 +121,6 @@ private:
                             const Leir::Vector3& axis, float& outT) const;
     float PointSegmentDistPx(const Leir::Vector2& p, const Leir::Vector2& a,
                              const Leir::Vector2& b) const;
-    bool PointInQuadPx(const Leir::Vector2& p, const Leir::Vector2 quad[4]) const;
 
     // Draws the camera-facing half-arc of a ring (the "semi circumference").
     void DrawRingArc(GizmoRenderer& g, const Leir::Vector3& center,

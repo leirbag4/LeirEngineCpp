@@ -27,7 +27,6 @@ constexpr float kCenterCubeHalfPx = 9.0f;
 // Pick thresholds in LOGICAL pixels.
 constexpr float kAxisPickPx = 10.0f;
 constexpr float kTipPickPx = 14.0f;
-constexpr float kPlanePickPx = 8.0f;
 constexpr float kRingPickPx = 9.0f;
 constexpr float kCubePickPx = 13.0f;
 
@@ -185,6 +184,34 @@ bool TransformGizmo::RayPlane(const Ray& r, const Leir::Vector3& n,
     return true;
 }
 
+bool TransformGizmo::RayQuadHit(const Ray& r, const Leir::Vector3& p0,
+                                const Leir::Vector3& p1, const Leir::Vector3& p3,
+                                Leir::Vector3& out) const
+{
+    // Parallelogram quad (p0 + u*(p1-p0) + v*(p3-p0), u,v in [0,1]). Compute
+    // the ray intersection with the quad's plane and reject if the (u,v)
+    // barycentric coordinates fall outside the quad. This tests the ACTUAL
+    // finite quad (not the infinite plane), so a plane is only picked when the
+    // cursor is really over its screen projection.
+    const Leir::Vector3 e1 = p1 - p0;
+    const Leir::Vector3 e2 = p3 - p0;
+    const Leir::Vector3 n = Leir::Vector3::Cross(e1, e2);
+    const float denom = Leir::Vector3::Dot(r.dir, n);
+    if (std::fabs(denom) < 1e-6f)
+        return false; // ray parallel to the quad's plane
+    const float t = Leir::Vector3::Dot(p0 - r.origin, n) / denom;
+    if (t < 0.0f)
+        return false;
+    const Leir::Vector3 hit = r.origin + r.dir * t;
+    const Leir::Vector3 rel = hit - p0;
+    const float u = Leir::Vector3::Dot(rel, e1) / Leir::Vector3::Dot(e1, e1);
+    const float v = Leir::Vector3::Dot(rel, e2) / Leir::Vector3::Dot(e2, e2);
+    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f)
+        return false;
+    out = hit;
+    return true;
+}
+
 bool TransformGizmo::ClosestPointOnAxis(const Ray& r, const Leir::Vector3& center,
                                         const Leir::Vector3& axis, float& outT) const
 {
@@ -216,18 +243,6 @@ float TransformGizmo::PointSegmentDistPx(const Leir::Vector2& p,
         return (p - a).Length();
     const float t = Leir::Mathf::Clamp01(Leir::Vector2::Dot(p - a, ab) / len2);
     return (p - (a + ab * t)).Length();
-}
-
-bool TransformGizmo::PointInQuadPx(const Leir::Vector2& p,
-                                   const Leir::Vector2 quad[4]) const
-{
-    for (int i = 0; i < 4; ++i) {
-        const Leir::Vector2 e0 = quad[(i + 1) % 4] - quad[i];
-        const Leir::Vector2 e1 = p - quad[i];
-        if (Leir::Vector2::Cross(e0, e1) > 0.0f)
-            return false;
-    }
-    return true;
 }
 
 TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
@@ -304,14 +319,11 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
 
     if (!isScale) {
         // ---- Translate: the plane squares win over the arrow lines ----
-        // When the camera-facing planes reorient, the perpendicular arrow shaft
-        // projects inside the plane's quad with ~0px distance, so testing the
-        // arrows first made them steal the hover (a distance tie). The planes
-        // are tested FIRST, and when the cursor is inside one the NEAREST plane
-        // to the camera wins (a tie across two planes -> pick the front one).
-        // Geometry matches Draw: all three squares SHARE the gizmo-center
-        // corner (no per-square normal offset -> they never cross) and extend
-        // toward the camera in their two in-plane axes.
+        // Picking is done with a 3D RAYCAST against the ACTUAL finite quad of
+        // each plane (same geometry as Draw: all three squares SHARE the
+        // gizmo-center corner and extend toward the camera in their two
+        // in-plane axes). The nearest hit to the camera wins, so the plane the
+        // cursor is really over (not its projected shadow / winding) is picked.
         const float s = kPlaneSizePx * g.worldPerPixel;
         const Leir::Vector3 camPosPlane =
             f.camera->GetOwner()->GetTransform().GetWorldPosition();
@@ -320,37 +332,20 @@ TransformGizmo::Handle TransformGizmo::Pick(const Frame& f, const GizmoFrame& g,
         Handle bestPlane = Handle::None;
         float bestPlaneDepth = 1e30f;
         for (int a = 0; a < 3; ++a) {
-            const Leir::Vector3 n = g.axes[a];
             const Leir::Vector3 u = g.axes[(a + 1) % 3];
             const Leir::Vector3 v = g.axes[(a + 2) % 3];
             const float su = Leir::Vector3::Dot(camDirPlane, u) >= 0.0f ? 1.0f : -1.0f;
             const float sv = Leir::Vector3::Dot(camDirPlane, v) >= 0.0f ? 1.0f : -1.0f;
             const Leir::Vector3 p0 = g.center; // shared corner
             const Leir::Vector3 p1 = p0 + u * (s * su);
-            const Leir::Vector3 p2 = p0 + u * (s * su) + v * (s * sv);
             const Leir::Vector3 p3 = p0 + v * (s * sv);
-            Leir::Vector2 quad[4];
-            quad[0] = toScreen(p0);
-            quad[1] = toScreen(p1);
-            quad[2] = toScreen(p2);
-            quad[3] = toScreen(p3);
-            if (PointInQuadPx(mouse, quad)) {
-                // Depth of the plane at the cursor (ray-plane hit distance to
-                // the camera): the front-most plane wins ties.
-                Leir::Vector3 hit;
-                float depth = 1e30f;
-                if (RayPlane(pickRay, n, g.center, hit))
-                    depth = (hit - camPosPlane).Length();
+            Leir::Vector3 hit;
+            if (RayQuadHit(pickRay, p0, p1, p3, hit)) {
+                const float depth = (hit - camPosPlane).Length();
                 if (depth < bestPlaneDepth) {
                     bestPlaneDepth = depth;
                     bestPlane = Handle((int)Handle::PlaneX + a);
                 }
-            } else {
-                float dq = 1e9f;
-                for (int i = 0; i < 4; ++i)
-                    dq = std::min(dq, PointSegmentDistPx(mouse, quad[i], quad[(i + 1) % 4]));
-                if (dq < kPlanePickPx)
-                    consider(Handle((int)Handle::PlaneX + a), dq);
             }
         }
         if (bestPlane != Handle::None) {
