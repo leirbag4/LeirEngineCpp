@@ -206,10 +206,13 @@ protected:
             for (const auto& line : wgpuLines)
                 Leir::XConsole::Println("{}", line);
 
-            // Web export single-source: generate the .web.wgsl (LEIR_BINDLESS=0)
-            // into the runtime shader dir so they are never hand-maintained.
+            // Web export single-source: generate the .web.wgsl (LEIR_BINDLESS=0) into the
+            // engine/shaders SOURCE dir — the web build preloads
+            // engine/shaders@/shaders, so the exported demo always uses the
+            // generated shaders (git diff on the committed .web.wgsl is the
+            // drift check). LEIR_SHADER_SOURCE_DIR is compile-time (engine).
             auto webLines = ShaderExporter::WriteWebShaders(m_ShaderCompiler.get(),
-                LEIR_SHADER_DIR);
+                LEIR_SHADER_SOURCE_DIR);
             for (const auto& line : webLines)
                 Leir::XConsole::Println("{}", line);
         }

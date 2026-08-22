@@ -1,25 +1,37 @@
-// Sprite.frag.web.wgsl - browser variant of Sprite.frag.wgsl. naga's web build
-// cannot compile binding_array (the wgpu_binding_array enable is native-only),
-// so this variant uses a single texture/sampler pair at group 0 that the
-// backend binds per draw from the draw's sampled texture.
-
-struct PSInput {
-    @location(0) fragTexCoord: vec2<f32>,
+struct _MatrixStorage_float4x4std430_0
+{
+    @align(16) data_0 : array<vec4<f32>, i32(4)>,
 };
 
-struct SpritePushConstants {
-    mvp: mat4x4<f32>,
-    color: vec4<f32>,
-    uvRect: vec4<f32>,
-    textureIndex: u32,
+struct SpritePushConstants_std430_0
+{
+    @align(16) mvp_0 : _MatrixStorage_float4x4std430_0,
+    @align(16) color_0 : vec4<f32>,
+    @align(16) uvRect_0 : vec4<f32>,
+    @align(16) textureIndex_0 : u32,
 };
 
-@group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var samp: sampler;
-@group(1) @binding(0) var<uniform> push: SpritePushConstants;
+@group(1) @binding(0) var<uniform> push_0 : SpritePushConstants_std430_0;
+@binding(0) @group(0) var tex_texture_0 : texture_2d<f32>;
+
+@binding(1) @group(0) var tex_sampler_0 : sampler;
+
+struct pixelOutput_0
+{
+    @location(0) output_0 : vec4<f32>,
+};
+
+struct pixelInput_0
+{
+    @location(0) fragTexCoord_0 : vec2<f32>,
+};
 
 @fragment
-fn ps_main(in: PSInput) -> @location(0) vec4<f32> {
-    let uv = push.uvRect.xy + in.fragTexCoord * push.uvRect.zw;
-    return textureSample(tex, samp, uv) * push.color;
+fn ps_main( _S1 : pixelInput_0) -> pixelOutput_0
+{
+    var uv_0 : vec2<f32> = push_0.uvRect_0.xy + _S1.fragTexCoord_0 * push_0.uvRect_0.zw;
+    ;
+    var _S2 : pixelOutput_0 = pixelOutput_0( (textureSample((tex_texture_0), (tex_sampler_0), (uv_0))) * push_0.color_0 );
+    return _S2;
 }
+
