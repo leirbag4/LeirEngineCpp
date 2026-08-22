@@ -107,15 +107,15 @@ void GizmoRenderer::DrawCircle(const Leir::Vector3& center, float radius,
 
     // Orthonormal basis around the normal.
     Leir::Vector3 b0 = Leir::Vector3::Cross(n,
-        std::fabsf(n.y) < 0.9f ? Leir::Vector3::Up() : Leir::Vector3::Right());
+        std::fabs(n.y) < 0.9f ? Leir::Vector3::Up() : Leir::Vector3::Right());
     b0.Normalize();
     const Leir::Vector3 b1 = Leir::Vector3::Cross(n, b0);
 
     Leir::Vector3 prev = center + (b0 * radius);
     for (int i = 1; i <= segments; ++i) {
         const float a = (float)i / (float)segments * 2.0f * kPi;
-        const Leir::Vector3 cur = center + (b0 * (std::cosf(a) * radius)) +
-                                  (b1 * (std::sinf(a) * radius));
+        const Leir::Vector3 cur = center + (b0 * (std::cos(a) * radius)) +
+                                  (b1 * (std::sin(a) * radius));
         DrawLine(prev, cur, color, widthPx);
         prev = cur;
     }
