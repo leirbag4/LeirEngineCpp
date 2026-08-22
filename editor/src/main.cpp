@@ -59,6 +59,7 @@
 
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
+#include <LeirEngine/Input/EventQueue.h>
 
 #include "LeirEngine/Core/Log.h"
 
@@ -362,6 +363,33 @@ protected:
         m_Canvas = std::make_unique<Leir::UICanvas>();
         m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
         m_Canvas->ConnectToInputSystem();
+
+        // ---- Gizmo log recorder: capture REAL input events ----
+        // Only records when a user input event actually happens (mouse move /
+        // click / wheel / key), like the console: no event -> no log line. The
+        // hooks coexist with the canvas (which uses Set*Hook; we Add*Hook).
+        {
+            auto& eq = Leir::EventQueue::Get();
+            eq.AddPointerHook([this](const Leir::PointerEvent& e) {
+                OnInputEvent("POINTER", (int)e.action, (int)e.button,
+                             e.position.x, e.position.y, e.delta.x, e.delta.y);
+            });
+            eq.AddScrollHook([this](const Leir::ScrollEvent& e) {
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "SCROLL x=%.1f y=%.1f", e.offset.x, e.offset.y);
+                RecordGizmoLog(buf);
+            });
+            eq.AddKeyHook([this](const Leir::KeyEvent& e) {
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "KEY action=%d key=%d", (int)e.action, (int)e.key);
+                RecordGizmoLog(buf);
+            });
+            eq.AddCharHook([this](const Leir::CharEvent& e) {
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "CHAR cp=%u", e.codepoint);
+                RecordGizmoLog(buf);
+            });
+        }
 
         // ---- Editor Layout (dock system) ----
         // The dock manager is the full-screen root. It leaves the bottom 30px
@@ -765,77 +793,6 @@ protected:
             m_TransformGizmo.SetSelected(picked);
         }
 
-        // ---- Gizmo/selection recorder (DBG panel) ----
-        // While recording, dump every frame: camera + mouse state + viewport
-        // input events + gizmo tool/space + hovered/dragged handle + selected
-        // object transform. Writes to records/record_gizmo_log.txt.
-        if (m_GizmoLogPanel && m_GizmoLogPanel->IsRecording() && m_PrimaryCamera) {
-            auto* camOwner = m_PrimaryCamera->GetOwner();
-            Leir::Vector3 camPos = camOwner ? camOwner->GetTransform().GetWorldPosition()
-                                            : Leir::Vector3::Zero();
-            Leir::Vector2 mpos = Leir::Mouse::GetPos();
-            Leir::Vector2 mdelta = Leir::Mouse::GetDelta();
-            bool inVp = m_ViewportPanel && m_ViewportPanel->IsInsideViewport(mpos.x, mpos.y);
-
-            char buf[512];
-            std::snprintf(buf, sizeof(buf),
-                "cam=(%.3f,%.3f,%.3f) mouse=(%.1f,%.1f) d=(%.1f,%.1f) inVp=%d "
-                "L:%d%d%d R:%d%d%d M:%d%d%d",
-                camPos.x, camPos.y, camPos.z, mpos.x, mpos.y, mdelta.x, mdelta.y, inVp ? 1 : 0,
-                Leir::Mouse::WasPressed(Leir::PointerButton::Left) ? 1 : 0,
-                Leir::Mouse::IsDown(Leir::PointerButton::Left) ? 1 : 0,
-                Leir::Mouse::WasReleased(Leir::PointerButton::Left) ? 1 : 0,
-                Leir::Mouse::WasPressed(Leir::PointerButton::Right) ? 1 : 0,
-                Leir::Mouse::IsDown(Leir::PointerButton::Right) ? 1 : 0,
-                Leir::Mouse::WasReleased(Leir::PointerButton::Right) ? 1 : 0,
-                Leir::Mouse::WasPressed(Leir::PointerButton::Middle) ? 1 : 0,
-                Leir::Mouse::IsDown(Leir::PointerButton::Middle) ? 1 : 0,
-                Leir::Mouse::WasReleased(Leir::PointerButton::Middle) ? 1 : 0);
-            m_GizmoLogPanel->RecordLine(buf);
-
-            // Only log viewport events (clicks/drags), not UI/panel input.
-            if (inVp) {
-                if (Leir::Mouse::WasPressed(Leir::PointerButton::Left))
-                    m_GizmoLogPanel->RecordLine("EVENT L-DOWN viewport");
-                if (Leir::Mouse::WasReleased(Leir::PointerButton::Left))
-                    m_GizmoLogPanel->RecordLine("EVENT L-UP viewport");
-                if (Leir::Mouse::WasPressed(Leir::PointerButton::Right))
-                    m_GizmoLogPanel->RecordLine("EVENT R-DOWN viewport");
-                if (Leir::Mouse::WasReleased(Leir::PointerButton::Right))
-                    m_GizmoLogPanel->RecordLine("EVENT R-UP viewport");
-                if (Leir::Mouse::WasPressed(Leir::PointerButton::Middle))
-                    m_GizmoLogPanel->RecordLine("EVENT M-DOWN viewport");
-                if (Leir::Mouse::WasReleased(Leir::PointerButton::Middle))
-                    m_GizmoLogPanel->RecordLine("EVENT M-UP viewport");
-                if (mdelta.x != 0.0f || mdelta.y != 0.0f)
-                    m_GizmoLogPanel->RecordLine("EVENT MOVE viewport");
-            }
-
-            // Gizmo + selection state.
-            auto* sel = m_TransformGizmo.GetSelected();
-            if (sel) {
-                auto& t = sel->GetTransform();
-                auto p = t.GetLocalPosition();
-                auto e = Leir::Quaternion::ToEuler(t.GetLocalRotation());
-                auto sc = t.GetLocalScale();
-                const char* tool =
-                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Translate ? "T" :
-                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Rotate ? "R" :
-                    m_TransformGizmo.GetTool() == TransformGizmo::Tool::Scale ? "S" : "?";
-                const char* space =
-                    m_TransformGizmo.GetSpace() == TransformGizmo::Space::Global ? "G" : "L";
-                std::snprintf(buf, sizeof(buf),
-                    "SEL '%s' tool=%s space=%s hover=%s drag=%s "
-                    "pos=(%.4f,%.4f,%.4f) rot=(%.2f,%.2f,%.2f) scale=(%.4f,%.4f,%.4f)",
-                    sel->GetName().c_str(), tool, space,
-                    m_TransformGizmo.GetHoverName(), m_TransformGizmo.GetDragName(),
-                    p.x, p.y, p.z, e.x, e.y, e.z, sc.x, sc.y, sc.z);
-                m_GizmoLogPanel->RecordLine(buf);
-            } else {
-                m_GizmoLogPanel->RecordLine("SEL <none>");
-            }
-        }
-
         if (m_DebugOverlay)
             m_DebugOverlay->Update(deltaTime);
 
@@ -1072,6 +1029,61 @@ private:
             : Leir::RHI::ShaderTarget::SpirV;
     }
 #endif
+
+    // Gizmo-log recorder hook for pointer events: log a POINTER line plus the
+    // full gizmo/selection state (camera, hover, drag, object transform) so the
+    // log shows exactly what the gizmo picked under the cursor.
+    void OnInputEvent(const char* kind, int action, int button,
+                      float px, float py, float dx, float dy)
+    {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "%s action=%d btn=%d pos=(%.1f,%.1f) d=(%.1f,%.1f)",
+            kind, action, button, px, py, dx, dy);
+        RecordGizmoLog(buf);
+    }
+
+    // Appends the current gizmo/selection state to the log (only meaningful
+    // while the recorder is armed). Includes camera, gizmo tool/space/hover/
+    // drag and the selected object transform — the full context of the event.
+    void RecordGizmoLog(const char* eventLine)
+    {
+        if (!m_GizmoLogPanel || !m_GizmoLogPanel->IsRecording())
+            return;
+        if (eventLine)
+            m_GizmoLogPanel->RecordLine(eventLine);
+
+        Leir::Vector3 camPos = Leir::Vector3::Zero();
+        if (m_PrimaryCamera && m_PrimaryCamera->GetOwner()) {
+            camPos = m_PrimaryCamera->GetOwner()->GetTransform().GetWorldPosition();
+        }
+        Leir::Vector2 mpos = Leir::Mouse::GetPos();
+
+        char buf[512];
+        Leir::Object3D* sel = m_TransformGizmo.GetSelected();
+        if (sel) {
+            auto& t = sel->GetTransform();
+            auto p = t.GetLocalPosition();
+            auto e = Leir::Quaternion::ToEuler(t.GetLocalRotation());
+            auto sc = t.GetLocalScale();
+            const char* tool =
+                m_TransformGizmo.GetTool() == TransformGizmo::Tool::Translate ? "T" :
+                m_TransformGizmo.GetTool() == TransformGizmo::Tool::Rotate ? "R" :
+                m_TransformGizmo.GetTool() == TransformGizmo::Tool::Scale ? "S" : "?";
+            const char* space =
+                m_TransformGizmo.GetSpace() == TransformGizmo::Space::Global ? "G" : "L";
+            std::snprintf(buf, sizeof(buf),
+                "  cam=(%.3f,%.3f,%.3f) mouse=(%.1f,%.1f) tool=%s space=%s hover=%s drag=%s "
+                "SEL '%s' pos=(%.4f,%.4f,%.4f) rot=(%.2f,%.2f,%.2f) scale=(%.4f,%.4f,%.4f)",
+                camPos.x, camPos.y, camPos.z, mpos.x, mpos.y, tool, space,
+                m_TransformGizmo.GetHoverName(), m_TransformGizmo.GetDragName(),
+                sel->GetName().c_str(), p.x, p.y, p.z, e.x, e.y, e.z, sc.x, sc.y, sc.z);
+        } else {
+            std::snprintf(buf, sizeof(buf),
+                "  cam=(%.3f,%.3f,%.3f) mouse=(%.1f,%.1f) SEL <none>",
+                camPos.x, camPos.y, camPos.z, mpos.x, mpos.y);
+        }
+        m_GizmoLogPanel->RecordLine(buf);
+    }
 
     // Raycast the viewport cursor against scene objects (world-space AABB of
     // their mesh bounds). Returns the nearest hit, or nullptr (empty click ->

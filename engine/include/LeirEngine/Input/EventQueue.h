@@ -19,10 +19,18 @@ public:
     using PointerHook = std::function<void(const PointerEvent&)>;
     using ScrollHook = std::function<void(const ScrollEvent&)>;
 
-    void SetKeyHook(KeyHook hook) { m_KeyHook = hook; }
-    void SetCharHook(CharHook hook) { m_CharHook = hook; }
-    void SetPointerHook(PointerHook hook) { m_PointerHook = hook; }
-    void SetScrollHook(ScrollHook hook) { m_ScrollHook = hook; }
+    // Replace the listener list (keeps legacy single-hook call sites working).
+    void SetKeyHook(KeyHook hook) { m_KeyHooks = { std::move(hook) }; }
+    void SetCharHook(CharHook hook) { m_CharHooks = { std::move(hook) }; }
+    void SetPointerHook(PointerHook hook) { m_PointerHooks = { std::move(hook) }; }
+    void SetScrollHook(ScrollHook hook) { m_ScrollHooks = { std::move(hook) }; }
+
+    // Add an extra listener (multiple observers allowed, e.g. the editor's
+    // gizmo log recorder alongside the UICanvas).
+    void AddKeyHook(KeyHook hook) { m_KeyHooks.push_back(std::move(hook)); }
+    void AddCharHook(CharHook hook) { m_CharHooks.push_back(std::move(hook)); }
+    void AddPointerHook(PointerHook hook) { m_PointerHooks.push_back(std::move(hook)); }
+    void AddScrollHook(ScrollHook hook) { m_ScrollHooks.push_back(std::move(hook)); }
 
     void ClearHooks();
 
@@ -32,10 +40,10 @@ private:
     std::mutex m_Mutex;
     std::vector<InputEvent> m_Queue;
 
-    KeyHook m_KeyHook;
-    CharHook m_CharHook;
-    PointerHook m_PointerHook;
-    ScrollHook m_ScrollHook;
+    std::vector<KeyHook> m_KeyHooks;
+    std::vector<CharHook> m_CharHooks;
+    std::vector<PointerHook> m_PointerHooks;
+    std::vector<ScrollHook> m_ScrollHooks;
 };
 
 } // namespace Leir

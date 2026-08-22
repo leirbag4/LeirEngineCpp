@@ -31,17 +31,17 @@ void EventQueue::Process()
             using T = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<T, KeyEvent>) {
                 Keyboard::ProcessEvent(e);
-                if (m_KeyHook) m_KeyHook(e);
+                for (auto& h : m_KeyHooks) h(e);
             } else if constexpr (std::is_same_v<T, PointerEvent>) {
                 Mouse::ProcessEvent(e);
                 Touch::ProcessEvent(e);
                 Pointer::ProcessEvent(e);
-                if (m_PointerHook) m_PointerHook(e);
+                for (auto& h : m_PointerHooks) h(e);
             } else if constexpr (std::is_same_v<T, CharEvent>) {
-                if (m_CharHook) m_CharHook(e);
+                for (auto& h : m_CharHooks) h(e);
             } else if constexpr (std::is_same_v<T, ScrollEvent>) {
                 Mouse::ProcessScroll(e);
-                if (m_ScrollHook) m_ScrollHook(e);
+                for (auto& h : m_ScrollHooks) h(e);
             }
         }, event);
     }
@@ -49,10 +49,10 @@ void EventQueue::Process()
 
 void EventQueue::ClearHooks()
 {
-    m_KeyHook = nullptr;
-    m_CharHook = nullptr;
-    m_PointerHook = nullptr;
-    m_ScrollHook = nullptr;
+    m_KeyHooks.clear();
+    m_CharHooks.clear();
+    m_PointerHooks.clear();
+    m_ScrollHooks.clear();
 }
 
 } // namespace Leir
