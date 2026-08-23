@@ -2,7 +2,6 @@
 #include "LeirEngine/UI/UITreeView.h"
 #include "LeirEngine/UI/UILabel.h"
 #include "LeirEngine/UI/Font.h"
-#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -166,7 +165,6 @@ void UITreeViewItem::OnLayoutComputed()
 void UITreeViewItem::SetTreeHovered(bool hovered)
 {
     if (m_TreeHovered == hovered) return;
-    XConsole::Println("[TreeHover] item '{}' hover {}->{}", m_Text.c_str(), m_TreeHovered?1:0, hovered?1:0);
     m_TreeHovered = hovered;
     UpdateColors();
 }

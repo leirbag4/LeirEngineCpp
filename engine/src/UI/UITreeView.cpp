@@ -6,7 +6,6 @@
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Keyboard.h"
-#include "LeirEngine/Core/Log.h"
 #include <algorithm>
 #include <cmath>
 
@@ -575,10 +574,17 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
     bool hasChildren = !item->GetTreeChildren().empty();
     bool onArrow = hasChildren && pos.x >= arrowX && pos.x <= arrowX + 12.0f && pos.y >= arrowY && pos.y <= arrowY + m_RowHeight;
 
-    // Double-click detection
-    int curFrame = 0; // We use frame counter from UICanvas if available, but use simple time
-    // Use hover tracking's frame via global? For now use m_LastClickFrame as counter
-    // We approximate with frame via ++ on each call (not perfect but works)
+    if (onArrow) {
+        bool exp = !item->IsExpanded();
+        item->SetExpanded(exp);
+        InvalidateFlatCache();
+        if (exp && m_OnItemExpanded) m_OnItemExpanded(item);
+        else if (!exp && m_OnItemCollapsed) m_OnItemCollapsed(item);
+        // No actualizar m_LastClick* aquí: el toggle de flecha no debe contar como click para doble-click
+        return true;
+    }
+
+    // Double-click detection (solo para filas, no flecha — la flecha ya retornó arriba)
     static int s_Frame = 0; ++s_Frame;
     bool isDoubleClick = (item == m_LastClickItem && (s_Frame - m_LastClickFrame) <= 15 && std::fabs(pos.x - m_LastClickPos.x) <= 3.0f && std::fabs(pos.y - m_LastClickPos.y) <= 3.0f);
     m_LastClickFrame = s_Frame;
@@ -587,15 +593,6 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
 
     if (isDoubleClick) {
         if (m_OnItemDoubleClicked) m_OnItemDoubleClicked(item);
-        return true;
-    }
-
-    if (onArrow) {
-        bool exp = !item->IsExpanded();
-        item->SetExpanded(exp);
-        InvalidateFlatCache();
-        if (exp && m_OnItemExpanded) m_OnItemExpanded(item);
-        else if (!exp && m_OnItemCollapsed) m_OnItemCollapsed(item);
         return true;
     }
 
@@ -639,13 +636,6 @@ void UITreeView::OnPointerMove(const Vector2& pos)
             auto* it = m_FlatVisible[dbgIdx];
             if (it->IsItemEnabled()) hovered = it;
         }
-    }
-    // TEMP LOG: diagnosticar hover (Trace -> Debug level, visible si settings debug)
-    bool changing = (hovered != m_HoveredItem);
-    if (changing) {
-        XConsole::Println("[TreeHover] move pos=({:.1f},{:.1f}) cr=({:.1f},{:.1f} {:.1f}x{:.1f}) viewport=({:.1f}x{:.1f}) inside={} idx={} hovered={} prev={}",
-            pos.x, pos.y, cr.x, cr.y, cr.z, cr.w, viewport.x, viewport.y, inside?1:0, dbgIdx,
-            hovered?hovered->GetText().c_str():"null", m_HoveredItem?m_HoveredItem->GetText().c_str():"null");
     }
     NotifyItemHovered(hovered);
 
@@ -691,7 +681,6 @@ void UITreeView::OnPointerMove(const Vector2& pos)
 
 void UITreeView::OnPointerExit()
 {
-    XConsole::Println("[TreeHover] exit prev={}", m_HoveredItem?m_HoveredItem->GetText().c_str():"null");
     if (m_HoveredItem) {
         m_HoveredItem->SetTreeHovered(false);
         m_HoveredItem = nullptr;
@@ -702,7 +691,6 @@ void UITreeView::NotifyItemHovered(UITreeViewItem* item)
 {
     if (item && !item->IsItemEnabled()) item = nullptr;
     if (item == m_HoveredItem) return;
-    XConsole::Println("[TreeHover] itemHovered '{}' -> '{}'", m_HoveredItem?m_HoveredItem->GetText().c_str():"null", item?item->GetText().c_str():"null");
     if (m_HoveredItem) m_HoveredItem->SetTreeHovered(false);
     m_HoveredItem = item;
     if (m_HoveredItem) m_HoveredItem->SetTreeHovered(true);
