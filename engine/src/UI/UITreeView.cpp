@@ -63,14 +63,24 @@ UITreeView::~UITreeView()
     if (m_VScrollbar) { RemoveChild(m_VScrollbar); delete m_VScrollbar; }
     if (m_HScrollbar) { RemoveChild(m_HScrollbar); delete m_HScrollbar; }
     if (m_EditInput) { RemoveChild(m_EditInput); delete m_EditInput; }
+    if (m_PendingDeleteInput) { RemoveChild(m_PendingDeleteInput); delete m_PendingDeleteInput; }
     if (m_GhostLabel) { RemoveChild(m_GhostLabel); delete m_GhostLabel; }
     // Items are owned by the caller (like DockPanel content), not deleted here.
     // Flat cache is just views into the tree.
 }
 
+void UITreeView::ProcessPendingEditDeletion()
+{
+    if (!m_PendingDeleteInput) return;
+    UITextInput* doomed = m_PendingDeleteInput;
+    m_PendingDeleteInput = nullptr;
+    RemoveChild(doomed);
+    delete doomed;
+}
+
 bool UITreeView::OwnsChild(const UIElement* child) const
 {
-    return child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_GhostLabel;
+    return child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_PendingDeleteInput || child == m_GhostLabel;
 }
 
 void UITreeView::AddItem(UITreeViewItem* item, UITreeViewItem* parent)
@@ -376,7 +386,9 @@ void UITreeView::NotifySelectionChanged()
 void UITreeView::BeginEdit(UITreeViewItem* item)
 {
     if (!m_Editable || !item || !item->IsItemEnabled()) return;
+    if (m_PendingDeleteInput) ProcessPendingEditDeletion();
     if (m_EditInput) { RemoveChild(m_EditInput); delete m_EditInput; m_EditInput = nullptr; }
+    if (m_EditingItem) CommitEdit(true); // cancel any stale edit without deleting inside its callback
     m_EditingItem = item;
     m_EditOldText = item->GetText();
     m_EditInput = new TreeEditInput(this);
@@ -395,26 +407,53 @@ void UITreeView::BeginEdit(UITreeViewItem* item)
 
 void UITreeView::CommitEdit(bool cancel)
 {
+    // Re-entrancy: ClearFocus() below goes through SetFocus(nullptr) → OnBlur
+    // on the input → TreeEditInput::OnBlur → CommitEdit again. Also deleting
+    // the input inside its own OnKeyDown/OnBlur is use-after-free. Defer the
+    // actual delete to the next layout.
+    if (m_EditCommitting) return;
     if (!m_EditInput || !m_EditingItem) return;
-    std::string newText = m_EditInput->GetText();
+    m_EditCommitting = true;
+
+    UITextInput* input = m_EditInput;
+    UITreeViewItem* item = m_EditingItem;
+    std::string newText = input->GetText();
     std::string oldText = m_EditOldText;
-    // Cleanup input
+
+    // Detach state first so a re-entrant call via OnBlur sees nothing to do.
+    m_EditInput = nullptr;
+    m_EditingItem = nullptr;
+    m_EditOldText.clear();
+
+    // Hide immediately (stops hit-test/render while pending).
+    input->SetActive(false);
+
+    // Flush any older pending input from a previous edit that never got collected
+    // (e.g. BeginEdit deleted m_EditInput synchronously but not pending).
+    if (m_PendingDeleteInput) ProcessPendingEditDeletion();
+
+    // Clear canvas focus WITHOUT re-entering CommitEdit. SetFocus(nullptr) will
+    // call OnBlur on the input (still reachable via `input` param). The guard
+    // above ensures the nested CommitEdit from that OnBlur is a no-op because
+    // m_EditInput is already null.
     UIElement* e = this;
     while (e) {
-        if (auto* c = dynamic_cast<UICanvas*>(e)) { if (c->GetFocus() == m_EditInput) c->ClearFocus(); break; }
+        if (auto* c = dynamic_cast<UICanvas*>(e)) { if (c->GetFocus() == input) c->ClearFocus(); break; }
         e = e->GetParent();
     }
-    RemoveChild(m_EditInput);
-    delete m_EditInput;
-    m_EditInput = nullptr;
-    auto* item = m_EditingItem;
-    m_EditingItem = nullptr;
-    if (cancel) return;
-    if (newText != oldText) {
+
+    // Apply rename
+    if (!cancel && newText != oldText) {
         item->SetText(newText);
         InvalidateFlatCache();
         if (m_OnItemRenamed) m_OnItemRenamed(item, oldText, newText);
     }
+
+    // Defer actual destruction — deleting `input` while OnKeyDown/OnBlur is still
+    // on the stack would be use-after-free (the caller is `input` itself).
+    m_PendingDeleteInput = input;
+
+    m_EditCommitting = false;
 }
 
 void UITreeView::UpdateEditInputRect()
@@ -462,6 +501,8 @@ void UITreeView::ClearDropHighlight()
 void UITreeView::OnLayoutComputed()
 {
     UIElement::OnLayoutComputed();
+
+    if (m_PendingDeleteInput) ProcessPendingEditDeletion();
 
     RebuildFlatCache();
     Vector2 content = GetContentSize();

@@ -42,6 +42,7 @@ public:
 
     Vector2 GetMinSize() const override;
     const std::vector<TextGlyphQuad>& GetGlyphQuads() const { return m_GlyphQuads; }
+    void Invalidate() { MarkDirty(); }
 
 protected:
     void OnLayoutComputed() override;

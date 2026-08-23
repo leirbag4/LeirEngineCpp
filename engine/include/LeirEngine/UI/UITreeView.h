@@ -157,6 +157,11 @@ private:
     UITextInput* m_EditInput = nullptr;
     UITreeViewItem* m_EditingItem = nullptr;
     std::string m_EditOldText;
+    // Deferred deletion for the edit input — deleting inside TreeEditInput::OnKeyDown/OnBlur
+    // (i.e. inside its own callback) is use-after-free; defer until next layout.
+    UITextInput* m_PendingDeleteInput = nullptr;
+    bool m_EditCommitting = false;
+    void ProcessPendingEditDeletion();
 
     Vector2 m_ScrollOffset = {0.0f, 0.0f};
 

@@ -134,6 +134,14 @@ void UITreeViewItem::OnLayoutComputed()
     float arrowX = cr.x + indent;
     float arrowY = cr.y + (cr.w - arrowH) * 0.5f;
     if (m_ArrowLabel) {
+        // TreeView does a manual double-layout: first a stale Free pass (item at
+        // 0x0 or double-x) builds glyphs with wrong height, then the correct
+        // manual pass in TreeView::OnLayoutComputed fixes the rect. Only force a
+        // rebuild when the rect actually changed — unconditional Invalidate() every
+        // frame caused ~40 * 60 rebuilds/s and dropped FPS to ~10.
+        float prevW = m_ArrowLabel->GetComputedRect().z;
+        float prevH = m_ArrowLabel->GetComputedRect().w;
+        if (prevW != arrowW || prevH != arrowH) m_ArrowLabel->Invalidate();
         m_ArrowLabel->GetRect().anchor = {0, 0, 0, 0};
         m_ArrowLabel->GetRect().offset = {arrowX, arrowY, arrowX + arrowW, arrowY + arrowH};
         m_ArrowLabel->ComputeLayout({arrowW, arrowH});
@@ -142,6 +150,9 @@ void UITreeViewItem::OnLayoutComputed()
     float textW = std::max(0.0f, cr.x + cr.z - textX - 2.0f);
     float textH = cr.w;
     if (m_TextLabel) {
+        float prevW = m_TextLabel->GetComputedRect().z;
+        float prevH = m_TextLabel->GetComputedRect().w;
+        if (prevW != textW || prevH != textH) m_TextLabel->Invalidate();
         m_TextLabel->GetRect().anchor = {0, 0, 0, 0};
         m_TextLabel->GetRect().offset = {textX, cr.y, textX + textW, cr.y + textH};
         m_TextLabel->ComputeLayout({textW, textH});
@@ -162,7 +173,8 @@ void UITreeViewItem::RebuildLabels()
 {
     if (!m_ArrowLabel) return;
     bool hasChildren = !m_TreeChildren.empty();
-    m_ArrowLabel->SetText(hasChildren ? (m_Expanded ? "▼" : "▶") : "");
+    // Use ASCII fallback — font atlas only covers 32..126, unicode triangles render as "?"
+    m_ArrowLabel->SetText(hasChildren ? (m_Expanded ? "v" : ">") : "");
     m_ArrowLabel->SetActive(hasChildren);
     UpdateColors();
 }
