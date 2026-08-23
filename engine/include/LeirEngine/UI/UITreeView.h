@@ -107,6 +107,9 @@ public:
     bool OnPointerUp(const Vector2& pos) override;
     bool OnScroll(float delta) override;
     bool OnKeyDown(int key) override;
+    void OnPointerExit() override;
+
+    UITreeViewItem* GetHoveredItem() const { return m_HoveredItem; }
 
 protected:
     void OnLayoutComputed() override;

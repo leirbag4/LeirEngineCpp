@@ -465,7 +465,8 @@ void UITreeView::UpdateEditInputRect()
     for (int i = 0; i < (int)m_FlatVisible.size(); ++i) if (m_FlatVisible[i]==m_EditingItem) idx=i;
     if (idx < 0) return;
     float y = std::round(cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y);
-    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + 12.0f + 4.0f - m_ScrollOffset.x);
+    bool hasChildren = !m_EditingItem->GetTreeChildren().empty();
+    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + (hasChildren ? 12.0f + 4.0f : 4.0f) - m_ScrollOffset.x);
     float w = std::max(60.0f, GetViewportSize().x - (x - cr.x));
     m_EditInput->GetRect().anchor = {0, 0, 0, 0};
     m_EditInput->GetRect().offset = {x, y, x + w, y + m_RowHeight};
@@ -621,17 +622,25 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
 
 void UITreeView::OnPointerMove(const Vector2& pos)
 {
-    // Hover tracking — full-width rows
+    // Hover tracking — full-width rows, driven by parent (B). Works even when
+    // the hit is TreeText/TreeArrow (deepest child) and full-width selection.
+    // vieja lógica con IsHovered() del canvas solo funcionaba a la izquierda.
     RebuildFlatCache();
     const auto& cr = GetComputedRect();
-    int idx = (int)std::floor((pos.y - cr.y + m_ScrollOffset.y) / m_RowHeight);
+    Vector2 viewport = GetViewportSize();
+    bool inside = (pos.x >= cr.x && pos.x <= cr.x + viewport.x && pos.y >= cr.y && pos.y <= cr.y + viewport.y);
     UITreeViewItem* hovered = nullptr;
-    if (idx >= 0 && idx < (int)m_FlatVisible.size()) {
-        auto* it = m_FlatVisible[idx];
-        if (it->IsItemEnabled()) hovered = it;
+    if (inside) {
+        int idx = (int)std::floor((pos.y - cr.y + m_ScrollOffset.y) / m_RowHeight);
+        if (idx >= 0 && idx < (int)m_FlatVisible.size()) {
+            auto* it = m_FlatVisible[idx];
+            if (it->IsItemEnabled()) hovered = it;
+        }
     }
     if (hovered != m_HoveredItem) {
+        if (m_HoveredItem) m_HoveredItem->SetTreeHovered(false);
         m_HoveredItem = hovered;
+        if (m_HoveredItem) m_HoveredItem->SetTreeHovered(true);
     }
 
     if (m_DragItem && !m_Dragging) {
@@ -671,6 +680,14 @@ void UITreeView::OnPointerMove(const Vector2& pos)
             ClearDropHighlight();
             m_DropTarget = target;
         }
+    }
+}
+
+void UITreeView::OnPointerExit()
+{
+    if (m_HoveredItem) {
+        m_HoveredItem->SetTreeHovered(false);
+        m_HoveredItem = nullptr;
     }
 }
 

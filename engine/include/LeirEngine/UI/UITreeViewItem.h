@@ -75,6 +75,11 @@ public:
     float GetCachedTextWidth() const { return m_CachedTextWidth; }
     void InvalidateTextWidth() { m_TextWidthDirty = true; }
 
+    // Hover is driven by parent UITreeView (full-width row), not by canvas IsHovered().
+    // UITreeView calls this when the row under the cursor changes; it works even
+    // when the hit is TreeText/TreeArrow (deepest child) and clears when leaving.
+    void SetTreeHovered(bool hovered);
+
 protected:
     void OnLayoutComputed() override;
     void OnPointerEnter(const Vector2& pos) override;
@@ -91,6 +96,7 @@ private:
 
     bool m_ItemEnabled = true;
     bool m_Selected = false;
+    bool m_TreeHovered = false;
     bool m_Expanded = true;
     float m_Indent = 16.0f;
 

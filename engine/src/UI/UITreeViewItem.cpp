@@ -159,14 +159,23 @@ void UITreeViewItem::OnLayoutComputed()
     }
 }
 
+void UITreeViewItem::SetTreeHovered(bool hovered)
+{
+    if (m_TreeHovered == hovered) return;
+    m_TreeHovered = hovered;
+    UpdateColors();
+}
+
 void UITreeViewItem::OnPointerEnter(const Vector2&)
 {
-    UpdateColors();
+    // Hover is driven by parent UITreeView (SetTreeHovered), not by canvas IsHovered().
+    // The hit is often TreeText/TreeArrow (deepest child), so IsHovered() on the
+    // item is unreliable and would leave stale hover when leaving toward another row.
 }
 
 void UITreeViewItem::OnPointerExit()
 {
-    UpdateColors();
+    // See OnPointerEnter.
 }
 
 void UITreeViewItem::RebuildLabels()
@@ -190,7 +199,7 @@ void UITreeViewItem::UpdateColors()
         SetColor(m_SelectionColor);
         if (m_TextLabel) m_TextLabel->SetColor(m_TextSelectionColor);
         if (m_ArrowLabel) m_ArrowLabel->SetColor(m_ArrowColor);
-    } else if (IsHovered()) {
+    } else if (m_TreeHovered) {
         SetColor(m_HoverColor);
         if (m_TextLabel) m_TextLabel->SetColor(m_TextHoverColor);
         if (m_ArrowLabel) m_ArrowLabel->SetColor(m_ArrowColor);
