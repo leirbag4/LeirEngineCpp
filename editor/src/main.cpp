@@ -46,6 +46,7 @@
 #include "UI/InspectorTransformPanel.h"
 #include "UI/ToolbarPanel.h"
 #include "UI/GizmoLogPanel.h"
+#include "UI/TreeViewDebugPanel.h"
 #include "Camera/EditorCamera.h"
 #include "Grid/EditorGrid.h"
 #include "Gizmos/GizmoRenderer.h"
@@ -548,6 +549,10 @@ protected:
         m_GizmoLogPanel->SetName("GizmoLogPanel");
         m_GizmoLogPanel->SetFont(m_FontSmall.get());
 
+        m_TreeViewDebugPanel = new TreeViewDebugPanel();
+        m_TreeViewDebugPanel->SetName("TreeViewDebugPanel");
+        m_TreeViewDebugPanel->SetFont(m_FontSmall.get());
+
         // Gizmo-line live knobs (color / alpha / width), "Test2" tab.
         m_GizmoTestPanel = new GizmoLineTestPanel();
         m_GizmoTestPanel->SetName("GizmoTestPanel");
@@ -572,6 +577,7 @@ protected:
         m_DockManager->RegisterPanel("ConsolePanel", "Console", m_ConsolePanel, true);
         m_DockManager->RegisterPanel("DebugPanel", "Debug Panel", m_DebugPanel, true);
         m_DockManager->RegisterPanel("GizmoLogPanel", "DBG", m_GizmoLogPanel, true);
+        m_DockManager->RegisterPanel("TreeViewDebugPanel", "TreeView", m_TreeViewDebugPanel, true);
 
         // Restore a persisted layout, or fall back to the default one
         const std::string& dockJson = Leir::LeirSettings::Get().dock.layout;
@@ -818,6 +824,8 @@ protected:
             m_TextAreaWrapPanel->Refresh();
         if (m_InspectorTransformPanel)
             m_InspectorTransformPanel->Refresh();
+        if (m_TreeViewDebugPanel)
+            m_TreeViewDebugPanel->Refresh();
 
 #ifdef LEIR_EDITOR_SLANG
         // Shader hot-reload poll (cheap: one stat per .slang file per frame).
@@ -984,6 +992,8 @@ protected:
         m_DebugPanel = nullptr;
         DeleteUiSubtree(m_GizmoLogPanel); // dtor closes the log file if recording
         m_GizmoLogPanel = nullptr;
+        DeleteUiSubtree(m_TreeViewDebugPanel);
+        m_TreeViewDebugPanel = nullptr;
         DeleteUiSubtree(m_Toolbar);
         m_Toolbar = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
@@ -1253,6 +1263,7 @@ private:
     TextAreaWrapPanel* m_TextAreaWrapPanel = nullptr;
     DebugPanel* m_DebugPanel = nullptr;
     GizmoLogPanel* m_GizmoLogPanel = nullptr;
+    TreeViewDebugPanel* m_TreeViewDebugPanel = nullptr;
     InspectorTransformPanel* m_InspectorTransformPanel = nullptr;
 
 #ifdef LEIR_EDITOR_SLANG
