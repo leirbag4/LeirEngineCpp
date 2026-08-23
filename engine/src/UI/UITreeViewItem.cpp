@@ -1,6 +1,8 @@
 #include "LeirEngine/UI/UITreeViewItem.h"
+#include "LeirEngine/UI/UITreeView.h"
 #include "LeirEngine/UI/UILabel.h"
 #include "LeirEngine/UI/Font.h"
+#include "LeirEngine/Core/Log.h"
 
 namespace Leir {
 
@@ -17,6 +19,7 @@ UITreeViewItem::UITreeViewItem()
     m_ArrowLabel->SetFontSize(10);
     m_ArrowLabel->SetSizePolicy(SizePolicy::Fixed);
     m_ArrowLabel->SetColor({0.70f, 0.70f, 0.70f, 1.0f});
+    m_ArrowLabel->SetHitTestable(false);
     AddChild(m_ArrowLabel);
 
     m_TextLabel = new UILabel();
@@ -24,6 +27,7 @@ UITreeViewItem::UITreeViewItem()
     m_TextLabel->SetText("");
     m_TextLabel->SetFontSize(13);
     m_TextLabel->SetSizePolicy(SizePolicy::Fixed);
+    m_TextLabel->SetHitTestable(false);
     AddChild(m_TextLabel);
 
     RebuildLabels();
@@ -162,6 +166,7 @@ void UITreeViewItem::OnLayoutComputed()
 void UITreeViewItem::SetTreeHovered(bool hovered)
 {
     if (m_TreeHovered == hovered) return;
+    XConsole::Println("[TreeHover] item '{}' hover {}->{}", m_Text.c_str(), m_TreeHovered?1:0, hovered?1:0);
     m_TreeHovered = hovered;
     UpdateColors();
 }
@@ -176,6 +181,20 @@ void UITreeViewItem::OnPointerEnter(const Vector2&)
 void UITreeViewItem::OnPointerExit()
 {
     // See OnPointerEnter.
+}
+
+void UITreeViewItem::OnPointerMove(const Vector2& pos)
+{
+    // Forward full-width row hover to parent TreeView (B). Hit is now TreeViewItem
+    // itself (labels are HitTestable=false), so this is reliable and works over text.
+    if (auto* tv = dynamic_cast<UITreeView*>(GetParent())) {
+        tv->NotifyItemHovered(this);
+        // Also keep TreeView's viewport-based hover (for gaps) in sync by falling
+        // through to TreeView::OnPointerMove via the same pos when needed — the
+        // TreeView's OnPointerMove is not called when hit is the item, so we
+        // replicate its inside check here indirectly via NotifyItemHovered.
+        (void)pos;
+    }
 }
 
 void UITreeViewItem::RebuildLabels()

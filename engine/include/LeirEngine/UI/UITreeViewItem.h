@@ -84,6 +84,7 @@ protected:
     void OnLayoutComputed() override;
     void OnPointerEnter(const Vector2& pos) override;
     void OnPointerExit() override;
+    void OnPointerMove(const Vector2& pos) override;
 
 private:
     void RebuildLabels();

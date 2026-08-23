@@ -110,6 +110,7 @@ public:
     void OnPointerExit() override;
 
     UITreeViewItem* GetHoveredItem() const { return m_HoveredItem; }
+    void NotifyItemHovered(UITreeViewItem* item);
 
 protected:
     void OnLayoutComputed() override;

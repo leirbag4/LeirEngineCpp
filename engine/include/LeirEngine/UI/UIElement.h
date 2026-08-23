@@ -81,6 +81,9 @@ public:
     void SetClip(bool clip) { m_Clip = clip; }
     bool IsClipEnabled() const { return m_Clip; }
 
+    void SetHitTestable(bool hit) { m_HitTestable = hit; }
+    bool IsHitTestable() const { return m_HitTestable; }
+
     virtual Vector2 GetMinSize() const;
     // Optional explicit minimum size override (layout still calls GetMinSize,
     // which returns this when set — useful for buttons that need extra width).
@@ -128,6 +131,7 @@ protected:
     bool m_Hovered = false;
     bool m_IsOverlay = false;
     bool m_Clip = false;
+    bool m_HitTestable = true;
     std::string m_Name;
 
 private:

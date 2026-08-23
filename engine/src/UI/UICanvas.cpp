@@ -65,9 +65,9 @@ bool UICanvas::HitTest(const Vector2& screenPos, UIElement*& outElement)
 }
 
 void UICanvas::HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out,
-                                const Vector4* clip)
+                                 const Vector4* clip)
 {
-    if (!element->IsActive() || out)
+    if (!element->IsActive() || !element->IsHitTestable() || out)
         return;
 
     const auto& r = element->GetComputedRect();
