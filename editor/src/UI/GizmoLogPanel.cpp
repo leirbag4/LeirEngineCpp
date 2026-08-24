@@ -75,7 +75,15 @@ GizmoLogPanel::GizmoLogPanel()
 
 GizmoLogPanel::~GizmoLogPanel()
 {
-    SetRecording(false);
+    // Close the log file WITHOUT touching child UI. SetRecording(false) ->
+    // ApplyButtonState() dereferences m_Button, but during DeleteUiSubtree the
+    // children (m_Button) are freed BEFORE this dtor runs, so it was a
+    // use-after-free (crash 0xC0000005 at shutdown when recording was active).
+    if (m_File) {
+        std::fclose(m_File);
+        m_File = nullptr;
+    }
+    m_Recording = false;
 }
 
 void GizmoLogPanel::SetFont(Leir::Font* font)

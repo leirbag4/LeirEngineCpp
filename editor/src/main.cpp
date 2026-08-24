@@ -942,6 +942,14 @@ protected:
                 std::chrono::steady_clock::now() - tStart).count();
         };
         Leir::XConsole::Println("Editor shutting down");
+        // HARDENING (2026-08-24): wait for the GPU to finish before destroying
+        // any D3D12 resource (grid/gizmo pipelines, viewport RT, ...). Releasing
+        // pipelines while the GPU may still reference them made the D3D12 debug
+        // layer raise 0x87D (device-removed) at teardown (~240 accumulated crash
+        // entries in crash_diagnostics.log). The earlier RenderTexture teardown
+        // crash was the same class, fixed the same way. Cost: ~0-16ms once.
+        if (m_Backend)
+            m_Backend->WaitIdle();
         auto& settings = Leir::LeirSettings::Get();
         // Persist the dock tree (tabs, splits, ratios, closed panels)
         settings.dock.layout = m_DockManager ? m_DockManager->SerializeLayout() : "";
