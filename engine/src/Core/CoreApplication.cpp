@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 
 #include "LeirEngine/Core/Log.h"
+#include <stb_image.h>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -204,6 +205,24 @@ void CoreApplication::SetWindowTitle(const char* title)
 {
     if (m_Window)
         glfwSetWindowTitle(m_Window, title);
+}
+
+void CoreApplication::SetWindowIcon(const char* pngPath)
+{
+    if (!m_Window || !pngPath)
+        return;
+    int w = 0, h = 0, channels = 0;
+    unsigned char* data = stbi_load(pngPath, &w, &h, &channels, 4);
+    if (!data) {
+        XConsole::PrintWarning("SetWindowIcon: cannot load '{}'", pngPath);
+        return;
+    }
+    GLFWimage image;
+    image.width = w;
+    image.height = h;
+    image.pixels = data;
+    glfwSetWindowIcon(m_Window, 1, &image);
+    stbi_image_free(data);
 }
 
 void CoreApplication::Frame(double currentTime)

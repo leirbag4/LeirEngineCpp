@@ -57,6 +57,17 @@ if(WIN32)
     target_link_libraries(LeirEngineEditor PRIVATE dbghelp)
 endif()
 
+# ---- Windows app icon ----
+# res/LeirEditor.rc embeds res/LeirEditor.ico (multi-size PNG-ICO) -> the .exe
+# file shows the engine logo in Explorer. Compiled by rc.exe (MSVC) / windres
+# (MinGW) on WIN32. The window/taskbar icon is set at RUNTIME via
+# CoreApplication::SetWindowIcon (glfwSetWindowIcon) from assets/leir_icon.png —
+# see AGENTS.md "App icon" for the pending macOS (icns + .app bundle) and Linux
+# (.desktop) work.
+if(WIN32)
+    target_sources(LeirEngineEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/res/LeirEditor.rc)
+endif()
+
 # ---- Slang compiler (editor shader tooling) ----
 # Vendored libslang (v2026.14.1) under vendor/slang/ — per-platform link + the
 # runtime libs copied next to the exe. Shared with the SlangExportTest smoke

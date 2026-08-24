@@ -153,6 +153,11 @@ protected:
     {
         Leir::XConsole::Println("Editor initialized");
 
+        // App icon: Windows embeds LeirEditor.ico in the exe via res/LeirEditor.rc;
+        // this sets the window/taskbar icon at runtime (cross-platform GLFW).
+        // assets/leir_icon.png is copied next to the exe by the editor POST_BUILD.
+        SetWindowIcon("assets/leir_icon.png");
+
         m_Backend.reset(Leir::RHI::BackendFactory::Create(
             Leir::LeirSettings::Get().graphics.backend,
             GetWindow(), GetWidth(), GetHeight(),

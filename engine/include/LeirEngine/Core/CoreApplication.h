@@ -20,6 +20,11 @@ public:
     // known, to append its name).
     void SetWindowTitle(const char* title);
 
+    // Sets the window/taskbar icon (titlebar + taskbar button) from a PNG file.
+    // Cross-platform via GLFW (glfwSetWindowIcon); uses stb_image to decode.
+    // Best with a square, transparency-capable PNG. No-op if the file is missing.
+    void SetWindowIcon(const char* pngPath);
+
     GLFWwindow* GetWindow() const { return m_Window; }
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }
