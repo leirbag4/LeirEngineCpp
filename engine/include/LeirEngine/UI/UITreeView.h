@@ -163,6 +163,12 @@ private:
 
     UIScrollbar* m_VScrollbar = nullptr;
     UIScrollbar* m_HScrollbar = nullptr;
+    // Internal clipped content container (ScrollView pattern). All items are
+    // children of THIS, not of the tree: the viewport is scissored to the content
+    // area minus the scrollbar strips, so rows never render over/under the
+    // scrollbars and horizontal scroll clips correctly. Scrollbars are siblings
+    // (added after) so they draw on top.
+    UIPanel* m_Viewport = nullptr;
     UITextInput* m_EditInput = nullptr;
     UITreeViewItem* m_EditingItem = nullptr;
     std::string m_EditOldText;

@@ -183,16 +183,15 @@ void UITreeViewItem::OnPointerExit()
 
 void UITreeViewItem::OnPointerMove(const Vector2& pos)
 {
-    // Forward full-width row hover to parent TreeView (B). Hit is now TreeViewItem
-    // itself (labels are HitTestable=false), so this is reliable and works over text.
-    if (auto* tv = dynamic_cast<UITreeView*>(GetParent())) {
-        tv->NotifyItemHovered(this);
-        // Also keep TreeView's viewport-based hover (for gaps) in sync by falling
-        // through to TreeView::OnPointerMove via the same pos when needed — the
-        // TreeView's OnPointerMove is not called when hit is the item, so we
-        // replicate its inside check here indirectly via NotifyItemHovered.
-        (void)pos;
+    // Forward full-width row hover to the owning TreeView (B). The item is now a
+    // child of the internal clipped TreeViewport, so walk up to find the tree.
+    for (UIElement* p = GetParent(); p; p = p->GetParent()) {
+        if (auto* tv = dynamic_cast<UITreeView*>(p)) {
+            tv->NotifyItemHovered(this);
+            break;
+        }
     }
+    (void)pos;
 }
 
 void UITreeViewItem::RebuildLabels()

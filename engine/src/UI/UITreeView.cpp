@@ -35,12 +35,36 @@ private:
     UITreeView* m_Owner = nullptr;
 };
 
+// Clipped content viewport (ScrollView pattern). The canvas only forwards
+// OnPointerMove to the single deepest hovered element (no bubbling), so moves
+// landing on the viewport's empty area must be forwarded to the tree so it can
+// recompute/clear its row hover.
+class TreeViewport : public UIPanel {
+public:
+    explicit TreeViewport(UITreeView* owner) : m_Owner(owner) { SetName("TreeViewport"); }
+    void OnPointerMove(const Vector2& pos) override {
+        if (m_Owner) m_Owner->OnPointerMove(pos);
+    }
+private:
+    UITreeView* m_Owner = nullptr;
+};
+
 UITreeView::UITreeView()
 {
     SetName("TreeView");
     SetColor({0.08f, 0.08f, 0.10f, 0.85f});
     SetClip(true);
     SetSizePolicy(SizePolicy::Fill);
+
+    // Internal clipped viewport: items live here (added via AddItem), scissored
+    // to the content area minus the scrollbar strips. Added BEFORE the scrollbars
+    // so the scrollbars render on top.
+    m_Viewport = new TreeViewport(this);
+    m_Viewport->SetClip(true);
+    // UIPanel default color is opaque white; the viewport is only a clip region,
+    // so it must not paint a background over the tree content.
+    m_Viewport->SetColor({0.0f, 0.0f, 0.0f, 0.0f});
+    AddChild(m_Viewport);
 
     m_VScrollbar = new UIScrollbar(true);
     m_VScrollbar->SetName("TreeViewVScrollbar");
@@ -61,6 +85,7 @@ UITreeView::UITreeView()
 
 UITreeView::~UITreeView()
 {
+    if (m_Viewport) { RemoveChild(m_Viewport); delete m_Viewport; }
     if (m_VScrollbar) { RemoveChild(m_VScrollbar); delete m_VScrollbar; }
     if (m_HScrollbar) { RemoveChild(m_HScrollbar); delete m_HScrollbar; }
     if (m_EditInput) { RemoveChild(m_EditInput); delete m_EditInput; }
@@ -96,7 +121,7 @@ void UITreeView::ProcessPendingEditDeletion()
 
 bool UITreeView::OwnsChild(const UIElement* child) const
 {
-    return child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_PendingDeleteInput || child == m_GhostLabel || child == m_DropIndicator;
+    return child == m_Viewport || child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_PendingDeleteInput || child == m_GhostLabel || child == m_DropIndicator;
 }
 
 void UITreeView::AddItem(UITreeViewItem* item, UITreeViewItem* parent)
@@ -110,14 +135,15 @@ void UITreeView::AddItem(UITreeViewItem* item, UITreeViewItem* parent)
         if (it != m_Roots.end()) m_Roots.erase(it);
     }
     // Also ensure not already a UI child (stale)
-    RemoveChild(item);
+    if (m_Viewport) m_Viewport->RemoveChild(item);
     if (parent) {
         parent->AddTreeChild(item);
     } else {
         m_Roots.push_back(item);
     }
-    // All items are direct UI children of the TreeView for flat virtualized rendering
-    AddChild(item);
+    // Items are children of the internal clipped viewport (flat virtualized
+    // rendering, ScrollView pattern), not of the tree directly.
+    if (m_Viewport) m_Viewport->AddChild(item);
     if (m_Font) item->SetFont(m_Font);
     item->SetIndent(m_Indent);
     InvalidateFlatCache();
@@ -138,11 +164,11 @@ void UITreeView::RemoveItem(UITreeViewItem* item)
         auto it = std::find(m_Roots.begin(), m_Roots.end(), item);
         if (it != m_Roots.end()) m_Roots.erase(it);
     }
-    RemoveChild(item);
+    if (m_Viewport) m_Viewport->RemoveChild(item);
     // Also remove all descendants from UI children and roots tracking
     std::function<void(UITreeViewItem*)> removeDescendants = [&](UITreeViewItem* n) {
         for (auto* c : n->GetTreeChildren()) {
-            RemoveChild(c);
+            if (m_Viewport) m_Viewport->RemoveChild(c);
             removeDescendants(c);
         }
     };
@@ -153,10 +179,8 @@ void UITreeView::RemoveItem(UITreeViewItem* item)
 void UITreeView::ClearItems()
 {
     RebuildFlatCache();
-    for (auto* it : m_FlatVisible) RemoveChild(it);
-    for (auto* r : m_Roots) {
-        // Roots already in flatVisible, but ensure
-    }
+    for (auto* it : m_FlatVisible)
+        if (m_Viewport) m_Viewport->RemoveChild(it);
     m_Roots.clear();
     m_SelectedItems.clear();
     m_HoveredItem = nullptr;
@@ -542,16 +566,32 @@ void UITreeView::OnLayoutComputed()
         last = std::clamp(last, 0, n - 1);
     }
 
+    // Position the internal clipped viewport = content area minus the scrollbar
+    // strips. Items are its children and are scissored to it, so rows never
+    // render over/under the scrollbars (they look "translucent" because content
+    // drew on top) and horizontal scroll clips correctly.
+    if (m_Viewport) {
+        m_Viewport->GetRect().anchor = {0, 0, 0, 0};
+        m_Viewport->GetRect().offset = {std::round(cr.x), std::round(cr.y), std::round(cr.x + viewport.x), std::round(cr.y + viewport.y)};
+        m_Viewport->ComputeLayout({viewport.x, viewport.y});
+    }
+    const auto& vp = m_Viewport ? m_Viewport->GetComputedRect() : cr;
+    // Row background spans max(viewport, content) so scrolled rows still cover the
+    // visible area; horizontal scroll shifts rows by m_ScrollOffset.x (FIX: the
+    // hscrollbar previously moved the offset but rows ignored it).
+    const float bgW = std::max(viewport.x, content.x);
+
     for (int i = 0; i < n; ++i) {
         auto* item = m_FlatVisible[i];
         bool visible = (i >= first && i <= last);
         item->SetActive(visible);
         if (visible) {
-            float y = std::round(cr.y + (float)i * m_RowHeight - m_ScrollOffset.y);
+            float y = std::round(vp.y + (float)i * m_RowHeight - m_ScrollOffset.y);
+            float x0 = std::round(vp.x - m_ScrollOffset.x);
             // Full-width row for selection background
             item->GetRect().anchor = {0, 0, 0, 0};
-            item->GetRect().offset = {std::round(cr.x), y, std::round(cr.x + viewport.x), y + m_RowHeight};
-            item->ComputeLayout({viewport.x, m_RowHeight});
+            item->GetRect().offset = {x0, y, x0 + bgW, y + m_RowHeight};
+            item->ComputeLayout({bgW, m_RowHeight});
         }
     }
 
@@ -559,8 +599,9 @@ void UITreeView::OnLayoutComputed()
     // were left SetActive(true) forever, so the stale ComputeFreeLayout pass kept
     // positioning them at {treeView.x, treeView.y} + accumulated offset -> the
     // "flying / conglomerate of text" at startup and on collapse. Deactivate any
-    // UITreeViewItem child not in the visible flat range.
-    for (auto* child : GetChildren()) {
+    // UITreeViewItem child of the viewport not in the visible flat range.
+    const auto& itemChildren = m_Viewport ? m_Viewport->GetChildren() : GetChildren();
+    for (auto* child : itemChildren) {
         auto* it = dynamic_cast<UITreeViewItem*>(child);
         if (!it) continue;
         bool inVisible = false;
@@ -654,8 +695,8 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
     auto* item = m_FlatVisible[idx];
     if (!item || !item->IsItemEnabled()) return true; // consume but not selectable
 
-    // Check arrow hit (12x12 at indent)
-    float arrowX = cr.x + (float)item->GetDepth() * m_Indent;
+    // Check arrow hit (12x12 at indent, shifted by horizontal scroll)
+    float arrowX = cr.x - m_ScrollOffset.x + (float)item->GetDepth() * m_Indent;
     float arrowY = cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y;
     bool hasChildren = !item->GetTreeChildren().empty();
     bool onArrow = hasChildren && pos.x >= arrowX && pos.x <= arrowX + 12.0f && pos.y >= arrowY && pos.y <= arrowY + m_RowHeight;
@@ -839,14 +880,14 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
                         auto it = std::find(m_Roots.begin(), m_Roots.end(), di);
                         if (it != m_Roots.end()) m_Roots.erase(it);
                     }
-                    RemoveChild(di);
+                    if (m_Viewport) m_Viewport->RemoveChild(di);
                 }
                 // Insert at target
                 for (auto* di : m_DragItems) {
                     if (target.mode == DropMode::Onto) {
                         target.item->AddTreeChild(di);
                         target.item->SetExpanded(true);
-                        AddChild(di);
+                        if (m_Viewport) m_Viewport->AddChild(di);
                         if (m_OnItemDragged) m_OnItemDragged(di, target.item, (int)target.item->GetTreeChildren().size() - 1);
                     } else if (target.mode == DropMode::Below) {
                         UITreeViewItem* parent = target.item->GetTreeParent();
@@ -859,7 +900,7 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
                             m_Roots.insert(m_Roots.begin() + idx + 1, di);
                             di->SetIndent(m_Indent);
                         }
-                        AddChild(di);
+                        if (m_Viewport) m_Viewport->AddChild(di);
                         if (m_OnItemDragged) m_OnItemDragged(di, parent, idx + 1);
                     }
                 }
