@@ -302,6 +302,16 @@ void CoreApplication::WindowContentScaleCallback(GLFWwindow* window, float xscal
     app->m_ContentScale = std::max(xscale, yscale);
     InputManager::GetInstance().SetContentScale(app->GetContentScale());
     app->OnContentScaleChanged();
+    // FIX (2026-08-24): the framebuffer-size callback can fire BEFORE this one
+    // when moving the window between monitors with different DPI, so
+    // HandleWindowResize derived m_Width/m_Height with the OLD scale -> the
+    // logical canvas size stays wrong until the next resize event (UI laid out
+    // at the wrong size, panels missing/clipped). Re-derive the logical size now
+    // that the scale is known; in the good callback order this is idempotent.
+    int fbw, fbh;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    if (fbw > 0 && fbh > 0)
+        app->HandleWindowResize(fbw, fbh);
 }
 
 void CoreApplication::WindowPosCallback(GLFWwindow* window, int x, int y)
