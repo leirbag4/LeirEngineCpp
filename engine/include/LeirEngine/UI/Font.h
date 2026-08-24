@@ -34,6 +34,12 @@ public:
     float GetAscender() const { return m_Ascender; }
     float GetSpaceWidth() const { return m_SpaceWidth; }
 
+    // Monotonic counter bumped every time the atlas is re-rasterized (see
+    // SetContentScale). UILabel caches glyph UVs; when this changes, cached
+    // labels with stale UVs sample the new atlas at old coordinates (glitched /
+    // flattened text). Diagnostic: labels can detect staleness by comparing.
+    uint32_t GetAtlasGen() const { return m_AtlasGen; }
+
     Vector2 MeasureText(const std::string& text, float maxWidth = 0.0f) const;
     std::vector<Vector4> LayoutText(const std::string& text, float maxWidth = 0.0f) const;
 
@@ -60,6 +66,7 @@ private:
     std::unique_ptr<Texture2D> m_AtlasTexture;
     int m_AtlasWidth = 0;
     int m_AtlasHeight = 0;
+    uint32_t m_AtlasGen = 0;
 };
 
 } // namespace Leir

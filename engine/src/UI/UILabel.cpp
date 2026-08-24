@@ -31,9 +31,18 @@ void UILabel::OnLayoutComputed()
 
 void UILabel::Rebuild()
 {
-    if (!m_Dirty) return;
+    // FIX (2026-08-24, Bug 1): rebuild when the label is dirty OR the font atlas
+    // was re-rasterized (DPI change bumps Font::GetAtlasGen). Cached glyphs from
+    // an older gen have stale UVs that sample the wrong atlas region -> glitched /
+    // flattened text on static labels. The extra check is one 32-bit compare per
+    // label per frame (this already runs for every label every layout); no work
+    // happens in the steady state.
+    if (!m_Dirty && (!m_Font || m_Font->GetAtlasGen() == m_FontGen)) return;
     m_Dirty = false;
     m_GlyphQuads.clear();
+    // Record the atlas generation these glyphs were built with (drives the check
+    // above; also consumed on the empty-text path so a rescale is not misdetected).
+    m_FontGen = m_Font ? m_Font->GetAtlasGen() : 0;
 
     if (!m_Font || m_Text.empty()) return;
 

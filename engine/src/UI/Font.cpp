@@ -51,7 +51,8 @@ void Font::SetContentScale(float scale)
     if (scale < 0.1f) scale = 0.1f;
     if (scale == m_ContentScale) return;
     m_ContentScale = scale;
-    Rebuild(scale);
+    Rebuild(scale); // bumps m_AtlasGen; UILabel rebuilds its cached glyphs on the
+                    // gen change (see UILabel::Rebuild), so text is never stale.
 }
 
 void Font::Rebuild(float scale)
@@ -62,6 +63,8 @@ void Font::Rebuild(float scale)
     // unchanged; only the sampling resolution improves.
     stbtt_fontinfo info;
     if (!stbtt_InitFont(&info, m_TTFData.data(), 0)) return;
+
+    m_AtlasGen++;
 
     m_Scale = stbtt_ScaleForPixelHeight(&info, (float)m_FontSize * scale);
     int ascent, descent, lineGap;

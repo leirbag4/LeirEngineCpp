@@ -76,6 +76,20 @@ void UITreeView::ProcessPendingEditDeletion()
     if (!m_PendingDeleteInput) return;
     UITextInput* doomed = m_PendingDeleteInput;
     m_PendingDeleteInput = nullptr;
+    // FIX (2026-08-24): the canvas may still hover this input (mouse over it when
+    // Enter/blur commits). Deleting it leaves m_HoveredElement dangling ->
+    // UIDebugOverlay::Update reads freed memory (GetName) -> corrupt std::string
+    // -> bad_alloc crash. Clear hover/focus if they reference the doomed element
+    // (same pattern DockManager uses after deleting dock content).
+    UIElement* e = this;
+    while (e) {
+        if (auto* c = dynamic_cast<UICanvas*>(e)) {
+            if (c->GetHoveredElement() == doomed || c->GetFocus() == doomed)
+                c->ClearHoverAndFocus();
+            break;
+        }
+        e = e->GetParent();
+    }
     RemoveChild(doomed);
     delete doomed;
 }
@@ -583,7 +597,13 @@ void UITreeView::OnLayoutComputed()
         if (!m_DropIndicator) {
             m_DropIndicator = new UIPanel();
             m_DropIndicator->SetName("TreeDropIndicator");
-            AddChild(m_DropIndicator); // added after items -> drawn on top of rows
+            // FIX (2026-08-24): overlay layer routes this to the debug batch,
+            // which Flush draws LAST (regular -> viewport -> debug). Without it,
+            // items re-parented via drag are re-added at the END of m_Children
+            // and draw OVER the indicator, hiding its bottom half (the line
+            // looked 1px instead of 2px over recently-nested items).
+            m_DropIndicator->SetOverlayLayer(true);
+            AddChild(m_DropIndicator);
         }
         int tIdx = -1;
         for (int i = 0; i < n; ++i) {

@@ -64,6 +64,10 @@ private:
     bool m_Dirty = true;
     mutable Vector2 m_CachedSize = {0.0f, 0.0f};
     mutable bool m_SizeValid = false;
+    // Font atlas generation these cached glyphs were built with. Rebuild() also
+    // fires when the font re-rasterizes (DPI change) and GetAtlasGen() differs,
+    // so static labels never sample a stale atlas (glitched/flattened text).
+    uint32_t m_FontGen = 0;
 };
 
 } // namespace Leir
