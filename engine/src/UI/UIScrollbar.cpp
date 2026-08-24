@@ -65,7 +65,12 @@ float UIScrollbar::ThumbLen() const
     if (m_Content <= m_Viewport || m_Viewport <= 0.0f)
         return track;
     const float len = track * (m_Viewport / m_Content);
-    return std::clamp(len, 16.0f, track);
+    // FIX (2026-08-24): while resizing, a dock pane can momentarily become
+    // shorter/narrower than 16px with the scrollbar still overflowing ->
+    // std::clamp(len, 16, track) had lo(16) > hi(track) -> MSVC debug assert
+    // ("invalid bounds"). Clamp the minimum to the track so bounds are always valid.
+    const float minLen = std::min(16.0f, track);
+    return std::clamp(len, minLen, track);
 }
 
 float UIScrollbar::ThumbStart() const
