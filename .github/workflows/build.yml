@@ -162,3 +162,41 @@ jobs:
           test -f build/emscripten-webengine/WebEngineDemo.wasm
           test -f build/emscripten-webengine/WebEngineDemo.js
           test -f build/emscripten-webengine/WebEngineDemo.data
+
+  # Fase 6 / M1: compile-only validation of the standalone raw-RHI WebDemo
+  # (WebGPUBackend + BackendFactory + XConsole). Uses the single-source
+  # *.web.wgsl shaders preloaded from engine/shaders (vs_main/ps_main).
+  emscripten-m1:
+    name: Emscripten (WebDemo M1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten 6.0.6
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 6.0.6 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 6.0.6
+          "$HOME/emsdk/emsdk" activate 6.0.6
+          echo "EMSDK=$HOME/emsdk" >> "$GITHUB_ENV"
+
+      - name: Configure WebDemo (M1)
+        shell: bash
+        run: |
+          source "$EMSDK/emsdk_env.sh"
+          cmake -S examples/WebDemo -B build/emscripten-webdemo -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+
+      - name: Build WebDemo (M1)
+        shell: bash
+        run: |
+          source "$EMSDK/emsdk_env.sh"
+          cmake --build build/emscripten-webdemo
+
+      - name: Assert WebDemo artifacts
+        shell: bash
+        run: |
+          test -f build/emscripten-webdemo/LeirEngineWebDemo.wasm
+          test -f build/emscripten-webdemo/LeirEngineWebDemo.js
+          test -f build/emscripten-webdemo/LeirEngineWebDemo.data

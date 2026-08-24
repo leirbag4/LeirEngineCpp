@@ -1401,12 +1401,17 @@ RHIPipeline WebGPUBackend::CreateGraphicsPipeline(const RHIPipelineDesc& desc) {
         : WGPUCullMode_Back;
     pdesc.primitive.unclippedDepth = 0;
 
-    // Depth-stencil (only when the render pass has a depth attachment)
-    WGPUDepthStencilState ds{};
-    if (rp->hasDepth && desc.depthTestEnable) {
+    // Depth-stencil. wgpu REQUIRES a pipeline used in a render pass that has a
+// depth attachment to declare a depth-stencil state whose FORMAT matches the
+// pass — even when depth testing is disabled (D3D12/Vulkan derive the format
+// from the render pass instead, so they don't hit this). Always emit it when
+// rp->hasDepth; a disabled test maps to CompareAlways (draws on top, never
+// occluded) with writes per depthWriteEnable, preserving the original behavior.
+WGPUDepthStencilState ds{};
+    if (rp->hasDepth) {
         ds.format = rp->depthFormat;
         ds.depthWriteEnabled = desc.depthWriteEnable ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        ds.depthCompare = WGPUCompareFunction_Less;
+        ds.depthCompare = desc.depthTestEnable ? WGPUCompareFunction_Less : WGPUCompareFunction_Always;
         ds.stencilReadMask = 0xFFFFFFFFu;
         ds.stencilWriteMask = 0xFFFFFFFFu;
         pdesc.depthStencil = &ds;

@@ -106,13 +106,18 @@ public:
         XConsole::Println("WebDemo: backend ready ({:d}x{:d})", m_Width, m_Height);
 
         // ---- Shaders (preloaded to /shaders via --preload-file) ----
-        m_Vs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.vert.wgsl"));
+        // Single-source: the generated *.web.wgsl (LEIR_BINDLESS=0, vs_main/
+        // ps_main) are committed in engine/shaders and match the web backend's
+        // single-texture layout + entry points. The old hand-written
+        // Basic.vert.wgsl was removed during the single-source migration.
 #if defined(__EMSCRIPTEN__)
+        m_Vs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.vert.web.wgsl"));
         // Firefox's naga cannot compile binding_array, so the browser build
         // uses the single-texture variant (the backend binds the first
         // registered texture into the shared group).
         m_Fs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.frag.web.wgsl"));
 #else
+        m_Vs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.vert.wgsl"));
         m_Fs = m_Backend->CreateShaderModule(ReadFile("/shaders/Basic.frag.wgsl"));
 #endif
         if (!m_Vs.IsValid() || !m_Fs.IsValid()) {
