@@ -176,6 +176,7 @@ private:
     UITreeViewItem* m_DragItem = nullptr; // primary dragged
     DropTarget m_DropTarget;
     UILabel* m_GhostLabel = nullptr; // translucent text overlay (IsOverlayLayer)
+    Vector2 m_GhostPos = {0.0f, 0.0f}; // authoritative ghost position (re-applied in OnLayoutComputed)
 
     // Double-click detection
     int m_LastClickFrame = -1000;

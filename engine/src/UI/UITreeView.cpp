@@ -8,8 +8,64 @@
 #include "LeirEngine/Input/Keyboard.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 
 namespace Leir {
+
+namespace {
+
+// TEMP diagnostic file logger (2026-08-23). Writes to %TEMP%\leir_tree.log so the
+// trace never touches the XConsole ring buffer (which would trigger ConsolePanel
+// rebuilds and fake the very "flying" we are diagnosing). Removed after the fix.
+class TreeDiag {
+public:
+    static void Log(const char* fmt, ...)
+    {
+        FILE* f = Open();
+        if (!f) return;
+        va_list args;
+        va_start(args, fmt);
+        std::vfprintf(f, fmt, args);
+        va_end(args);
+        std::fprintf(f, "\n");
+        std::fflush(f);
+        std::fclose(f);
+    }
+private:
+    static FILE* Open()
+    {
+        if (!s_Initialized) {
+            s_Initialized = true;
+            const char* tmp = std::getenv("TEMP");
+            if (!tmp || !*tmp) tmp = ".";
+            std::string path = std::string(tmp) + "\\leir_tree.log";
+            FILE* f = std::fopen(path.c_str(), "w"); // truncate on each run
+            if (f) std::fclose(f);
+            Log("== LeirEngine TreeView diagnostics start ==");
+        }
+        const char* tmp = std::getenv("TEMP");
+        if (!tmp || !*tmp) tmp = ".";
+        std::string path = std::string(tmp) + "\\leir_tree.log";
+        return std::fopen(path.c_str(), "a");
+    }
+    static bool s_Initialized;
+};
+bool TreeDiag::s_Initialized = false;
+
+int& TreeFrameCounter()
+{
+    static int s_Frame = 0;
+    return s_Frame;
+}
+
+void TreeDiagFrame()
+{
+    TreeFrameCounter()++;
+}
+
+} // namespace
 
 // Inline edit input that commits/cancels back to the owning UITreeView.
 class TreeEditInput : public UITextInput {
@@ -538,12 +594,56 @@ void UITreeView::OnLayoutComputed()
         }
     }
 
+    // FIX (2026-08-23): items that left m_FlatVisible (collapsed parents' children)
+    // were left SetActive(true) forever, so the stale ComputeFreeLayout pass kept
+    // positioning them at {treeView.x, treeView.y} + accumulated offset -> the
+    // "flying / conglomerate of text" at startup and on collapse. Deactivate any
+    // UITreeViewItem child not in the visible flat range.
+    int activeCount = 0;
+    for (auto* child : GetChildren()) {
+        auto* it = dynamic_cast<UITreeViewItem*>(child);
+        if (!it) continue;
+        bool inVisible = false;
+        for (int i = first; i <= last && i < n; ++i) {
+            if (m_FlatVisible[i] == it) { inVisible = true; break; }
+        }
+        if (!inVisible && it->IsActive()) {
+            it->SetActive(false);
+            // Ensure its labels are not dirty-rebuilt while inactive (harmless but cheap)
+            activeCount++;
+        }
+    }
+    TreeDiagFrame();
+    if (n > 0) {
+        TreeDiag::Log("[layout] f=%d cr=(%.1f,%.1f,%.1f,%.1f) n=%d range=[%d-%d] scroll=(%.1f,%.1f) content=(%.1f,%.1f) viewport=(%.1f,%.1f) deactivated=%d",
+            TreeFrameCounter(), cr.x, cr.y, cr.z, cr.w, n, first, last, m_ScrollOffset.x, m_ScrollOffset.y,
+            content.x, content.y, viewport.x, viewport.y, activeCount);
+        for (int i = first; i <= last && i < n; ++i) {
+            auto* it = m_FlatVisible[i];
+            const auto& r = it->GetComputedRect();
+            TreeDiag::Log("  row[%d] '%s' active=%d rect=(%.1f,%.1f,%.1f,%.1f)", i, it->GetText().c_str(), it->IsActive()?1:0, r.x, r.y, r.z, r.w);
+        }
+    }
+
     SyncScrollbars();
 
     // Keep edit input rect in sync if editing
     if (m_EditInput && m_EditInput->IsActive()) {
         UpdateEditInputRect();
     }
+
+    // FIX (2026-08-23): re-apply the ghost at its authoritative position AFTER
+    // ComputeFreeLayout accumulated the tree origin into its offset. Without
+    // this, a still mouse (no OnPointerMove) lets the offset accumulate tree.y
+    // every frame and the ghost flies down. Setting an ABSOLUTE offset here and
+    // re-computing makes it render at the cursor on every frame.
+    if (m_GhostLabel && m_GhostLabel->IsActive()) {
+        m_GhostLabel->GetRect().anchor = {0, 0, 0, 0};
+        m_GhostLabel->GetRect().offset = {m_GhostPos.x + 12.0f, m_GhostPos.y + 8.0f, m_GhostPos.x + 200.0f, m_GhostPos.y + 28.0f};
+        m_GhostLabel->ComputeLayout({200, 20});
+    }
+
+    // Diagnostic logs removed - were causing console rebuild flood (see TODO_UI_EVENT_FLOOD)
 }
 
 bool UITreeView::OnPointerDown(const Vector2& pos)
@@ -575,6 +675,7 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
     bool onArrow = hasChildren && pos.x >= arrowX && pos.x <= arrowX + 12.0f && pos.y >= arrowY && pos.y <= arrowY + m_RowHeight;
 
     if (onArrow) {
+        TreeDiag::Log("[toggle] f=%d '%s' %d->%d idx=%d hasChildren=%d", TreeFrameCounter(), item->GetText().c_str(), item->IsExpanded()?1:0, !item->IsExpanded()?1:0, idx, hasChildren?1:0);
         bool exp = !item->IsExpanded();
         item->SetExpanded(exp);
         InvalidateFlatCache();
@@ -657,19 +758,28 @@ void UITreeView::OnPointerMove(const Vector2& pos)
                 m_GhostLabel->SetName("TreeDragGhost");
                 m_GhostLabel->SetFont(m_Font);
                 m_GhostLabel->SetFontSize(13);
-                m_GhostLabel->SetColor({0.0f, 0.0f, 0.0f, 0.0f});
+                // UILabel::m_Color is the GLYPH color (not background) — a
+                // transparent color here made the ghost text invisible.
+                m_GhostLabel->SetColor({0.90f, 0.90f, 0.90f, 0.95f});
                 m_GhostLabel->SetOverlayLayer(true);
                 AddChild(m_GhostLabel);
             }
             std::string ghostText = m_DragItems.size() == 1 ? m_DragItems[0]->GetText() : std::to_string(m_DragItems.size()) + " items";
             m_GhostLabel->SetText(ghostText);
             m_GhostLabel->SetActive(true);
+            m_GhostPos = pos;
+            TreeDiag::Log("[dragstart] f=%d '%s' items=%d", TreeFrameCounter(), m_DragItems[0]->GetText().c_str(), (int)m_DragItems.size());
         }
     }
     if (m_Dragging && m_GhostLabel) {
-        m_GhostLabel->GetRect().anchor = {0, 0, 0, 0};
-        m_GhostLabel->GetRect().offset = {pos.x + 12.0f, pos.y + 8.0f, pos.x + 200.0f, pos.y + 28.0f};
-        m_GhostLabel->ComputeLayout({200, 20});
+        // FIX (2026-08-23): TreeView::ComputeFreeLayout adds this tree's
+        // cr.x/cr.y to every child offset on EVERY layout. When the mouse is
+        // still, OnPointerMove isn't called, so the ghost's offset accumulates
+        // tree.y each frame and it flies down. The authoritative position is
+        // m_GhostPos (set on every move); OnLayoutComputed re-applies it AFTER
+        // the accumulation so it always renders at the cursor.
+        m_GhostPos = pos;
+        TreeDiag::Log("[ghost] f=%d pos=(%.1f,%.1f)", TreeFrameCounter(), pos.x, pos.y);
         // Drop target highlight
         auto target = HitTestDropTarget(pos);
         if (target.item != m_DropTarget.item || target.mode != m_DropTarget.mode) {
