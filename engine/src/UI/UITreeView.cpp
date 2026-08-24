@@ -3,6 +3,7 @@
 #include "LeirEngine/UI/UIScrollbar.h"
 #include "LeirEngine/UI/UITextInput.h"
 #include "LeirEngine/UI/UILabel.h"
+#include "LeirEngine/UI/UIPanel.h"
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Keyboard.h"
@@ -65,6 +66,7 @@ UITreeView::~UITreeView()
     if (m_EditInput) { RemoveChild(m_EditInput); delete m_EditInput; }
     if (m_PendingDeleteInput) { RemoveChild(m_PendingDeleteInput); delete m_PendingDeleteInput; }
     if (m_GhostLabel) { RemoveChild(m_GhostLabel); delete m_GhostLabel; }
+    if (m_DropIndicator) { RemoveChild(m_DropIndicator); delete m_DropIndicator; }
     // Items are owned by the caller (like DockPanel content), not deleted here.
     // Flat cache is just views into the tree.
 }
@@ -80,7 +82,7 @@ void UITreeView::ProcessPendingEditDeletion()
 
 bool UITreeView::OwnsChild(const UIElement* child) const
 {
-    return child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_PendingDeleteInput || child == m_GhostLabel;
+    return child == m_VScrollbar || child == m_HScrollbar || child == m_EditInput || child == m_PendingDeleteInput || child == m_GhostLabel || child == m_DropIndicator;
 }
 
 void UITreeView::AddItem(UITreeViewItem* item, UITreeViewItem* parent)
@@ -497,6 +499,7 @@ UITreeView::DropTarget UITreeView::HitTestDropTarget(const Vector2& pos) const
 void UITreeView::ClearDropHighlight()
 {
     m_DropTarget = {};
+    if (m_DropIndicator) m_DropIndicator->SetActive(false);
 }
 
 void UITreeView::OnLayoutComputed()
@@ -571,6 +574,42 @@ void UITreeView::OnLayoutComputed()
         m_GhostLabel->GetRect().offset = {m_GhostPos.x + 12.0f, m_GhostPos.y + 8.0f, m_GhostPos.x + 200.0f, m_GhostPos.y + 28.0f};
         m_GhostLabel->ComputeLayout({200, 20});
     }
+
+    // FIX (2026-08-23): drop feedback — a 2px line at the target row's bottom
+    // edge (Below = reorder) or a translucent fill over the target row (Onto =
+    // nest). Positioned here (absolute) so the ComputeFreeLayout accumulation
+    // never drifts it, same pattern as the ghost.
+    if (m_Dragging && m_DropTarget.item && n > 0) {
+        if (!m_DropIndicator) {
+            m_DropIndicator = new UIPanel();
+            m_DropIndicator->SetName("TreeDropIndicator");
+            AddChild(m_DropIndicator); // added after items -> drawn on top of rows
+        }
+        int tIdx = -1;
+        for (int i = 0; i < n; ++i) {
+            if (m_FlatVisible[i] == m_DropTarget.item) { tIdx = i; break; }
+        }
+        if (tIdx >= first && tIdx <= last) {
+            m_DropIndicator->SetActive(true);
+            float rowY = std::round(cr.y + (float)tIdx * m_RowHeight - m_ScrollOffset.y);
+            float x0 = std::round(cr.x - m_ScrollOffset.x);
+            float indW = std::max(viewport.x, content.x);
+            m_DropIndicator->GetRect().anchor = {0, 0, 0, 0};
+            if (m_DropTarget.mode == DropMode::Below) {
+                m_DropIndicator->SetColor({0.35f, 0.65f, 1.0f, 0.95f});
+                m_DropIndicator->GetRect().offset = {x0, rowY + m_RowHeight - 1.0f, x0 + indW, rowY + m_RowHeight + 1.0f};
+                m_DropIndicator->ComputeLayout({indW, 2.0f});
+            } else { // Onto
+                m_DropIndicator->SetColor({0.30f, 0.50f, 1.0f, 0.35f});
+                m_DropIndicator->GetRect().offset = {x0, rowY, x0 + indW, rowY + m_RowHeight};
+                m_DropIndicator->ComputeLayout({indW, m_RowHeight});
+            }
+        } else {
+            m_DropIndicator->SetActive(false);
+        }
+    } else if (m_DropIndicator) {
+        m_DropIndicator->SetActive(false);
+    }
 }
 
 bool UITreeView::OnPointerDown(const Vector2& pos)
@@ -629,7 +668,19 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
 
     bool ctrl = Keyboard::IsDown(Key::LeftControl) || Keyboard::IsDown(Key::RightControl);
     bool shift = Keyboard::IsDown(Key::LeftShift) || Keyboard::IsDown(Key::RightShift);
-    UpdateSelection(item, ctrl, shift);
+    // FIX (2026-08-23): a plain click on an item that is ALREADY selected must
+    // NOT clear the multi-selection — that would break dragging several items at
+    // once. Defer the collapse-to-single until OnPointerUp (only when no drag
+    // actually happens). The drag code in OnPointerMove then drags the whole
+    // m_SelectedItems like any standard treeview.
+    m_DeferredSelect = nullptr;
+    bool alreadySelected = m_MultipleSelection &&
+        std::find(m_SelectedItems.begin(), m_SelectedItems.end(), item) != m_SelectedItems.end();
+    if (!ctrl && !shift && alreadySelected) {
+        m_DeferredSelect = item;
+    } else {
+        UpdateSelection(item, ctrl, shift);
+    }
 
     // Drag start
     m_DragItem = item;
@@ -671,6 +722,7 @@ void UITreeView::OnPointerMove(const Vector2& pos)
         float dy = pos.y - m_DragStartPos.y;
         if (dx*dx + dy*dy > 16.0f) {
             m_Dragging = true;
+            m_DeferredSelect = nullptr; // dragging -> keep the multi-selection
             // Collect drag items: if dragging a selected item, drag all selected; else single
             auto it = std::find(m_SelectedItems.begin(), m_SelectedItems.end(), m_DragItem);
             if (it != m_SelectedItems.end()) {
@@ -809,6 +861,11 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
         return true;
     }
     m_DragItem = nullptr;
+    // Plain click on an already-selected item (no drag): collapse to single now.
+    if (m_DeferredSelect) {
+        UpdateSelection(m_DeferredSelect, false, false);
+        m_DeferredSelect = nullptr;
+    }
     return false;
 }
 

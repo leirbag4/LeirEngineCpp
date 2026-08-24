@@ -13,6 +13,7 @@ class Font;
 class UIScrollbar;
 class UITextInput;
 class UILabel;
+class UIPanel;
 class UITreeViewItem;
 
 // Virtualized tree view with full-width rows, indent, expand/collapse arrow,
@@ -139,6 +140,10 @@ private:
 
     std::vector<UITreeViewItem*> m_SelectedItems;
     int m_LastSelectedIndex = -1; // for Shift range
+    // When a plain click lands on an item that is ALREADY part of a multi
+    // selection, the collapse-to-single is deferred to OnPointerUp so that
+    // starting a drag preserves the multi-selection (standard treeview behavior).
+    UITreeViewItem* m_DeferredSelect = nullptr;
 
     float m_Indent = 16.0f;
     float m_RowHeight = 20.0f;
@@ -177,6 +182,10 @@ private:
     DropTarget m_DropTarget;
     UILabel* m_GhostLabel = nullptr; // translucent text overlay (IsOverlayLayer)
     Vector2 m_GhostPos = {0.0f, 0.0f}; // authoritative ghost position (re-applied in OnLayoutComputed)
+    // Drop feedback: a 2px line at the row edge (Below = reorder) or a translucent
+    // fill over the target row (Onto = nest). Positioned in OnLayoutComputed so the
+    // ComputeFreeLayout accumulation never drifts it.
+    UIPanel* m_DropIndicator = nullptr;
 
     // Double-click detection
     int m_LastClickFrame = -1000;
