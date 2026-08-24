@@ -104,7 +104,7 @@ private:
     UITreeViewItem* m_TreeParent = nullptr;
     std::vector<UITreeViewItem*> m_TreeChildren;
 
-    Vector4 m_SelectionColor = {0.30f, 0.50f, 1.0f, 0.40f};
+    Vector4 m_SelectionColor = {0.50f, 0.35f, 1.0f, 0.40f};
     Vector4 m_HoverColor = {0.15f, 0.15f, 0.18f, 1.0f};
     Vector4 m_TextColor = {0.85f, 0.85f, 0.85f, 1.0f};
     Vector4 m_TextHoverColor = {1.0f, 1.0f, 1.0f, 1.0f};

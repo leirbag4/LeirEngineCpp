@@ -596,11 +596,11 @@ void UITreeView::OnLayoutComputed()
             float indW = std::max(viewport.x, content.x);
             m_DropIndicator->GetRect().anchor = {0, 0, 0, 0};
             if (m_DropTarget.mode == DropMode::Below) {
-                m_DropIndicator->SetColor({0.35f, 0.65f, 1.0f, 0.95f});
+                m_DropIndicator->SetColor({0.65f, 0.45f, 1.0f, 0.95f});
                 m_DropIndicator->GetRect().offset = {x0, rowY + m_RowHeight - 1.0f, x0 + indW, rowY + m_RowHeight + 1.0f};
                 m_DropIndicator->ComputeLayout({indW, 2.0f});
             } else { // Onto
-                m_DropIndicator->SetColor({0.30f, 0.50f, 1.0f, 0.35f});
+                m_DropIndicator->SetColor({0.55f, 0.40f, 1.0f, 0.35f});
                 m_DropIndicator->GetRect().offset = {x0, rowY, x0 + indW, rowY + m_RowHeight};
                 m_DropIndicator->ComputeLayout({indW, m_RowHeight});
             }
