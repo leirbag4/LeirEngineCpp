@@ -71,6 +71,10 @@ bool LeirSettings::Load(const std::string& path)
         debug.show_overlay = j.value("debug", nlohmann::json::object()).value("show_overlay", true);
         debug.show_glyph_quads = j.value("debug", nlohmann::json::object()).value("show_glyph_quads", false);
         debug.ui_event_log = j.value("debug", nlohmann::json::object()).value("ui_event_log", false);
+        auto statsJ = j.value("debug", nlohmann::json::object()).value("stats", nlohmann::json::object());
+        debug.stats.pos_x = statsJ.value("pos_x", INT_MIN);
+        debug.stats.pos_y = statsJ.value("pos_y", INT_MIN);
+        debug.stats.minimized = statsJ.value("minimized", false);
 
         graphics.backend = j.value("graphics", nlohmann::json::object()).value("backend", "vulkan");
 
@@ -105,6 +109,9 @@ bool LeirSettings::Save()
     j["debug"]["show_overlay"] = debug.show_overlay;
     j["debug"]["show_glyph_quads"] = debug.show_glyph_quads;
     j["debug"]["ui_event_log"] = debug.ui_event_log;
+    j["debug"]["stats"]["pos_x"] = debug.stats.pos_x;
+    j["debug"]["stats"]["pos_y"] = debug.stats.pos_y;
+    j["debug"]["stats"]["minimized"] = debug.stats.minimized;
     j["graphics"]["backend"] = graphics.backend;
     j["layout"]["hierarchy_width"] = layout.hierarchy_width;
     j["layout"]["inspector_width"] = layout.inspector_width;
@@ -150,6 +157,7 @@ void LeirSettings::SetDefaults()
     debug.show_overlay = true;
     debug.show_glyph_quads = false;
     debug.ui_event_log = false;
+    debug.stats = { INT_MIN, INT_MIN, false };
     graphics.backend = "vulkan";
     layout.hierarchy_width = 300.0f;
     layout.inspector_width = 300.0f;

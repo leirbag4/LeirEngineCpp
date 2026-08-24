@@ -29,6 +29,12 @@ public:
         bool show_overlay = true;
         bool show_glyph_quads = false;
         bool ui_event_log = false;
+        // Stats overlay (UIDebugOverlay): persisted position + collapsed state.
+        struct {
+            int pos_x = INT_MIN;   // INT_MIN = unset (default top-left placement)
+            int pos_y = INT_MIN;
+            bool minimized = false;
+        } stats;
     } debug;
 
     struct {

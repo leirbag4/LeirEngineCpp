@@ -16,6 +16,12 @@ enum class LEIR_API ButtonState {
     Pressed,
 };
 
+enum class LEIR_API ButtonTextAlign {
+    Left,   // legacy: 6px left inset
+    Center,
+    Right,
+};
+
 class LEIR_API UIButton : public UIElement {
 public:
     UIButton();
@@ -35,6 +41,9 @@ public:
     void SetTextColor(const Vector4& color) { m_TextColor = color; }
     const Vector4& GetTextColor() const { return m_TextColor; }
 
+    void SetTextAlign(ButtonTextAlign align) { m_TextAlign = align; }
+    ButtonTextAlign GetTextAlign() const { return m_TextAlign; }
+
     void SetOnClick(std::function<void()> callback) { m_OnClick = callback; }
 
     ButtonState GetState() const { return m_State; }
@@ -51,6 +60,7 @@ private:
     Font* m_Font = nullptr;
     std::function<void()> m_OnClick;
     ButtonState m_State = ButtonState::Normal;
+    ButtonTextAlign m_TextAlign = ButtonTextAlign::Left;
     Vector4 m_BgNormal = {0.3f, 0.3f, 0.3f, 1.0f};
     Vector4 m_BgHover = {0.4f, 0.4f, 0.4f, 1.0f};
     Vector4 m_BgPressed = {0.2f, 0.2f, 0.2f, 1.0f};

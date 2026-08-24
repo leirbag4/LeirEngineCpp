@@ -453,10 +453,23 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
             float ascender = btn->GetFont()->GetAscender();
             float baselineY = cr.y + (cr.w - lineH) * 0.5f + ascender;
             auto rawQuads = btn->GetFont()->LayoutText(btn->GetText(), cr.z - 12.0f);
+            // Horizontal alignment (default Left = legacy 6px inset). Compute the
+            // text block width so Center/Right can position it correctly.
+            float blockW = 0.0f;
+            for (size_t i = 0; i < rawQuads.size(); i += 2) {
+                const auto& r = rawQuads[i];
+                if (r.x + r.z > blockW) blockW = r.x + r.z;
+            }
+            float startX = cr.x + 6.0f;
+            switch (btn->GetTextAlign()) {
+                case ButtonTextAlign::Center: startX = cr.x + (cr.z - blockW) * 0.5f; break;
+                case ButtonTextAlign::Right:  startX = cr.x + cr.z - blockW - 6.0f; break;
+                default: break; // Left
+            }
             for (size_t i = 0; i < rawQuads.size(); i += 2) {
                 const auto& r = rawQuads[i];
                 const auto& uv = rawQuads[i + 1];
-                Vector4 textRect = {cr.x + 6.0f + r.x, baselineY + r.y, r.z, r.w};
+                Vector4 textRect = {startX + r.x, baselineY + r.y, r.z, r.w};
                 Batch(btn->GetFont()->GetAtlasTexture(), textRect, uv, btn->GetTextColor());
             }
         }

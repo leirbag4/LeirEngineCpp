@@ -646,6 +646,11 @@ protected:
         m_DebugOverlay->SetRenderStatsProvider([this]() {
             return m_UIRenderer ? m_UIRenderer->GetLastStats() : Leir::UIRenderStats{};
         });
+        // The minimized Stats panel pins to the 3D viewport's bottom-right corner.
+        m_DebugOverlay->SetViewportRectProvider([this]() {
+            return m_ViewportPanel ? m_ViewportPanel->GetComputedRect()
+                                   : Leir::Vector4{};
+        });
 
         Leir::XConsole::Println("Scene hierarchy created with dock system");
     }

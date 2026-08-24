@@ -2,6 +2,7 @@
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/UIPanel.h"
 #include "LeirEngine/UI/UILabel.h"
+#include "LeirEngine/UI/UIButton.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Mouse.h"
 #include "LeirEngine/Input/Keyboard.h"
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <climits>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -79,6 +81,28 @@ std::string FormatBytes(std::uint64_t bytes)
 
 } // namespace
 
+// Draggable title bar of the Stats panel. Forwards pointer events to the owner
+// overlay; dragging only starts while the panel is maximized (the minimized
+// panel is pinned to the viewport bottom-right). The minimize/maximize button
+// is a child, so clicking it is consumed by the button and never reaches here.
+class OverlayTitleBar : public UIPanel {
+public:
+    explicit OverlayTitleBar(UIDebugOverlay* owner) : m_Owner(owner) { SetName("StatsTitleBar"); }
+    bool OnPointerDown(const Vector2& pos) override {
+        if (m_Owner && !m_Owner->IsMinimized()) { m_Owner->BeginTitleDrag(this, pos); return true; }
+        return false;
+    }
+    void OnPointerMove(const Vector2& pos) override {
+        if (m_Owner) m_Owner->TitleDragTo(pos);
+    }
+    bool OnPointerUp(const Vector2& pos) override {
+        if (m_Owner) m_Owner->EndTitleDrag(pos);
+        return false;
+    }
+private:
+    UIDebugOverlay* m_Owner = nullptr;
+};
+
 UIDebugOverlay::UIDebugOverlay(Font* font, UICanvas* canvas)
     : m_Canvas(canvas)
 {
@@ -101,9 +125,60 @@ void UIDebugOverlay::CreatePanel(Font* font)
     m_Panel->GetRect().offset = {274.0f, 10.0f, 590.0f, 340.0f};
     m_Panel->SetColor({0.08f, 0.08f, 0.1f, 0.85f});
     m_Panel->SetOverlayLayer(true);   // always on top of the dock/viewports
-    m_Panel->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
     m_Panel->SetLayoutMode(LayoutMode::Column);
-    m_Panel->SetSpacing(3.0f);
+    m_Panel->SetSpacing(0.0f);
+
+    // Title bar (draggable when maximized): "Stats" + spacer + -/+ toggle.
+    m_HeaderRow = new OverlayTitleBar(this);
+    m_HeaderRow->SetName("StatsTitleBar");
+    m_HeaderRow->SetLayoutMode(LayoutMode::Row);
+    m_HeaderRow->SetSizePolicy(SizePolicy::Fixed);
+    m_HeaderRow->SetMinSize({0.0f, 24.0f});
+    // Vertical padding leaves ~3px margin around the -/+ button (smaller than
+    // the bar); translucent when expanded (ApplyMaximizedLayout), solid when
+    // minimized (ApplyMinimizedLayout).
+    m_HeaderRow->SetPadding(8.0f, 3.0f, 4.0f, 3.0f);
+    m_HeaderRow->SetColor({0.13f, 0.13f, 0.16f, 0.60f});
+    m_Panel->AddChild(m_HeaderRow);
+
+    m_TitleLabel = new UILabel();
+    m_TitleLabel->SetName("StatsTitle");
+    m_TitleLabel->SetText("Stats");
+    m_TitleLabel->SetFont(font);
+    m_TitleLabel->SetFontSize(13);
+    m_TitleLabel->SetColor({0.9f, 0.9f, 0.9f, 1.0f});
+    m_TitleLabel->SetSizePolicy(SizePolicy::Fixed);
+    m_HeaderRow->AddChild(m_TitleLabel);
+
+    auto* spacer = new UIPanel();
+    spacer->SetName("StatsTitleSpacer");
+    spacer->SetColor({0.0f, 0.0f, 0.0f, 0.0f});
+    spacer->SetSizePolicy(SizePolicy::Fill);
+    m_HeaderRow->AddChild(spacer);
+
+    m_MinMaxButton = new UIButton();
+    m_MinMaxButton->SetName("StatsMinMaxButton");
+    m_MinMaxButton->SetFont(font);
+    m_MinMaxButton->SetText("-");
+    m_MinMaxButton->SetSizePolicy(SizePolicy::Fixed);
+    m_MinMaxButton->SetMinSize({20.0f, 18.0f}); // smaller than the 24px bar (3px margin)
+    m_MinMaxButton->SetTextAlign(ButtonTextAlign::Center);
+    m_MinMaxButton->SetColors({0.25f, 0.25f, 0.30f, 1.0f},
+                              {0.35f, 0.35f, 0.42f, 1.0f},
+                              {0.15f, 0.15f, 0.20f, 1.0f});
+    m_MinMaxButton->SetTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    m_MinMaxButton->SetOnClick([this]() { ToggleMinimized(); });
+    m_HeaderRow->AddChild(m_MinMaxButton);
+
+    // Content panel (hidden when minimized) holding the stat labels.
+    m_ContentPanel = new UIPanel();
+    m_ContentPanel->SetName("StatsContent");
+    m_ContentPanel->SetColor({0.0f, 0.0f, 0.0f, 0.0f});
+    m_ContentPanel->SetLayoutMode(LayoutMode::Column);
+    m_ContentPanel->SetSizePolicy(SizePolicy::Fill);
+    m_ContentPanel->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
+    m_ContentPanel->SetSpacing(3.0f);
+    m_Panel->AddChild(m_ContentPanel);
 
     auto makeLabel = [&](const std::string& name, const std::string& text) -> UILabel* {
         auto* label = new UILabel();
@@ -113,7 +188,7 @@ void UIDebugOverlay::CreatePanel(Font* font)
         label->SetColor({0.9f, 0.9f, 0.9f, 1.0f});
         label->SetFontSize(14);
         label->SetSizePolicy(SizePolicy::Fixed);
-        m_Panel->AddChild(label);
+        m_ContentPanel->AddChild(label);
         return label;
     };
 
@@ -128,6 +203,13 @@ void UIDebugOverlay::CreatePanel(Font* font)
     m_LastEventLabel = makeLabel("DebugLastEvent", "Event: --");
 
     m_Canvas->AddChild(m_Panel);
+
+    // Apply persisted position/state (maximized default), then the layout.
+    RestoreState();
+    if (m_Minimized)
+        ApplyMinimizedLayout();
+    else
+        ApplyMaximizedLayout();
 }
 
 void UIDebugOverlay::SetFont(Font* font)
@@ -139,11 +221,139 @@ void UIDebugOverlay::SetFont(Font* font)
     };
     for (UILabel* l : labels)
         if (l) l->SetFont(font);
+    if (m_TitleLabel) m_TitleLabel->SetFont(font);
+    if (m_MinMaxButton) m_MinMaxButton->SetFont(font);
+}
+
+void UIDebugOverlay::ApplyMaximizedLayout()
+{
+    m_Minimized = false;
+    if (m_ContentPanel) m_ContentPanel->SetActive(true);
+    if (m_MinMaxButton) m_MinMaxButton->SetText("-");
+    // Translucent title bar when expanded (matches the panel's translucent bg).
+    if (m_HeaderRow) m_HeaderRow->SetColor({0.13f, 0.13f, 0.16f, 0.60f});
+    const auto& r = m_MaximizedRect;
+    m_Panel->GetRect().anchor = {0, 0, 0, 0};
+    m_Panel->GetRect().offset = {r.x, r.y, r.x + r.z, r.y + r.w};
+}
+
+void UIDebugOverlay::ApplyMinimizedLayout()
+{
+    m_Minimized = true;
+    if (m_ContentPanel) m_ContentPanel->SetActive(false);
+    if (m_MinMaxButton) m_MinMaxButton->SetText("+");
+    // Solid title bar when minimized (a solid little collapsed bar).
+    if (m_HeaderRow) m_HeaderRow->SetColor({0.13f, 0.13f, 0.16f, 1.0f});
+    // Pin to the viewport's bottom-right corner (inside the viewport rect).
+    const float kW = 170.0f, kH = 24.0f, kMargin = 8.0f;
+    float x = 0.0f, y = 0.0f;
+    if (m_ViewportRectProvider) {
+        Vector4 vp = m_ViewportRectProvider();
+        x = vp.x + vp.z - kW - kMargin;
+        y = vp.y + vp.w - kH - kMargin;
+        if (x < vp.x) x = vp.x;
+        if (y < vp.y) y = vp.y;
+    }
+    m_Panel->GetRect().anchor = {0, 0, 0, 0};
+    m_Panel->GetRect().offset = {x, y, x + kW, y + kH};
+}
+
+void UIDebugOverlay::RestoreState()
+{
+    const auto& s = LeirSettings::Get().debug.stats;
+    const float w = m_MaximizedRect.z, h = m_MaximizedRect.w;
+    m_MaximizedRect.x = (s.pos_x != INT_MIN) ? (float)s.pos_x : 274.0f;
+    m_MaximizedRect.y = (s.pos_y != INT_MIN) ? (float)s.pos_y : 10.0f;
+    m_MaximizedRect.z = w;
+    m_MaximizedRect.w = h;
+    m_Minimized = s.minimized;
+}
+
+void UIDebugOverlay::SaveState()
+{
+    auto& s = LeirSettings::Get().debug.stats;
+    s.pos_x = (int)m_MaximizedRect.x;
+    s.pos_y = (int)m_MaximizedRect.y;
+    s.minimized = m_Minimized;
+    LeirSettings::Get().Save();
+}
+
+void UIDebugOverlay::BeginTitleDrag(UIPanel* titleBar, const Vector2& pos)
+{
+    if (m_Minimized || !titleBar) return;
+    m_Dragging = true;
+    m_DragStart = pos;
+    m_StartOffset = {m_Panel->GetRect().offset.left, m_Panel->GetRect().offset.top};
+    for (UIElement* e = titleBar; e; e = e->GetParent()) {
+        if (auto* c = dynamic_cast<UICanvas*>(e)) { c->CapturePointer(titleBar); break; }
+    }
+}
+
+void UIDebugOverlay::TitleDragTo(const Vector2& pos)
+{
+    if (!m_Dragging || m_Minimized) return;
+    const auto& o = m_Panel->GetRect().offset;
+    const float w = o.right - o.left;
+    const float h = o.bottom - o.top;
+    float nx = m_StartOffset.x + (pos.x - m_DragStart.x);
+    float ny = m_StartOffset.y + (pos.y - m_DragStart.y);
+    // Clamp to the canvas so the panel never goes off-screen (windows.h defines
+    // a `max` macro, so avoid std::max here).
+    float maxX = m_Canvas->GetScreenWidth() - w;
+    float maxY = m_Canvas->GetScreenHeight() - h;
+    if (maxX < 0.0f) maxX = 0.0f;
+    if (maxY < 0.0f) maxY = 0.0f;
+    nx = std::clamp(nx, 0.0f, maxX);
+    ny = std::clamp(ny, 0.0f, maxY);
+    m_Panel->GetRect().offset = {nx, ny, nx + w, ny + h};
+    m_MaximizedRect = {nx, ny, w, h};
+}
+
+void UIDebugOverlay::EndTitleDrag(const Vector2& pos)
+{
+    (void)pos;
+    if (!m_Dragging) return;
+    m_Dragging = false;
+    if (m_HeaderRow) {
+        for (UIElement* e = m_HeaderRow; e; e = e->GetParent()) {
+            if (auto* c = dynamic_cast<UICanvas*>(e)) { c->ReleasePointer(); break; }
+        }
+    }
+    SaveState();
+}
+
+void UIDebugOverlay::ToggleMinimized()
+{
+    if (m_Minimized) {
+        ApplyMaximizedLayout();
+    } else {
+        const auto& cr = m_Panel->GetComputedRect();
+        m_MaximizedRect = {cr.x, cr.y, cr.z, cr.w};
+        ApplyMinimizedLayout();
+    }
+    SaveState();
 }
 
 void UIDebugOverlay::Update(float deltaTime)
 {
     if (!m_Active || !m_Panel) return;
+
+    // Keep the minimized panel pinned to the viewport's bottom-right corner
+    // (it follows window/viewport resizes; not draggable while minimized).
+    if (m_Minimized && m_Panel->IsActive() && m_ViewportRectProvider) {
+        Vector4 vp = m_ViewportRectProvider();
+        if (vp.z > 0.0f && vp.w > 0.0f) {
+            const auto& o = m_Panel->GetRect().offset;
+            const float w = o.right - o.left, h = o.bottom - o.top;
+            const float kMargin = 8.0f;
+            float x = vp.x + vp.z - w - kMargin;
+            float y = vp.y + vp.w - h - kMargin;
+            if (x < vp.x) x = vp.x;
+            if (y < vp.y) y = vp.y;
+            if (o.left != x || o.top != y)
+                m_Panel->GetRect().offset = {x, y, x + w, y + h};
+        }
+    }
 
     // Render stats (from the previous frame's Flush)
     UIRenderStats stats = m_StatsProvider ? m_StatsProvider() : UIRenderStats{};
