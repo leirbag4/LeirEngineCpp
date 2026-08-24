@@ -68,32 +68,6 @@ void TreeViewDebugPanel::Refresh()
 
 void TreeViewDebugPanel::PopulateSample()
 {
-    // Small test mode for scrollbar-less validation (pedido usuario 2026-08-23).
-    // Cambiá a false para volver al stress test de 2000 items.
-    constexpr bool kSmallTest = true;
-    if (kSmallTest) {
-        for (int i = 0; i < 2; ++i) {
-            auto* root = new Leir::UITreeViewItem();
-            root->SetText("Root " + std::to_string(i));
-            m_TreeView->AddItem(root, nullptr);
-            for (int j = 0; j < 2; ++j) {
-                auto* child = new Leir::UITreeViewItem();
-                child->SetText("Child " + std::to_string(i) + "." + std::to_string(j));
-                m_TreeView->AddItem(child, root);
-                // No grand para mantener total < 20 (sin scrollbar)
-            }
-        }
-        auto* smallRoot = new Leir::UITreeViewItem();
-        smallRoot->SetText("Small List (10)");
-        m_TreeView->AddItem(smallRoot, nullptr);
-        for (int i = 0; i < 10; ++i) {
-            auto* it = new Leir::UITreeViewItem();
-            it->SetText("Item " + std::to_string(i));
-            m_TreeView->AddItem(it, smallRoot);
-        }
-        smallRoot->SetExpanded(false);
-        return;
-    }
     // Create a sample hierarchy with varied depths and a large flat list for perf test
     for (int i = 0; i < 5; ++i) {
         auto* root = new Leir::UITreeViewItem();
