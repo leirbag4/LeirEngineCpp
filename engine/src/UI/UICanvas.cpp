@@ -144,6 +144,9 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
                     m_CaptureElement->GetName().c_str());
             XConsole::Trace("[Canvas] ReleaseCapture");
             m_CaptureElement = nullptr;
+            // A captured release also ends the pointer-down state (otherwise
+            // m_PointerDown stays true and hover would stay frozen forever).
+            m_PointerDown = false;
         }
         return;
     }
@@ -154,8 +157,13 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
         hit ? hit->GetName().c_str() : "null",
         m_HoveredElement ? m_HoveredElement->GetName().c_str() : "null");
 
-    // Hover tracking (only when no capture)
-    if (hit != m_HoveredElement) {
+    // Hover is a no-button state. While a pointer button is held (drag in
+    // progress) and no element captured the pointer, the cursor is dragging, not
+    // hovering — do NOT change hover state (SetHovered / OnPointerEnter/Exit).
+    // Otherwise dragging from elsewhere over e.g. a tree row highlights it.
+    // Move forwarding below is kept so non-capturing drags (UISlider) still work.
+    const bool dragging = m_PointerDown && !m_CaptureElement;
+    if (!dragging && hit != m_HoveredElement) {
         if (m_HoveredElement) {
             m_HoveredElement->OnPointerExit();
             m_HoveredElement->SetHovered(false);
