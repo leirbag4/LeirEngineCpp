@@ -242,8 +242,8 @@ void UIDebugOverlay::ApplyMinimizedLayout()
     m_Minimized = true;
     if (m_ContentPanel) m_ContentPanel->SetActive(false);
     if (m_MinMaxButton) m_MinMaxButton->SetText("+");
-    // Solid title bar when minimized (a solid little collapsed bar).
-    if (m_HeaderRow) m_HeaderRow->SetColor({0.13f, 0.13f, 0.16f, 1.0f});
+    // Same translucency as the expanded bar.
+    if (m_HeaderRow) m_HeaderRow->SetColor({0.13f, 0.13f, 0.16f, 0.60f});
     // Pin to the viewport's bottom-right corner (inside the viewport rect).
     const float kW = 170.0f, kH = 24.0f, kMargin = 8.0f;
     float x = 0.0f, y = 0.0f;
