@@ -1,6 +1,7 @@
 #include "LeirEngine/UI/UITreeViewItem.h"
 #include "LeirEngine/UI/UITreeView.h"
 #include "LeirEngine/UI/UILabel.h"
+#include "LeirEngine/UI/UIImage.h"
 #include "LeirEngine/UI/Font.h"
 
 namespace Leir {
@@ -29,6 +30,14 @@ UITreeViewItem::UITreeViewItem()
     m_TextLabel->SetHitTestable(false);
     AddChild(m_TextLabel);
 
+    // Icon quad (12x12) between the arrow and the text. Hidden until SetIcon +
+    // SetShowIcon(true) (the UITreeView's SetIconsEnabled drives the latter).
+    m_IconImage = new UIImage();
+    m_IconImage->SetName("TreeIcon");
+    m_IconImage->SetActive(false);
+    m_IconImage->SetHitTestable(false);
+    AddChild(m_IconImage);
+
     RebuildLabels();
 }
 
@@ -36,6 +45,7 @@ UITreeViewItem::~UITreeViewItem()
 {
     if (m_ArrowLabel) { RemoveChild(m_ArrowLabel); delete m_ArrowLabel; }
     if (m_TextLabel) { RemoveChild(m_TextLabel); delete m_TextLabel; }
+    if (m_IconImage) { RemoveChild(m_IconImage); delete m_IconImage; }
 }
 
 void UITreeViewItem::SetText(const std::string& text)
@@ -114,7 +124,7 @@ void UITreeViewItem::SetFont(Font* font)
 
 bool UITreeViewItem::OwnsChild(const UIElement* child) const
 {
-    return child == m_ArrowLabel || child == m_TextLabel;
+    return child == m_ArrowLabel || child == m_TextLabel || child == m_IconImage;
 }
 
 Vector2 UITreeViewItem::GetMinSize() const
@@ -149,7 +159,18 @@ void UITreeViewItem::OnLayoutComputed()
         m_ArrowLabel->GetRect().offset = {arrowX, arrowY, arrowX + arrowW, arrowY + arrowH};
         m_ArrowLabel->ComputeLayout({arrowW, arrowH});
     }
-    float textX = arrowX + (m_ArrowLabel && m_ArrowLabel->IsActive() ? arrowW + 4.0f : 4.0f);
+    // Cursor starts after the arrow (or after the indent when there is none).
+    float cursor = arrowX + (m_ArrowLabel && m_ArrowLabel->IsActive() ? arrowW + 4.0f : 4.0f);
+    // Icon (12x12) between the arrow and the text, vertically centered.
+    if (m_ShowIcon && m_IconImage && m_IconImage->IsActive()) {
+        float iconX = cursor;
+        float iconY = cr.y + (cr.w - m_IconSize) * 0.5f;
+        m_IconImage->GetRect().anchor = {0, 0, 0, 0};
+        m_IconImage->GetRect().offset = {iconX, iconY, iconX + m_IconSize, iconY + m_IconSize};
+        m_IconImage->ComputeLayout({m_IconSize, m_IconSize});
+        cursor += m_IconSize + 4.0f;
+    }
+    float textX = cursor;
     float textW = std::max(0.0f, cr.x + cr.z - textX - 2.0f);
     float textH = cr.w;
     if (m_TextLabel) {
@@ -194,6 +215,26 @@ void UITreeViewItem::OnPointerMove(const Vector2& pos)
     (void)pos;
 }
 
+void UITreeViewItem::SetIcon(std::shared_ptr<Texture2D> icon)
+{
+    m_Icon = std::move(icon);
+    UpdateIconState();
+}
+
+void UITreeViewItem::SetShowIcon(bool show)
+{
+    if (m_ShowIcon == show) return;
+    m_ShowIcon = show;
+    UpdateIconState();
+}
+
+void UITreeViewItem::UpdateIconState()
+{
+    if (!m_IconImage) return;
+    m_IconImage->SetTexture(m_Icon ? m_Icon.get() : nullptr);
+    m_IconImage->SetActive(m_ShowIcon && m_Icon != nullptr);
+}
+
 void UITreeViewItem::RebuildLabels()
 {
     if (!m_ArrowLabel) return;
@@ -201,6 +242,7 @@ void UITreeViewItem::RebuildLabels()
     // Use ASCII fallback — font atlas only covers 32..126, unicode triangles render as "?"
     m_ArrowLabel->SetText(hasChildren ? (m_Expanded ? "v" : ">") : "");
     m_ArrowLabel->SetActive(hasChildren);
+    UpdateIconState();
     UpdateColors();
 }
 

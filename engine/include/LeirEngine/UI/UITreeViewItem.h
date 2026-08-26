@@ -2,6 +2,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIPanel.h"
 #include "LeirEngine/Math/Vector4.h"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,8 @@ namespace Leir {
 
 class Font;
 class UILabel;
+class UIImage;
+class Texture2D;
 
 // Single row in a UITreeView. Holds text, enabled/selected/expanded state,
 // tree parent/children, indent and per-item colors. The UITreeView owns the
@@ -21,6 +24,13 @@ public:
     // Text
     void SetText(const std::string& text);
     const std::string& GetText() const { return m_Text; }
+
+    // Icon (12x12 quad to the left of the text, after the arrow). Uses the
+    // UITextureCache (decode-once by path hash) — the caller loads a
+    // shared_ptr and the item keeps it alive. Shown only when SetShowIcon(true).
+    void SetIcon(std::shared_ptr<Texture2D> icon);
+    void SetShowIcon(bool show);
+    void SetIconSize(float size) { m_IconSize = size; }
 
     // Enabled — false = grayed, not selectable, OnPointerDown returns false
     void SetItemEnabled(bool enabled);
@@ -89,11 +99,16 @@ protected:
 private:
     void RebuildLabels();
     void UpdateColors();
+    void UpdateIconState();
 
     std::string m_Text;
     Font* m_Font = nullptr;
     UILabel* m_ArrowLabel = nullptr;
     UILabel* m_TextLabel = nullptr;
+    UIImage* m_IconImage = nullptr;
+    std::shared_ptr<Texture2D> m_Icon;
+    bool m_ShowIcon = false;
+    float m_IconSize = 12.0f;
 
     bool m_ItemEnabled = true;
     bool m_Selected = false;

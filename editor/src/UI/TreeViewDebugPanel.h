@@ -11,6 +11,7 @@ public:
 
     void SetFont(Leir::Font* font);
     void Refresh();
+    Leir::UITreeView* GetTreeView() const { return m_TreeView; }
     Leir::Vector2 GetMinSize() const override;
 protected:
     void OnLayoutComputed() override;

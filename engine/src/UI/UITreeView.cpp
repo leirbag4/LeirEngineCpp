@@ -146,6 +146,8 @@ void UITreeView::AddItem(UITreeViewItem* item, UITreeViewItem* parent)
     if (m_Viewport) m_Viewport->AddChild(item);
     if (m_Font) item->SetFont(m_Font);
     item->SetIndent(m_Indent);
+    item->SetShowIcon(m_IconsEnabled);
+    item->SetIconSize(m_IconSize);
     InvalidateFlatCache();
 }
 
@@ -257,6 +259,28 @@ void UITreeView::SetIndent(float indent)
     m_Indent = indent;
     for (auto* r : m_Roots) r->SetIndent(indent);
     InvalidateFlatCache();
+}
+
+void UITreeView::SetIconsEnabled(bool enabled)
+{
+    m_IconsEnabled = enabled;
+    std::function<void(UITreeViewItem*)> apply = [&](UITreeViewItem* it) {
+        it->SetShowIcon(enabled);
+        it->SetIconSize(m_IconSize);
+        for (auto* c : it->GetTreeChildren()) apply(c);
+    };
+    for (auto* r : m_Roots) apply(r);
+    InvalidateFlatCache();
+}
+
+void UITreeView::SetIconSize(float size)
+{
+    m_IconSize = size;
+    std::function<void(UITreeViewItem*)> apply = [&](UITreeViewItem* it) {
+        it->SetIconSize(size);
+        for (auto* c : it->GetTreeChildren()) apply(c);
+    };
+    for (auto* r : m_Roots) apply(r);
 }
 
 void UITreeView::SetFont(Font* font)

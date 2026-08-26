@@ -58,6 +58,14 @@ public:
     void SetRowHeight(float h) { m_RowHeight = h; }
     float GetRowHeight() const { return m_RowHeight; }
 
+    // Icons — reserves a 12x12 slot to the left of each row's text (after the
+    // arrow). Items get an icon via UITreeViewItem::SetIcon (typically from the
+    // UITextureCache). Propagates to all items (roots + children).
+    void SetIconsEnabled(bool enabled);
+    bool AreIconsEnabled() const { return m_IconsEnabled; }
+    void SetIconSize(float size);
+    float GetIconSize() const { return m_IconSize; }
+
     // Appearance — defaults match engine dark theme
     void SetSelectionColor(const Vector4& c) { m_SelectionColor = c; }
     Vector4 GetSelectionColor() const { return m_SelectionColor; }
@@ -147,6 +155,8 @@ private:
 
     float m_Indent = 16.0f;
     float m_RowHeight = 20.0f;
+    bool m_IconsEnabled = false;
+    float m_IconSize = 12.0f;
 
     Vector4 m_SelectionColor = {0.50f, 0.35f, 1.0f, 0.40f};
     Vector4 m_HoverColor = {0.15f, 0.15f, 0.18f, 1.0f};

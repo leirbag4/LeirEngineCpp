@@ -51,6 +51,7 @@ add_library(LeirEngine SHARED
     src/UI/UIScrollbar.cpp
     src/UI/UITreeView.cpp
     src/UI/UITreeViewItem.cpp
+    src/UI/UITextureCache.cpp
     src/UI/Dock/DockNode.cpp
     src/UI/Dock/DockSplitNode.cpp
     src/UI/Dock/DockPane.cpp
