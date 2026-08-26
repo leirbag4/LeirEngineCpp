@@ -22,6 +22,29 @@
 #include <cmath>
 #include "LeirEngine/Core/Log.h"
 
+// ============================================================================
+// CAPA DE DIBUJO DE LOS OUTLINES DE DEBUG (debug.ui_outlines)
+// ----------------------------------------------------------------------------
+// Los outlines verdes son una ayuda de depuración: muestran los bounds lógicos
+// de cada elemento. Hay dos modos de dibujarlos, elegidos por este define:
+//
+//   1 = (DEFAULT) ARRIBA DE TODO  -> usa BuildBatchDebug (capa debug overlay)
+//       Flush dibuja en orden regular -> viewport -> debug, así que el outline
+//       queda SIEMPRE por encima de cualquier contenido (incluido el quad del
+//       RenderTexture del viewport, que vive en la capa media y de lo contrario
+//       tapa el borde del propio viewport). Nada puede ocultar una línea.
+//       Costo: los outlines de elementos ocultos/tapados también se ven (eso
+//       suele ser justo lo que se quiere al depurar bounds).
+//
+//   0 = COMO ANTES  -> usa Batch (capa regular)
+//       El outline va en la misma capa que los rellenos y textos. No pisa nada
+//       que esté encima, pero cualquier contenido (viewport, paneles superpuestos)
+//       puede TAPARLO y "desaparecen" líneas (el bug del borde del viewport).
+//
+// Para comparar: cambiá el valor, recompilá y activá debug.ui_outlines.
+// ============================================================================
+#define LEIR_UI_OUTLINES_ON_TOP 1
+
 namespace Leir {
 
 namespace {
@@ -737,17 +760,25 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         // integer physical edges and BuildBatch's snap is a no-op on it. Result:
         // a stable 1-px outline at any DPI, aligned with the element's own edge.
         //
-        // Routed to the DEBUG OVERLAY layer (BuildBatchDebug) on purpose: debug
-        // outlines are a debug aid and must render ON TOP of everything — the
-        // regular UI layer AND the viewport layer (the viewport's RenderTexture
-        // quad draws in the middle layer and would otherwise cover the viewport's
-        // own outline). Nothing in the scene can hide an outline this way.
+        // Layer: controlled by LEIR_UI_OUTLINES_ON_TOP (see the define at the top
+        // of this file). Default = on top of everything (BuildBatchDebug) so no
+        // content — including the viewport's RenderTexture quad, which draws in
+        // the middle layer and would otherwise cover the viewport's own outline —
+        // can hide an outline. Set to 0 to use Batch (regular layer, the old
+        // behavior) when the on-top lines overlap too much to read.
         const Vector4 sr = SnapToPhysicalPixels(cr, m_ContentScale);
         const float t = 1.0f / m_ContentScale;
+#if LEIR_UI_OUTLINES_ON_TOP
         BuildBatchDebug(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
         BuildBatchDebug(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
         BuildBatchDebug(nullptr, {sr.x, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
         BuildBatchDebug(nullptr, {sr.x + sr.z - t, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+#else
+        Batch(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x + sr.z - t, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+#endif
     }
 
     m_CurrentClip = clip;
