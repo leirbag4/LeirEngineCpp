@@ -43,6 +43,27 @@ void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, R
     s.height = (uint32_t)std::max(0.0f, std::ceil(y1 * scale) - std::floor(y0 * scale));
 }
 
+// Pixel snapping: the UI is laid out and batched in LOGICAL units, but at
+// fractional DPI scales (e.g. 125% = 1.25) a logical coordinate maps to a
+// FRACTIONAL physical pixel. A 1-logical-px line (or a texture's 1px border)
+// then renders 1 or 2 physical px depending on where its edge lands on the
+// pixel grid — and which side is "lucky" flips with position/window size.
+// Snap every quad's edges to the physical pixel grid: floor() the min corner,
+// ceil() the max corner, convert back to logical (the vertex shader then maps
+// those back to integer physical pixels). Same floor/ceil convention as
+// ScissorFromLogicalClip, so quads and their clip never fight. At scale <= 1
+// (100%) the coordinates are already 1:1 and the rect is returned untouched.
+Vector4 SnapToPhysicalPixels(const Vector4& r, float scale)
+{
+    if (scale <= 1.0f)
+        return r;
+    const float x0 = std::floor(r.x * scale) / scale;
+    const float y0 = std::floor(r.y * scale) / scale;
+    const float x1 = std::ceil((r.x + r.z) * scale) / scale;
+    const float y1 = std::ceil((r.y + r.w) * scale) / scale;
+    return { x0, y0, x1 - x0, y1 - y0 };
+}
+
 } // namespace
 
 UIRenderer::UIRenderer(RHI::RenderBackend* device)
@@ -179,10 +200,11 @@ UIRenderer::~UIRenderer()
 
 void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
-    float x0 = rect.x;
-    float y0 = rect.y;
-    float x1 = rect.x + rect.z;
-    float y1 = rect.y + rect.w;
+    const Vector4 r = SnapToPhysicalPixels(rect, m_ContentScale);
+    float x0 = r.x;
+    float y0 = r.y;
+    float x1 = r.x + r.z;
+    float y1 = r.y + r.w;
     float u0 = uv.x, v0 = uv.y, u1 = uv.x + uv.z, v1 = uv.y + uv.w;
 
     float idx = (float)(texture ? texture : m_FallbackTex)->GetBindlessIndex();
@@ -201,10 +223,11 @@ void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vecto
 
 void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
-    float x0 = rect.x;
-    float y0 = rect.y;
-    float x1 = rect.x + rect.z;
-    float y1 = rect.y + rect.w;
+    const Vector4 r = SnapToPhysicalPixels(rect, m_ContentScale);
+    float x0 = r.x;
+    float y0 = r.y;
+    float x1 = r.x + r.z;
+    float y1 = r.y + r.w;
     float u0 = uv.x, v0 = uv.y, u1 = uv.x + uv.z, v1 = uv.y + uv.w;
 
     float idx = (float)(texture ? texture : m_FallbackTex)->GetBindlessIndex();
@@ -655,7 +678,11 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
 
     if (LeirSettings::Get().debug.ui_outlines) {
         static const Vector4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
-        float t = 1.0f;
+        // 1 physical px hairline at any DPI (0.8 logical at 125%). A 1-LOGICAL
+        // px line at 125% is 1.25 physical px -> renders 1 or 2 px depending on
+        // alignment; dividing by the scale keeps it a stable 1 physical px, and
+        // SnapToPhysicalPixels in BuildBatch snaps it to the pixel grid.
+        float t = 1.0f / m_ContentScale;
         Batch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
         Batch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
         Batch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
