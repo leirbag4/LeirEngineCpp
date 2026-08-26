@@ -48,11 +48,22 @@ void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, R
 // FRACTIONAL physical pixel. A 1-logical-px line (or a texture's 1px border)
 // then renders 1 or 2 physical px depending on where its edge lands on the
 // pixel grid — and which side is "lucky" flips with position/window size.
-// Snap every quad's edges to the physical pixel grid: floor() the min corner,
-// ceil() the max corner, convert back to logical (the vertex shader then maps
-// those back to integer physical pixels). Same floor/ceil convention as
-// ScissorFromLogicalClip, so quads and their clip never fight. At scale <= 1
-// (100%) the coordinates are already 1:1 and the rect is returned untouched.
+// Snap every quad's edges to the physical pixel grid and convert back to
+// logical (the vertex shader then maps those back to integer physical pixels).
+// At scale <= 1 (100%) the coordinates are already 1:1 and the rect is
+// returned untouched.
+//
+// ROUND, not floor/ceil — why: adjacent elements share a logical boundary
+// (tab A ends where tab B starts). With floor/ceil the shared value becomes
+// tab A's ceil-edge (137.5 -> 138) but tab B's floor-edge (137.5 -> 137), a
+// 1-px mismatch that OVERLAPS the two snapped rects; their 1-px outlines then
+// land on the SAME pixel and visually merge into one line (the "double lines
+// collapse to 1 at 125%" bug). Round is a consistent function: the same
+// logical boundary always maps to the same physical pixel, so adjacent
+// elements stay adjacent and their outlines render as distinct 1-px lines.
+// Trade-off vs floor/ceil: a fill can lose 0.5 px at an outer edge (a faint
+// sliver against the background), which is acceptable; interior edges are
+// shared and stay seamless.
 //
 // PRECONDITION (the implicit heuristic — see BuildBatch): this helper must
 // ONLY be applied to quads that sample their FULL texture ({0,0,1,1} UV).
@@ -60,21 +71,20 @@ void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, R
 // quad WITHOUT snapping the UV stretches the glyph and overshoots into the
 // neighbouring glyphs packed next to it (ghost/split letters). Standalone
 // textures (icons) and flat fills have nothing adjacent to bleed into, so
-// floor/ceil is safe there. See BuildBatch for the full rationale.
+// snapping is safe there. See BuildBatch for the full rationale.
 Vector4 SnapToPhysicalPixels(const Vector4& r, float scale)
 {
     if (scale <= 1.0f)
         return r;
-    // kSnapEps guards the logical<->physical float round-trip: dividing by scale
-    // and multiplying back can land 1 ULP below an integer (7/1.25*1.25 ==
-    // 6.9999999...), which floor/ceil would turn into a spurious 2-px line.
-    // The epsilon (>> float noise, << a pixel) makes edges that are exactly on
-    // a pixel boundary stay on it. Only affects values within 1e-3 of a pixel.
+    // kSnapEps guards the logical<->physical float round-trip: dividing by
+    // scale and multiplying back can land 1 ULP off an integer (7/1.25*1.25 ==
+    // 6.9999999...). The epsilon (>> float noise, << half a pixel) keeps an
+    // edge that is exactly on a pixel boundary on it.
     constexpr float kSnapEps = 1e-3f;
-    const float x0 = std::floor(r.x * scale + kSnapEps) / scale;
-    const float y0 = std::floor(r.y * scale + kSnapEps) / scale;
-    const float x1 = std::ceil((r.x + r.z) * scale - kSnapEps) / scale;
-    const float y1 = std::ceil((r.y + r.w) * scale - kSnapEps) / scale;
+    const float x0 = std::round(r.x * scale + kSnapEps) / scale;
+    const float y0 = std::round(r.y * scale + kSnapEps) / scale;
+    const float x1 = std::round((r.x + r.z) * scale - kSnapEps) / scale;
+    const float y1 = std::round((r.y + r.w) * scale - kSnapEps) / scale;
     return { x0, y0, x1 - x0, y1 - y0 };
 }
 
@@ -722,16 +732,22 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         // Hairlines in PHYSICAL pixels: 1 logical px at 125% is 1.25 physical px,
         // which floor/ceil snapping inflates to 2 px whenever the position is
         // fractional. Divide by the scale so the line is exactly 1 physical px,
-        // and derive it from the ELEMENT'S ALREADY-SNAPPED rect (same floor/ceil
-        // as BuildBatch applies to the fill) — the line then lands on integer
-        // physical edges and BuildBatch's snap is a no-op on it. Result: a
-        // stable 1-px outline at any DPI, aligned with the element's own edge.
+        // and derive it from the ELEMENT'S ALREADY-SNAPPED rect (round-snapped,
+        // same as BuildBatch applies to the fill) — the line then lands on
+        // integer physical edges and BuildBatch's snap is a no-op on it. Result:
+        // a stable 1-px outline at any DPI, aligned with the element's own edge.
+        //
+        // Routed to the DEBUG OVERLAY layer (BuildBatchDebug) on purpose: debug
+        // outlines are a debug aid and must render ON TOP of everything — the
+        // regular UI layer AND the viewport layer (the viewport's RenderTexture
+        // quad draws in the middle layer and would otherwise cover the viewport's
+        // own outline). Nothing in the scene can hide an outline this way.
         const Vector4 sr = SnapToPhysicalPixels(cr, m_ContentScale);
         const float t = 1.0f / m_ContentScale;
-        Batch(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {sr.x, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {sr.x + sr.z - t, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+        BuildBatchDebug(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        BuildBatchDebug(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        BuildBatchDebug(nullptr, {sr.x, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+        BuildBatchDebug(nullptr, {sr.x + sr.z - t, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
     }
 
     m_CurrentClip = clip;
