@@ -180,6 +180,32 @@ UITreeViewItem (UIPanel, Row)
 - [x] Build MSVC limpio (LeirEngine + LeirEngineEditor), editor launch sin VUIDs/stderr
 - [ ] ctest 2/2 (pendiente CI), test con miles de items — verificado local 2000 sin overflow
 
+### Fase 8 — Iconos (agregado 2026-08-26, ver TODO_BIG_PLAN.md Fase 0.1)
+Slot de icono a la izquierda del texto, con cache por hash para no re-decodear PNGs repetidos.
+Desbloquea el hierarchy por tipo (Object3D/Object2D/UIElement), atoms, file system y Contents.
+
+- [ ] **Espacio a la izquierda** del texto: `SetIconsEnabled(bool)` en `UITreeView` (o por item).
+  - Si activo, cada fila dibuja un quad 12×12 (configurable `SetIconSize`) antes del texto
+    (después de la flecha), con el indent de nivel ya aplicado.
+- [ ] **API en `UITreeViewItem`**: `SetIcon(Texture2D*)` / `SetIcon(const std::string& path)` /
+  `GetIcon()`. El item guarda el `Texture2D*` (o el path) y UIRenderer lo bachea como quad.
+- [ ] **Registry con hash-cache** (nuevo helper, p.ej. `engine/.../UI/UITextureCache.h`):
+  - `std::shared_ptr<Texture2D> Load(const std::string& path)` keyed por **hash del path**
+    (`std::unordered_map<uint64_t, shared_ptr<Texture2D>>`).
+  - Decodifica cada PNG **una sola vez** (stbi_load → Texture2D + registrar en bindless); los
+    hits de hash reusan el puntero sin re-procesar. Icons repetidos → costo 0.
+  - Se puede mejorar a futuro con un **atlas** (1 textura + UVs por icono) para muchos iconos
+    estáticos (file system / Contents). Por ahora cache de Texture2D por item es suficiente.
+- [ ] **Iconos por familia** (el HierarchyPanel setea el icono por item según el tipo):
+  - `assets/icons/object3d.png` — círculo `#BFBFFF`
+  - `assets/icons/object2d.png` — círculo `#FF94C9`
+  - `assets/icons/uielement.png` — círculo `#96F1A2`
+  - (después: `atom.png`, `folder.png`, `file.png`, `scene2d/scene3d/uidoc.png`, iconos de los
+    tipos del "+").
+- [ ] **Carga al inicio** del editor (preload de los iconos base en el registry).
+- [ ] Verificación: filas con icono 12×12 a la izquierda del texto, repetidos sin lag,
+  FPS estable, sin overflow del UIRenderer.
+
 ## Decisiones / Notas
 
 - `SetItemEnabled` en vez de `SetEnabled` para no colisionar con `UIElement::IsActive` (visibilidad). `SetSelected` distinto de `IsActive` de dock.
