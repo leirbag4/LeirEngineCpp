@@ -159,8 +159,10 @@ void UITreeViewItem::OnLayoutComputed()
         m_ArrowLabel->GetRect().offset = {arrowX, arrowY, arrowX + arrowW, arrowY + arrowH};
         m_ArrowLabel->ComputeLayout({arrowW, arrowH});
     }
-    // Cursor starts after the arrow (or after the indent when there is none).
-    float cursor = arrowX + (m_ArrowLabel && m_ArrowLabel->IsActive() ? arrowW + 4.0f : 4.0f);
+    // Cursor starts AFTER the reserved arrow slot (12px) + gap, so leaves align
+    // with nodes that have children (a leaf at depth N starts where depth N's
+    // arrow slot would be). Previously leaves used only +4 -> barely indented.
+    float cursor = arrowX + arrowW + 4.0f;
     // Icon (12x12) between the arrow and the text, vertically centered.
     if (m_ShowIcon && m_IconImage && m_IconImage->IsActive()) {
         float iconX = cursor;

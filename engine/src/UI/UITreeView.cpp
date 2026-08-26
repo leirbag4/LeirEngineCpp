@@ -529,8 +529,12 @@ void UITreeView::UpdateEditInputRect()
     for (int i = 0; i < (int)m_FlatVisible.size(); ++i) if (m_FlatVisible[i]==m_EditingItem) idx=i;
     if (idx < 0) return;
     float y = std::round(cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y);
-    bool hasChildren = !m_EditingItem->GetTreeChildren().empty();
-    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + (hasChildren ? 12.0f + 4.0f : 4.0f) - m_ScrollOffset.x);
+    // Input must sit exactly over the row's TEXT: always reserve the arrow slot
+    // (12px, even for leaves — matches the layout fix) plus the icon slot when
+    // icons are enabled and the item has one.
+    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + 12.0f + 4.0f - m_ScrollOffset.x);
+    if (m_IconsEnabled && m_EditingItem->HasIcon())
+        x += m_IconSize + 4.0f;
     float w = std::max(60.0f, GetViewportSize().x - (x - cr.x));
     m_EditInput->GetRect().anchor = {0, 0, 0, 0};
     m_EditInput->GetRect().offset = {x, y, x + w, y + m_RowHeight};

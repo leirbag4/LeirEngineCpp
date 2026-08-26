@@ -559,20 +559,7 @@ protected:
         m_TreeViewDebugPanel = new TreeViewDebugPanel();
         m_TreeViewDebugPanel->SetName("TreeViewDebugPanel");
         m_TreeViewDebugPanel->SetFont(m_FontSmall.get());
-        // Fase 0.1 proof: enable the tree icon slot and color the sample items by
-        // depth (root=Object3D, child=Object2D, grand=UI) via the UITextureCache
-        // (decode-once by path hash). The HierarchyPanel will do this per family.
-        if (auto* tv = m_TreeViewDebugPanel->GetTreeView()) {
-            tv->SetIconsEnabled(true);
-            auto icon3D = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/object3d.png");
-            auto icon2D = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/object2d.png");
-            auto iconUI = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/uielement.png");
-            std::function<void(Leir::UITreeViewItem*, int)> color = [&](Leir::UITreeViewItem* it, int depth) {
-                it->SetIcon(depth == 0 ? icon3D : (depth == 1 ? icon2D : iconUI));
-                for (auto* c : it->GetTreeChildren()) color(c, depth + 1);
-            };
-            for (auto* r : tv->GetRoots()) color(r, 0);
-        }
+        ApplyTreeIcons();
 
         // Gizmo-line live knobs (color / alpha / width), "Test2" tab.
         m_GizmoTestPanel = new GizmoLineTestPanel();
@@ -1067,6 +1054,8 @@ protected:
         // Font* holders stay valid) for crisp text on the new scale.
         if (m_Font) m_Font->SetContentScale(GetContentScale());
         if (m_FontSmall) m_FontSmall->SetContentScale(GetContentScale());
+        // Re-load tree icons at the new DPI (cache keys on the scale) so they stay crisp.
+        ApplyTreeIcons();
     }
 
 private:
@@ -1304,6 +1293,27 @@ private:
     std::unique_ptr<Leir::RHI::SlangShaderCompiler> m_ShaderCompiler;
     std::unique_ptr<ShaderHotReloader> m_HotReloader;
 #endif
+
+    // Fase 0.1: sample icons for the TreeViewDebugPanel, colored by depth via the
+    // UITextureCache (decode-once by path+scale hash). Re-applied on content-scale
+    // change so icons stay crisp at any DPI (cache keys on the scale). The real
+    // HierarchyPanel will set icons per object family instead.
+    void ApplyTreeIcons()
+    {
+        if (!m_TreeViewDebugPanel) return;
+        if (auto* tv = m_TreeViewDebugPanel->GetTreeView()) {
+            const float scale = GetContentScale();
+            tv->SetIconsEnabled(true);
+            auto icon3D = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/object3d.png", scale);
+            auto icon2D = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/object2d.png", scale);
+            auto iconUI = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/uielement.png", scale);
+            std::function<void(Leir::UITreeViewItem*, int)> color = [&](Leir::UITreeViewItem* it, int depth) {
+                it->SetIcon(depth == 0 ? icon3D : (depth == 1 ? icon2D : iconUI));
+                for (auto* c : it->GetTreeChildren()) color(c, depth + 1);
+            };
+            for (auto* r : tv->GetRoots()) color(r, 0);
+        }
+    }
 
     uint32_t m_ViewportW = 800;
     uint32_t m_ViewportH = 600;

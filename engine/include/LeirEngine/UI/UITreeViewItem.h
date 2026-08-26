@@ -31,6 +31,7 @@ public:
     void SetIcon(std::shared_ptr<Texture2D> icon);
     void SetShowIcon(bool show);
     void SetIconSize(float size) { m_IconSize = size; }
+    bool HasIcon() const { return m_Icon != nullptr; }
 
     // Enabled — false = grayed, not selectable, OnPointerDown returns false
     void SetItemEnabled(bool enabled);
