@@ -53,15 +53,36 @@ void ScissorFromLogicalClip(const Vector4& c, float scale, float pw, float ph, R
 // those back to integer physical pixels). Same floor/ceil convention as
 // ScissorFromLogicalClip, so quads and their clip never fight. At scale <= 1
 // (100%) the coordinates are already 1:1 and the rect is returned untouched.
+//
+// PRECONDITION (the implicit heuristic — see BuildBatch): this helper must
+// ONLY be applied to quads that sample their FULL texture ({0,0,1,1} UV).
+// Text glyphs pass a PARTIAL UV into the shared font atlas; snapping their
+// quad WITHOUT snapping the UV stretches the glyph and overshoots into the
+// neighbouring glyphs packed next to it (ghost/split letters). Standalone
+// textures (icons) and flat fills have nothing adjacent to bleed into, so
+// floor/ceil is safe there. See BuildBatch for the full rationale.
 Vector4 SnapToPhysicalPixels(const Vector4& r, float scale)
 {
     if (scale <= 1.0f)
         return r;
-    const float x0 = std::floor(r.x * scale) / scale;
-    const float y0 = std::floor(r.y * scale) / scale;
-    const float x1 = std::ceil((r.x + r.z) * scale) / scale;
-    const float y1 = std::ceil((r.y + r.w) * scale) / scale;
+    // kSnapEps guards the logical<->physical float round-trip: dividing by scale
+    // and multiplying back can land 1 ULP below an integer (7/1.25*1.25 ==
+    // 6.9999999...), which floor/ceil would turn into a spurious 2-px line.
+    // The epsilon (>> float noise, << a pixel) makes edges that are exactly on
+    // a pixel boundary stay on it. Only affects values within 1e-3 of a pixel.
+    constexpr float kSnapEps = 1e-3f;
+    const float x0 = std::floor(r.x * scale + kSnapEps) / scale;
+    const float y0 = std::floor(r.y * scale + kSnapEps) / scale;
+    const float x1 = std::ceil((r.x + r.z) * scale - kSnapEps) / scale;
+    const float y1 = std::ceil((r.y + r.w) * scale - kSnapEps) / scale;
     return { x0, y0, x1 - x0, y1 - y0 };
+}
+
+// True when a quad samples its ENTIRE texture (UV spans [0,0]..[1,1]).
+// Used as the pixel-snap gate in BuildBatch/BuildBatchDebug.
+bool IsFullUv(const Vector4& uv)
+{
+    return uv.x <= 0.0f && uv.y <= 0.0f && uv.z >= 1.0f && uv.w >= 1.0f;
 }
 
 } // namespace
@@ -200,7 +221,25 @@ UIRenderer::~UIRenderer()
 
 void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
-    const Vector4 r = SnapToPhysicalPixels(rect, m_ContentScale);
+    // Pixel-snap gate — IMPLICIT HEURISTIC (documented on purpose):
+    //   * FULL UV ({0,0,1,1})  -> the quad samples its whole texture (flat
+    //     fills, standalone images/icons). Snap to the physical pixel grid:
+    //     floor/ceil is safe because the texture has no neighbours — a 1px
+    //     stretch just linearly resamples the same image, and it FIXES the
+    //     clipped border / 1-or-2px-line instability at fractional DPI.
+    //   * PARTIAL UV (glyphs)  -> the quad samples a sub-rect of the SHARED
+    //     font atlas, where neighbouring glyphs are packed right next to the
+    //     glyph. Snapping the quad WITHOUT snapping the UV would stretch it
+    //     and overshoot into those neighbours ("ghost"/split letters). Text is
+    //     left at its exact logical rect: sub-pixel positioned + antialiased,
+    //     which is how browsers/Qt/Windows render text at fractional DPI.
+    //
+    // This is a pragmatic, localized rule, not the textbook architecture (snap
+    // position AND UV together, or snap in layout). It was chosen because the
+    // layout stays 100% logical (smooth scroll, dock math, hit-testing) and the
+    // cost/risk is tiny. If a non-atlas texture is ever drawn with a partial UV
+    // sub-rect (e.g. a sprite sheet) and mis-renders at 125%, revisit here.
+    const Vector4 r = IsFullUv(uv) ? SnapToPhysicalPixels(rect, m_ContentScale) : rect;
     float x0 = r.x;
     float y0 = r.y;
     float x1 = r.x + r.z;
@@ -223,7 +262,9 @@ void UIRenderer::BuildBatch(Texture2D* texture, const Vector4& rect, const Vecto
 
 void UIRenderer::BuildBatchDebug(Texture2D* texture, const Vector4& rect, const Vector4& uv, const Vector4& color)
 {
-    const Vector4 r = SnapToPhysicalPixels(rect, m_ContentScale);
+    // Same pixel-snap gate as BuildBatch (full-UV quads snap; glyph sub-rects
+    // don't). See BuildBatch for the full rationale.
+    const Vector4 r = IsFullUv(uv) ? SnapToPhysicalPixels(rect, m_ContentScale) : rect;
     float x0 = r.x;
     float y0 = r.y;
     float x1 = r.x + r.z;
@@ -678,15 +719,19 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
 
     if (LeirSettings::Get().debug.ui_outlines) {
         static const Vector4 debugOutlineColor = {0.0f, 1.0f, 0.0f, 1.0f};
-        // 1 physical px hairline at any DPI (0.8 logical at 125%). A 1-LOGICAL
-        // px line at 125% is 1.25 physical px -> renders 1 or 2 px depending on
-        // alignment; dividing by the scale keeps it a stable 1 physical px, and
-        // SnapToPhysicalPixels in BuildBatch snaps it to the pixel grid.
-        float t = 1.0f / m_ContentScale;
-        Batch(nullptr, {cr.x, cr.y, cr.z, t}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {cr.x, cr.y + cr.w - t, cr.z, t}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {cr.x, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
-        Batch(nullptr, {cr.x + cr.z - t, cr.y, t, cr.w}, {0,0,1,1}, debugOutlineColor);
+        // Hairlines in PHYSICAL pixels: 1 logical px at 125% is 1.25 physical px,
+        // which floor/ceil snapping inflates to 2 px whenever the position is
+        // fractional. Divide by the scale so the line is exactly 1 physical px,
+        // and derive it from the ELEMENT'S ALREADY-SNAPPED rect (same floor/ceil
+        // as BuildBatch applies to the fill) — the line then lands on integer
+        // physical edges and BuildBatch's snap is a no-op on it. Result: a
+        // stable 1-px outline at any DPI, aligned with the element's own edge.
+        const Vector4 sr = SnapToPhysicalPixels(cr, m_ContentScale);
+        const float t = 1.0f / m_ContentScale;
+        Batch(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
+        Batch(nullptr, {sr.x + sr.z - t, sr.y, t, sr.w}, {0,0,1,1}, debugOutlineColor);
     }
 
     m_CurrentClip = clip;
