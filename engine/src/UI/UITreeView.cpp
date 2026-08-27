@@ -181,13 +181,21 @@ void UITreeView::RemoveItem(UITreeViewItem* item)
 
 void UITreeView::ClearItems()
 {
-    RebuildFlatCache();
-    for (auto* it : m_FlatVisible)
+    // Detach EVERY item (visible or not) from the internal viewport before the
+    // caller deletes them. The old code only detached the flat-visible items, so
+    // collapsed/filtered items stayed as viewport children and became DANGLING
+    // after the caller freed them -> the next layout walked freed memory and
+    // crashed (hierarchy drag crash, 2026-08-27).
+    std::function<void(UITreeViewItem*)> detach = [&](UITreeViewItem* it) {
+        for (auto* c : it->GetTreeChildren()) detach(c);
         if (m_Viewport) m_Viewport->RemoveChild(it);
+    };
+    for (auto* r : m_Roots) detach(r);
     m_Roots.clear();
     m_SelectedItems.clear();
     m_HoveredItem = nullptr;
     m_DropTarget = {};
+    m_DeferredSelect = nullptr;
     m_FlatVisible.clear();
     m_FlatDirty = true;
     m_CachedMaxWidthDirty = true;
@@ -977,39 +985,57 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
                 for (auto* di2 : m_DragItems) if (isDesc(di2, target.item)) valid = false;
             }
             if (valid) {
-                // Perform reparent/reorder
-                for (auto* di : m_DragItems) {
-                    // Remove from old location
-                    if (di->GetTreeParent()) di->GetTreeParent()->RemoveTreeChild(di);
-                    else {
-                        auto it = std::find(m_Roots.begin(), m_Roots.end(), di);
-                        if (it != m_Roots.end()) m_Roots.erase(it);
-                    }
-                    if (m_Viewport) m_Viewport->RemoveChild(di);
+                // Compute the drop target for the callback BEFORE mutating.
+                const bool onto = (target.mode == DropMode::Onto);
+                UITreeViewItem* newParent = onto ? target.item : target.item->GetTreeParent();
+                int newIndex = -1;
+                if (onto) {
+                    newIndex = (int)target.item->GetTreeChildren().size();
+                } else if (newParent) {
+                    const auto& tc = newParent->GetTreeChildren();
+                    auto it = std::find(tc.begin(), tc.end(), target.item);
+                    newIndex = (int)(it - tc.begin()) + 1;
+                } else {
+                    auto it = std::find(m_Roots.begin(), m_Roots.end(), target.item);
+                    newIndex = (int)(it - m_Roots.begin()) + 1;
                 }
-                // Insert at target
-                for (auto* di : m_DragItems) {
-                    if (target.mode == DropMode::Onto) {
-                        target.item->AddTreeChild(di);
-                        target.item->SetExpanded(true);
-                        if (m_Viewport) m_Viewport->AddChild(di);
-                        if (m_OnItemDragged) m_OnItemDragged(di, target.item, (int)target.item->GetTreeChildren().size() - 1);
-                    } else if (target.mode == DropMode::Below) {
-                        UITreeViewItem* parent = target.item->GetTreeParent();
-                        int idx = -1;
-                        if (parent) {
-                            for (int i = 0; i < (int)parent->GetTreeChildren().size(); ++i) if (parent->GetTreeChildren()[i]==target.item) idx=i;
-                            parent->InsertTreeChildAt(di, idx + 1);
-                        } else {
-                            for (int i = 0; i < (int)m_Roots.size(); ++i) if (m_Roots[i]==target.item) idx=i;
-                            m_Roots.insert(m_Roots.begin() + idx + 1, di);
-                            di->SetIndent(m_Indent);
+                // Ask the scene owner (editor/panel) to apply the change FIRST —
+                // only mutate the tree structure if it accepted (it validates
+                // family/cycles at the scene level). Keeps tree + scene in sync
+                // even when the drop is rejected (no desync on cross-family).
+                bool accepted = true;
+                if (m_OnItemDragged)
+                    accepted = m_OnItemDragged(m_DragItems, newParent, newIndex, onto);
+                if (accepted) {
+                    // Remove from old locations
+                    for (auto* di : m_DragItems) {
+                        if (di->GetTreeParent()) di->GetTreeParent()->RemoveTreeChild(di);
+                        else {
+                            auto it = std::find(m_Roots.begin(), m_Roots.end(), di);
+                            if (it != m_Roots.end()) m_Roots.erase(it);
                         }
-                        if (m_Viewport) m_Viewport->AddChild(di);
-                        if (m_OnItemDragged) m_OnItemDragged(di, parent, idx + 1);
+                        if (m_Viewport) m_Viewport->RemoveChild(di);
                     }
+                    // Insert at target
+                    for (auto* di : m_DragItems) {
+                        if (target.mode == DropMode::Onto) {
+                            target.item->AddTreeChild(di);
+                            target.item->SetExpanded(true);
+                            if (m_Viewport) m_Viewport->AddChild(di);
+                        } else { // Below
+                            if (newParent) {
+                                newParent->InsertTreeChildAt(di, (size_t)newIndex);
+                            } else {
+                                int idx = -1;
+                                for (int i = 0; i < (int)m_Roots.size(); ++i) if (m_Roots[i]==target.item) idx=i;
+                                m_Roots.insert(m_Roots.begin() + idx + 1, di);
+                                di->SetIndent(m_Indent);
+                            }
+                            if (m_Viewport) m_Viewport->AddChild(di);
+                        }
+                    }
+                    InvalidateFlatCache();
                 }
-                InvalidateFlatCache();
             }
         }
         // Cleanup

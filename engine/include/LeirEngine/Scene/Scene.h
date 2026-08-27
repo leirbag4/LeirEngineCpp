@@ -34,6 +34,11 @@ public:
     CoreObject* FindObjectByName(const std::string& name) const;
     const std::vector<std::unique_ptr<CoreObject>>& GetObjects() const { return m_Objects; }
 
+    // Move an object to a given index in m_Objects (the authoritative scene
+    // order: render + the hierarchy's root/sibling DFS). Used by the hierarchy
+    // drag&drop to reorder roots. Clamps; no-op if obj isn't in the scene.
+    void MoveObject(CoreObject* object, size_t index);
+
     // Lifecycle
     void OnUpdate(float deltaTime);
     void OnRender();

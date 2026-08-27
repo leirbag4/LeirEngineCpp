@@ -115,7 +115,8 @@ public:
     void SetOnSelectedItemsChanged(std::function<void(const std::vector<UITreeViewItem*>&)> cb) { m_OnSelectedItemsChanged = std::move(cb); }
     void SetOnItemExpanded(std::function<void(UITreeViewItem*)> cb) { m_OnItemExpanded = std::move(cb); }
     void SetOnItemCollapsed(std::function<void(UITreeViewItem*)> cb) { m_OnItemCollapsed = std::move(cb); }
-    void SetOnItemDragged(std::function<void(UITreeViewItem* draggedItem, UITreeViewItem* newParent, int newIndex)> cb) { m_OnItemDragged = std::move(cb); }
+    void SetOnItemDragged(std::function<bool(const std::vector<UITreeViewItem*>& draggedItems,
+        UITreeViewItem* newParent, int newIndex, bool onto)> cb) { m_OnItemDragged = std::move(cb); }
     void SetOnItemDoubleClicked(std::function<void(UITreeViewItem*)> cb) { m_OnItemDoubleClicked = std::move(cb); }
     void SetOnItemRenamed(std::function<void(UITreeViewItem*, const std::string& oldText, const std::string& newText)> cb) { m_OnItemRenamed = std::move(cb); }
 
@@ -230,7 +231,7 @@ private:
     std::function<void(const std::vector<UITreeViewItem*>&)> m_OnSelectedItemsChanged;
     std::function<void(UITreeViewItem*)> m_OnItemExpanded;
     std::function<void(UITreeViewItem*)> m_OnItemCollapsed;
-    std::function<void(UITreeViewItem*, UITreeViewItem*, int)> m_OnItemDragged;
+    std::function<bool(const std::vector<UITreeViewItem*>&, UITreeViewItem*, int, bool)> m_OnItemDragged;
     std::function<void(UITreeViewItem*)> m_OnItemDoubleClicked;
     std::function<void(UITreeViewItem*, const std::string&, const std::string&)> m_OnItemRenamed;
 };

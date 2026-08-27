@@ -56,6 +56,20 @@ void Scene::DestroyObject(CoreObject* object)
     }
 }
 
+void Scene::MoveObject(CoreObject* object, size_t index)
+{
+    if (!object) return;
+    for (size_t i = 0; i < m_Objects.size(); ++i) {
+        if (m_Objects[i].get() != object) continue;
+        auto ptr = std::move(m_Objects[i]);
+        m_Objects.erase(m_Objects.begin() + (ptrdiff_t)i);
+        if (i < index) --index; // removal shifted earlier entries
+        index = std::min(index, m_Objects.size());
+        m_Objects.insert(m_Objects.begin() + (ptrdiff_t)index, std::move(ptr));
+        return;
+    }
+}
+
 CoreObject* Scene::FindObjectByUUID(uint64_t uuid) const
 {
     auto it = m_ObjectIndex.find(uuid);

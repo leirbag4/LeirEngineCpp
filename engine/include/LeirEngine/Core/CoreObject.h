@@ -40,6 +40,10 @@ public:
     size_t GetChildCount() const;
     CoreObject* GetChild(size_t index) const;
     void AddChild(CoreObject* child);
+    // Insert a child at a specific index in m_Children (removes it from its
+    // current parent first). Used by the hierarchy drag&drop to reorder siblings
+    // (Below). Clamps to [0, m_Children.size()].
+    void InsertChildAt(CoreObject* child, size_t index);
     void RemoveChild(CoreObject* child);
     const std::vector<CoreObject*>& GetChildren() const { return m_Children; }
 

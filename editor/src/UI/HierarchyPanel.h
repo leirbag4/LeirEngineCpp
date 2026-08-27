@@ -68,8 +68,11 @@ public:
     Leir::Vector2 GetMinSize() const override;
 
 private:
-    void NotifySelectionChanged();
     enum class Family { Object3D, Object2D, UI };
+    void NotifySelectionChanged();
+    Leir::CoreObject* ObjectOfItem(Leir::UITreeViewItem* item) const;
+    static bool IsDescendantOf(Leir::CoreObject* ancestor, Leir::CoreObject* node);
+    size_t RootInsertIndex(Leir::Scene* scene, Family f, int k) const; // m_Objects index of the k-th root of family f
     static Family FamilyOf(Leir::CoreObject* obj);
     static const char* FamilyName(Family f);
     void EnsureIcons();
@@ -87,6 +90,7 @@ private:
     size_t m_LastSignature = 0;
     std::vector<Leir::UITreeViewItem*> m_OwnedItems;
     std::unordered_map<Leir::CoreObject*, Leir::UITreeViewItem*> m_ItemMap;
+    std::unordered_map<Leir::UITreeViewItem*, Family> m_FamilyRootItems;
     std::function<void(const std::vector<Leir::CoreObject*>&)> m_OnSelectionChanged;
     std::shared_ptr<Leir::Texture2D> m_Icon3D;
     std::shared_ptr<Leir::Texture2D> m_Icon2D;

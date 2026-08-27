@@ -68,6 +68,24 @@ void CoreObject::AddChild(CoreObject* child)
     }
 }
 
+void CoreObject::InsertChildAt(CoreObject* child, size_t index)
+{
+    if (!child || child == this)
+        return;
+    // Remove from its current parent (or leave it if already a child of ours).
+    if (child->m_Parent != this) {
+        if (child->m_Parent)
+            child->m_Parent->RemoveChild(child);
+    } else {
+        auto it = std::find(m_Children.begin(), m_Children.end(), child);
+        if (it != m_Children.end())
+            m_Children.erase(it);
+    }
+    index = std::min(index, m_Children.size());
+    m_Children.insert(m_Children.begin() + (ptrdiff_t)index, child);
+    child->m_Parent = this;
+}
+
 void CoreObject::RemoveChild(CoreObject* child)
 {
     auto it = std::find(m_Children.begin(), m_Children.end(), child);
