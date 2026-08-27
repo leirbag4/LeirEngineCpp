@@ -117,9 +117,18 @@ std::vector<Leir::CoreObject*> HierarchyPanel::GetSelectedObjects() const
     if (!m_TreeView) return objs;
     const auto sel = m_TreeView->GetSelectedItems();
     if (sel.empty()) return objs;
-    for (const auto& kv : m_ItemMap)
-        if (std::find(sel.begin(), sel.end(), kv.second) != sel.end())
-            objs.push_back(kv.first);
+    // Preserve the TREE's selection order (last = most recently clicked) — NOT the
+    // unordered_map iteration order, which is arbitrary and would make the editor's
+    // "active object" (gizmo/inspector follow the last selected) pick a random one.
+    // Reverse map item->obj once (O(N)) then walk the selection (O(K)).
+    std::unordered_map<Leir::UITreeViewItem*, Leir::CoreObject*> rev;
+    rev.reserve(m_ItemMap.size());
+    for (const auto& kv : m_ItemMap) rev[kv.second] = kv.first;
+    objs.reserve(sel.size());
+    for (auto* item : sel) {
+        auto it = rev.find(item);
+        if (it != rev.end()) objs.push_back(it->second);
+    }
     return objs;
 }
 

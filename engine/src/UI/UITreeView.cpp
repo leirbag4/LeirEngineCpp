@@ -462,6 +462,7 @@ void UITreeView::UpdateSelection(UITreeViewItem* clickedItem, bool ctrl, bool sh
     } else if (m_MultipleSelection && shift && m_LastSelectedIndex >= 0) {
         int clickedIdx = -1;
         for (int i = 0; i < (int)m_FlatVisible.size(); ++i) if (m_FlatVisible[i]==clickedItem) clickedIdx=i;
+        if (clickedIdx < 0) return;
         int lo = std::min(m_LastSelectedIndex, clickedIdx);
         int hi = std::max(m_LastSelectedIndex, clickedIdx);
         for (auto* it : m_SelectedItems) it->SetSelected(false);
@@ -471,6 +472,14 @@ void UITreeView::UpdateSelection(UITreeViewItem* clickedItem, bool ctrl, bool sh
                 m_FlatVisible[i]->SetSelected(true);
                 m_SelectedItems.push_back(m_FlatVisible[i]);
             }
+        }
+        // The shift-clicked item becomes the ACTIVE (last) selection: the gizmo /
+        // inspector follow the most recent click, matching Ctrl-add. The range is
+        // built in flat order, so move the endpoint to the end (O(K)).
+        auto cit = std::find(m_SelectedItems.begin(), m_SelectedItems.end(), clickedItem);
+        if (cit != m_SelectedItems.end() && cit != m_SelectedItems.end() - 1) {
+            m_SelectedItems.erase(cit);
+            m_SelectedItems.push_back(clickedItem);
         }
     } else {
         for (auto* it : m_SelectedItems) it->SetSelected(false);
