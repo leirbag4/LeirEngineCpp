@@ -14,24 +14,21 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
 
 ## Concepto
 
-- Un **solo panel Hierarchy** muestra la escena activa, con **3 grupos de raíces** (uno por
-  familia), cada uno con su propio árbol:
+- **Modelo Unity (refactor 2026-08-27)**: un solo panel Hierarchy muestra la escena activa
+  **sin grupos de familia**. Todos los roots de la escena (`GetParent()==nullptr`) son items
+  **top-level** en orden de `m_Objects`; cualquier mezcla de familias coexiste en lvl0
+  (`obj3D lvl0, obj2D lvl0, obj3D lvl0`). La familia se muestra por el **icono** de cada item.
   ```
-  [Object3D]
-    └─ Camera
-    └─ Light
-    └─ Cube
-        └─ Child
-  [Object2D]
-    └─ ... (raíces Object2D)
-  [UI]
-    └─ ... (raíces UI / UINode)
+  Camera (icono Object3D)
+  Cube
+    └─ Child
+  Canvas (icono UI)
   ```
-- **No se mezclan familias** (no hay `Object3D → UIElement`). Múltiples raíces por familia OK.
-- Cada item lleva el **icono de su familia** (`#BFBFFF` Object3D, `#FF94C9` Object2D,
-  `#96F1A2` UI) — ver `TODO_UI_TREEVIEW.md` Fase 8.
-- Los objetos de tipo `UIElement` en la escena se modelan con **`UINode : CoreObject`** que
-  envuelve un `UIElement` root (decisión confirmada: Opción b, sin refactor del framework UI).
+- **Guard de familia (al anidar)**: un padre solo acepta hijos de SU familia (Object3D no
+  puede tener un Object2D de hijo). En lvl0 no hay guard (coexisten libres). Se valida en el
+  drag del editor; en Fase 1 el engine lo enforcea en `CoreObject::SetParent`.
+- **Drag 3 zonas** (Kendo/estándar): borde superior = insertar ANTES, centro = nest,
+  borde inferior = insertar DESPUÉS. Índices post-remoción. Sin flicker (se salta el rebuild).
 
 ---
 
@@ -50,10 +47,14 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
       `CoreObject* ↔ UITreeViewItem*` (mapa en el panel, sin tocar el engine).
 - [x] **Poblar**: caminar `scene->GetObjects()`, raíces = `GetParent()==nullptr`, recursar
       `GetChildren()`. Item = texto `GetName()` + icono de familia.
-- [x] **3 grupos de raíces** por familia (Object3D / Object2D / UI), colapsables, todos
-      expandidos por defecto.
-- [x] **Refresh** de la escena: reconstruir cuando cambia la estructura (conteo/firma) y
-      sincronizar nombres. Detectar mutations sin re-Crear todo cada frame.
+- [x] **Unity-style (refactor 2026-08-27)**: se eliminaron los grupos de familia
+      `[Object3D]`/`[Object2D]`/`[UI]` — todos los roots de la escena son items **top-level**
+      (orden = `m_Objects`), cualquier mezcla de familias coexiste en lvl0. La familia se
+      muestra solo por el icono. El guard de familia se aplica al **anidar** (un padre solo
+      acepta hijos de su familia). (La decisión anterior de "3 grupos colapsables" quedó
+      descartada en favor del modelo Unity.)
+- [x] **Refresh** de la escena: reconstruir cuando cambia la estructura (firma FNV-1a
+      estructural) y sincronizar nombres. Detectar mutations sin re-Crear todo cada frame.
 - [x] Reemplazar el placeholder en `main.cpp` (tab no-cerrable "Hierarchy"). Font + refresh
       en `OnUpdate`.
 
@@ -93,7 +94,8 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
 ## Decisiones / Notas
 
 - **Selección MULTI** confirmada (no single).
-- **Familias**: guard en el engine Y validación en el drag del editor (ambos confirmados).
+- **Guard de familia al anidar**: validación en el drag del editor + engine en Fase 1 (ambos
+  confirmados). En lvl0 las familias se mezclan libremente (Unity).
 - **UIElement en escena = UINode** (Opción b) confirmada.
 - El panel Hierarchy reusa el `UITreeView` virtualizado (miles de objetos sin problema).
 - Los tabs de escenas (Godot-style) afectan qué escena muestra el Hierarchy — ver
@@ -103,11 +105,15 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
   frame → los elementos volaban). Se arregló de raíz con el parámetro `parentOffset`
   (ver `TODO_COMPUTE_FREE_LAYOUT_FIX.md`). El panel quedó simple (Stretch), sin workaround.
 - **Paso 2.5 (2026-08-27)**: el panel es Column con un header arriba (`#55555E` lineal —
-  ver nota de color abajo) con botón "+" (placeholder del `UIContextMenu` futuro) + input
-  de filtro (`Fill` → sigue al splitter). **El filtrado es Godot-style y vive en el CORE**:
-  `UITreeView::SetFilter` + flags `SetTreeFiltered`/`SetFilterExcluded` — sin rebuild, sin
-  parpadeo, selección/expansión conservadas. **Los colores de UI son LINEALES** (el RTV
-  `UNORM_SRGB` encoda a sRGB al guardar): un literal `#55555E` (0.333 lineal) se muestra
-  ~#9C9CA4; para un gris así se usa el valor lineal del `TreeViewDebugPanel` `{0.08,0.08,0.10}`.
+  los colores de UI son LINEALES, el RTV `UNORM_SRGB` encoda a sRGB al guardar) con botón
+  "+" (placeholder del `UIContextMenu` futuro) + input de filtro (`Fill` → sigue al splitter).
+  **El filtrado es Godot-style y vive en el CORE**: `UITreeView::SetFilter` + flags
+  `SetTreeFiltered`/`SetFilterExcluded` — sin rebuild, sin parpadeo, selección/expansión
+  conservadas.
+- **Paso 4 (2026-08-27)**: drag 3 zonas (`Above`/`Onto`/`Below`), `CoreObject::InsertChildAt`,
+  `Scene::MoveObject` (reordenar roots en `m_Objects`), sin flicker (se salta el rebuild tras
+  drag aceptado), fix de crash (use-after-free: `ClearItems` desprende todos + `ClearHoverAndFocus`).
+- **Teardown**: `DeleteUiSubtree` desprende el elemento de su padre antes de borrarlo (fix de
+  un AV intermitente en `~UICanvas` — el toolbar quedaba dangle en `m_Children` del canvas).
 
 ---

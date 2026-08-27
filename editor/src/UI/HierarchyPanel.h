@@ -19,14 +19,17 @@ namespace RHI { class RenderBackend; }
 
 // Real scene hierarchy panel (Fase 0.2, see TODO_HIERARCHY_SYSTEM.md). Replaces
 // the placeholder "Hierarchy" panel: a single virtualized UITreeView that shows
-// the active scene grouped by FAMILY — one collapsible root per family
-// ([Object3D] / [Object2D] / [UI]) — with each object's family icon.
+// the active scene Unity-style — every scene ROOT is a top-level item (in
+// m_Objects order) and children recurse; there are NO family group headers, the
+// family is shown only via each item's icon. Any mix of families coexists at
+// level 0; the FAMILY RULE (a parent only accepts children of its own family) is
+// enforced by the drag callback and, in Fase 1, by CoreObject::SetParent.
 //
 // Layout (Paso 2.5): a Column with a header bar (#55555E) on top and the tree
 // below. The header holds a "+" add button (placeholder for the future
 // UIContextMenu with Object2D/Object3D/UIElement) and a filter UITextInput
 // (Godot-style search: nodes that match OR have a matching descendant stay,
-// branches without matches are hidden; family roots show only when non-empty).
+// branches without matches are hidden).
 //
 // Performance (thousands of objects): Refresh() rebuilds ONLY when a cheap
 // structural signature (object count + parent wiring, FNV-1a over raw parent
@@ -72,7 +75,6 @@ private:
     void NotifySelectionChanged();
     Leir::CoreObject* ObjectOfItem(Leir::UITreeViewItem* item) const;
     static bool IsDescendantOf(Leir::CoreObject* ancestor, Leir::CoreObject* node);
-    size_t RootInsertIndex(Leir::Scene* scene, Family f, int k) const; // m_Objects index of the k-th root of family f
     static Family FamilyOf(Leir::CoreObject* obj);
     static const char* FamilyName(Family f);
     void EnsureIcons();
@@ -90,7 +92,6 @@ private:
     size_t m_LastSignature = 0;
     std::vector<Leir::UITreeViewItem*> m_OwnedItems;
     std::unordered_map<Leir::CoreObject*, Leir::UITreeViewItem*> m_ItemMap;
-    std::unordered_map<Leir::UITreeViewItem*, Family> m_FamilyRootItems;
     std::function<void(const std::vector<Leir::CoreObject*>&)> m_OnSelectionChanged;
     std::shared_ptr<Leir::Texture2D> m_Icon3D;
     std::shared_ptr<Leir::Texture2D> m_Icon2D;

@@ -113,6 +113,12 @@ void DeleteUiSubtree(Leir::UIElement* element)
 {
     if (!element)
         return;
+    // Detach from the parent FIRST so the parent's child list never holds a
+    // dangling pointer (the canvas's dtor iterates m_Children and nulls each
+    // child's parent — a freed child there caused an intermittent AV at close,
+    // e.g. the toolbar which was deleted but not removed from the canvas).
+    if (element->GetParent())
+        element->GetParent()->RemoveChild(element);
     auto children = element->GetChildren();
     for (auto* c : children) {
         if (element->OwnsChild(c))

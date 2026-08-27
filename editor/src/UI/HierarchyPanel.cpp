@@ -89,17 +89,18 @@ HierarchyPanel::HierarchyPanel()
         if (Leir::CoreObject* obj = ObjectOfItem(item)) obj->SetName(newText);
     });
 
-    // Fase 0.2 Paso 4 — drag&drop (3-zone). Returns whether the scene accepted the
-    // change: the tree only mutates its structure when true, so a rejected drop
-    // never desyncs tree from scene. targetItem is the row, mode its zone:
+    // Fase 0.2 Paso 4 — drag&drop (3-zone, Unity-style). Returns whether the scene
+    // accepted the change: the tree only mutates its structure when true, so a
+    // rejected drop never desyncs tree from scene. targetItem is the row, mode its
+    // zone:
     //   * Onto   -> nest into the target (SetParent, append — matches the tree).
     //   * Above  -> insert as a sibling BEFORE the target (post-removal index).
     //   * Below  -> insert as a sibling AFTER the target (post-removal index).
-    //   * target = FAMILY ROOT ([Object3D]/[Object2D]/[UI]) -> make the dragged
-    //     a root of that family; Above = front, Below/Onto = end (Unity style).
-    //     The tree's own mutation is not trusted there -> we do NOT skip the next
-    //     rebuild, so the tree re-syncs.
-    // Warnings on every rejection (family root dragged / cross-family / cycle).
+    // There are NO family group headers: every scene root is a top-level item, so
+    // the tree's generic behavior already matches the scene. The only guard is the
+    // FAMILY RULE: a parent may only have children of its own family (an Object3D
+    // can't have an Object2D child). At level 0 (no parent) any family mixes freely.
+    // Warnings on every rejection (cross-family / cycle / invalid target).
     m_TreeView->SetOnItemDragged([this](const std::vector<Leir::UITreeViewItem*>& draggedItems,
         Leir::UITreeViewItem* targetItem, Leir::UITreeView::DropMode mode) -> bool {
         if (draggedItems.empty() || !targetItem) return false;
@@ -111,64 +112,39 @@ HierarchyPanel::HierarchyPanel()
         objs.reserve(draggedItems.size());
         for (auto* di : draggedItems) {
             auto it = rev.find(di);
-            if (it == rev.end()) {
-                Leir::XConsole::PrintWarning("Hierarchy: cannot drag the group header '{}'", di->GetText());
-                return false;
-            }
+            if (it == rev.end()) return false; // unknown / pseudo item (none exist now)
             objs.push_back(it->second);
         }
-        // Resolve the target: a real object, or a family-root group header.
-        Leir::CoreObject* targetObj = nullptr;
-        bool familyRootTarget = false;
-        Family targetFamily = Family::Object3D;
-        {
-            auto it = rev.find(targetItem);
-            if (it != rev.end()) {
-                targetObj = it->second;
-            } else {
-                auto fit = m_FamilyRootItems.find(targetItem);
-                if (fit == m_FamilyRootItems.end()) {
-                    Leir::XConsole::PrintWarning("Hierarchy: invalid drop target");
-                    return false;
-                }
-                familyRootTarget = true;
-                targetFamily = fit->second;
-            }
+        auto tit = rev.find(targetItem);
+        if (tit == rev.end()) {
+            Leir::XConsole::PrintWarning("Hierarchy: invalid drop target");
+            return false;
         }
+        Leir::CoreObject* targetObj = tit->second;
         const bool above = (mode == Leir::UITreeView::DropMode::Above);
-        // Validate: no self/cycle, family match.
+        // The parent that will own the dragged after the drop: the target itself
+        // (Onto) or the target's parent (Above/Below = the dragged becomes a
+        // sibling). null = level 0, where any family is allowed.
+        Leir::CoreObject* guardParent = (mode == Leir::UITreeView::DropMode::Onto)
+            ? targetObj : targetObj->GetParent();
         for (auto* obj : objs) {
             if (obj == targetObj) return false;
-            if (targetObj && FamilyOf(obj) != FamilyOf(targetObj)) {
-                Leir::XConsole::PrintWarning("Hierarchy: cannot reparent '{}' to '{}' — cross-family drop",
-                    obj->GetName(), targetObj->GetName());
-                return false;
-            }
-            if (familyRootTarget && FamilyOf(obj) != targetFamily) {
-                Leir::XConsole::PrintWarning("Hierarchy: cannot move '{}' into the {} group — cross-family drop",
-                    obj->GetName(), FamilyName(targetFamily));
-                return false;
-            }
-            if (targetObj && IsDescendantOf(obj, targetObj)) {
+            // Cycle: the guard parent must not be a descendant of any dragged.
+            if (guardParent && IsDescendantOf(obj, guardParent)) {
                 Leir::XConsole::PrintWarning("Hierarchy: cannot reparent '{}' into its own descendant '{}'",
-                    obj->GetName(), targetObj->GetName());
+                    obj->GetName(), guardParent->GetName());
+                return false;
+            }
+            // Family rule: a parent only accepts children of its own family.
+            if (guardParent && FamilyOf(obj) != FamilyOf(guardParent)) {
+                Leir::XConsole::PrintWarning("Hierarchy: cannot reparent '{}' to '{}' — cross-family ({} vs {})",
+                    obj->GetName(), guardParent->GetName(),
+                    FamilyName(FamilyOf(obj)), FamilyName(FamilyOf(guardParent)));
                 return false;
             }
         }
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return false;
-
-        if (familyRootTarget) {
-            // Group-header target: the dragged becomes a root of that family.
-            // Above = front (0), Below/Onto = end (large k).
-            int k = above ? 0 : 0x3FFFFFFF;
-            for (auto* obj : objs) {
-                obj->SetParent(nullptr, false);
-                scene->MoveObject(obj, RootInsertIndex(scene, targetFamily, k));
-                if (k < 0x3FFFFFFF) ++k;
-            }
-            return true; // do NOT skip the rebuild (the tree re-syncs from the scene)
-        }
 
         if (mode == Leir::UITreeView::DropMode::Onto) {
             for (auto* obj : objs) obj->SetParent(targetObj, false);
@@ -185,22 +161,15 @@ HierarchyPanel::HierarchyPanel()
                     parentObj->InsertChildAt(obj, idx);
                 }
             } else {
-                // Target is a root object: reorder among the family's roots.
-                const Family f = FamilyOf(targetObj);
+                // Target is a level-0 root: reorder it in m_Objects (the free top
+                // level). MoveObject adjusts the index for the dragged's removal.
                 for (auto* obj : objs) {
                     obj->SetParent(nullptr, false);
-                    // Recompute the target's index among the family roots (fresh,
-                    // post-removal of obj) and insert before/after it.
-                    int ti = -1, seen = 0;
-                    for (const auto& o : scene->GetObjects()) {
-                        if (o->GetParent()) continue;
-                        if (FamilyOf(o.get()) != f) continue;
-                        if (o.get() == targetObj) { ti = seen; break; }
-                        ++seen;
-                    }
-                    if (ti < 0) return false;
-                    const int k = above ? ti : ti + 1;
-                    scene->MoveObject(obj, RootInsertIndex(scene, f, k));
+                    const auto& mo = scene->GetObjects();
+                    size_t ti = mo.size();
+                    for (size_t i = 0; i < mo.size(); ++i)
+                        if (mo[i].get() == targetObj) { ti = i; break; }
+                    scene->MoveObject(obj, above ? ti : ti + 1);
                 }
             }
         }
@@ -281,22 +250,6 @@ bool HierarchyPanel::IsDescendantOf(Leir::CoreObject* ancestor, Leir::CoreObject
         if (IsDescendantOf(c, node)) return true;
     }
     return false;
-}
-
-// m_Objects index where a root of family f should go to land at position k among
-// that family's roots (in m_Objects order). k >= the family's root count (or a
-// large value) -> end of the list. O(N).
-size_t HierarchyPanel::RootInsertIndex(Leir::Scene* scene, Family f, int k) const
-{
-    const auto& objs = scene->GetObjects();
-    int seen = 0;
-    for (size_t i = 0; i < objs.size(); ++i) {
-        if (objs[i]->GetParent()) continue;
-        if (FamilyOf(objs[i].get()) != f) continue;
-        if (seen == k) return i;
-        ++seen;
-    }
-    return objs.size();
 }
 
 void HierarchyPanel::SetSelectedObjects(const std::vector<Leir::CoreObject*>& objs)
@@ -395,35 +348,17 @@ void HierarchyPanel::RebuildAll()
     for (auto* it : m_OwnedItems) delete it;
     m_OwnedItems.clear();
     m_ItemMap.clear();
-    m_FamilyRootItems.clear();
 
     auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
     if (!scene) return;
 
-    // 3 family roots, expanded by default. NOT filter-excluded: they behave like
-    // normal items while filtering — they match by their own text (searching "UI"
-    // or "[" shows them) and the core's Godot rule still collapses empty families
-    // when the filter matches nothing in them (e.g. "cube" hides [Object2D]/[UI]).
-    // Tracked in m_FamilyRootItems so the drag callback can resolve them as
-    // pseudo-group targets.
-    Leir::UITreeViewItem* roots[3] = {nullptr, nullptr, nullptr};
-    for (int f = 0; f < 3; ++f) {
-        auto* r = new Leir::UITreeViewItem();
-        r->SetText(FamilyName((Family)f));
-        r->SetShowIcon(true);
-        r->SetIcon(f == 0 ? m_Icon3D : (f == 1 ? m_Icon2D : m_IconUI));
-        m_OwnedItems.push_back(r);
-        m_FamilyRootItems[r] = (Family)f;
-        m_TreeView->AddItem(r);
-        roots[f] = r;
-    }
-
-    // Items for every scene object, built by DFS in m_Children order so the tree
-    // mirrors the scene hierarchy faithfully (sibling order = CoreObject child
-    // order, which InsertChildAt reorders on Below drops). Roots are the objects
-    // with no parent, in m_Objects order.
-    std::function<Leir::UITreeViewItem*(Leir::CoreObject*, Leir::UITreeViewItem*)> build =
-        [&](Leir::CoreObject* obj, Leir::UITreeViewItem* parentItem) -> Leir::UITreeViewItem* {
+    // Unity-style: every scene ROOT is a top-level item (in m_Objects order) and
+    // children recurse in m_Children order. There are NO family group headers —
+    // the family is shown only via the per-item icon. Any mix of families coexists
+    // at level 0; the family rule (a parent only accepts its own family's children)
+    // is enforced by the drag callback and, in Fase 1, by CoreObject::SetParent.
+    std::function<void(Leir::CoreObject*, Leir::UITreeViewItem*)> build =
+        [&](Leir::CoreObject* obj, Leir::UITreeViewItem* parentItem) {
         auto* item = new Leir::UITreeViewItem();
         item->SetText(obj->GetName());
         item->SetShowIcon(true);
@@ -431,12 +366,11 @@ void HierarchyPanel::RebuildAll()
         item->SetIcon(f == Family::Object3D ? m_Icon3D : (f == Family::Object2D ? m_Icon2D : m_IconUI));
         m_OwnedItems.push_back(item);
         m_ItemMap[obj] = item;
-        m_TreeView->AddItem(item, parentItem ? parentItem : roots[(int)f]);
+        m_TreeView->AddItem(item, parentItem);
         for (auto* c : obj->GetChildren()) build(c, item);
-        return item;
     };
     for (const auto& obj : scene->GetObjects())
-        if (!obj->GetParent()) build(obj.get(), roots[(int)FamilyOf(obj.get())]);
+        if (!obj->GetParent()) build(obj.get(), nullptr);
 
     // Re-apply the active filter to the freshly built items (new items default
     // to unfiltered; SetFilter is O(N) and idempotent for the empty string).
