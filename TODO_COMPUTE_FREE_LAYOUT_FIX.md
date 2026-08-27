@@ -96,7 +96,12 @@ anchor fijo ahora quedan **estables** (se acabó la acumulación).
 - [x] **Verificación visual del usuario**: Hierarchy sin volar; dock/tabs/splitters OK;
       drag&drop del dock OK; TreeViewDebugPanel OK; scrollviews (console) OK; outlines.
       (Verificado por el usuario el 2026-08-27: "funciona bien".)
-- [ ] (Deuda, opcional) Los comentarios de workaround en `DockManager`/`DockDropOverlay`
-      ya se actualizaron; si en el futuro nadie llama a `ComputeLayout` con offsets
-      absolutos, migrar el resto de widgets (TreeView/ScrollView/scrollbars) a offsets
-      relativos + parentOffset para limpiar los dobles transitorios.
+- [x] (Deuda saldada 2026-08-27) Migrados a **offsets relativos + parentOffset**:
+      `UITreeView` (viewport, items, scrollbars, edit input, ghost, drop indicator),
+      `UITreeViewItem` (arrow/icon/text labels), `ScrollView` (viewport, content,
+      scrollbars), `UIScrollbar` (thumb), `UITextArea` (scrollbars). Con esto ya NO
+      existen dobles transitorios en el pase de layout. Los overrides del dock
+      (`DockManager`/`DockSplitNode`/`DockDropOverlay`) siguen usando offsets
+      absolutos + parentOffset por defecto `{}`, pero eso es correcto: esos overrides
+      reemplazan el pase Free y posicionan a sus hijos **una vez por frame** (sin doble
+      conteo). Verificado: build limpio, ctest 2/2, editor arranca/cierra OK.

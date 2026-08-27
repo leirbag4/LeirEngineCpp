@@ -125,15 +125,17 @@ void ScrollView::OnLayoutComputed()
     m_ScrollOffset.y = std::clamp(m_ScrollOffset.y, 0.0f, std::max(0.0f, GetMaxScrollY()));
 
     // The viewport is a Free child of the ScrollView; position it over the usable
-    // area (absolute coords) and refresh its computed rect so its clip region is
-    // exactly the content surface (never reaching the scrollbar strips). Snapped
-    // to integer pixels so the scissor doesn't drop partial edge rows.
+    // area (RELATIVE to the ScrollView + parentOffset={cr.xy} so m_ComputedRect
+    // lands absolute; the ScrollView's own Free pass passes the same offset — no
+    // transient double-counting) and refresh its computed rect so its clip region
+    // is exactly the content surface (never reaching the scrollbar strips).
+    // Snapped to integer pixels so the scissor doesn't drop partial edge rows.
     m_Viewport->GetRect().anchor = AnchorSet::TopLeft();
     m_Viewport->GetRect().offset = {
-        std::round(cr.x), std::round(cr.y),
-        std::round(cr.x + availW), std::round(cr.y + availH)
+        std::round(cr.x) - cr.x, std::round(cr.y) - cr.y,
+        std::round(cr.x + availW) - cr.x, std::round(cr.y + availH) - cr.y
     };
-    m_Viewport->ComputeLayout({availW, availH});
+    m_Viewport->ComputeLayout({availW, availH}, {cr.x, cr.y});
 
     ApplyContentLayout(layoutW, layoutH);
 
@@ -147,16 +149,17 @@ void ScrollView::ApplyContentLayout(float layoutW, float layoutH)
 {
     if (!m_Viewport || !m_Content)
         return;
-    // Content is docked to the viewport's absolute origin and scrolled from
-    // there, so it inherits the real global position and stays inside the
-    // viewport's clip region.
+    // Content is a child of the viewport: positioned RELATIVE to it (scrolled by
+    // m_ScrollOffset) + parentOffset={vp.xy} so it inherits the real global
+    // position and stays inside the viewport's clip region (no transient double
+    // from the viewport's own Free pass).
     const auto& vp = m_Viewport->GetComputedRect();
     m_Content->GetRect().anchor = AnchorSet::TopLeft();
-    m_Content->GetRect().offset.left = vp.x - m_ScrollOffset.x;
-    m_Content->GetRect().offset.top = vp.y - m_ScrollOffset.y;
-    m_Content->GetRect().offset.right = vp.x - m_ScrollOffset.x + layoutW;
-    m_Content->GetRect().offset.bottom = vp.y - m_ScrollOffset.y + layoutH;
-    m_Content->ComputeLayout({layoutW, layoutH});
+    m_Content->GetRect().offset.left = -m_ScrollOffset.x;
+    m_Content->GetRect().offset.top = -m_ScrollOffset.y;
+    m_Content->GetRect().offset.right = -m_ScrollOffset.x + layoutW;
+    m_Content->GetRect().offset.bottom = -m_ScrollOffset.y + layoutH;
+    m_Content->ComputeLayout({layoutW, layoutH}, {vp.x, vp.y});
 }
 
 void ScrollView::SyncScrollbar()
@@ -178,13 +181,14 @@ void ScrollView::SyncScrollbar()
             // Flush track: starts exactly at the viewport's right edge so the
             // clip (W - scrollbarWidth) never overlaps with the bar. Edges are
             // pixel-snapped and the thickness kept exact so partial rows are
-            // never dropped by rasterization.
+            // never dropped by rasterization. Positioned RELATIVE to the
+            // ScrollView + parentOffset={cr.xy} (no transient double).
             m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_VScrollbar->GetRect().offset = {
-                rightEdge - m_ScrollbarWidth, std::round(cr.y),
-                rightEdge, hOverflow ? (bottomEdge - m_ScrollbarWidth) : bottomEdge
+                rightEdge - m_ScrollbarWidth - cr.x, std::round(cr.y) - cr.y,
+                rightEdge - cr.x, (hOverflow ? (bottomEdge - m_ScrollbarWidth) : bottomEdge) - cr.y
             };
-            m_VScrollbar->ComputeLayout({cr.z, cr.w});
+            m_VScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
 
             m_VScrollbar->SetRange(viewportH, content.y);
             const float maxY = GetMaxScrollY();
@@ -199,11 +203,11 @@ void ScrollView::SyncScrollbar()
         if (hOverflow) {
             m_HScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_HScrollbar->GetRect().offset = {
-                std::round(cr.x), bottomEdge - m_ScrollbarWidth,
-                vOverflow ? (rightEdge - m_ScrollbarWidth) : rightEdge,
-                bottomEdge
+                std::round(cr.x) - cr.x, bottomEdge - m_ScrollbarWidth - cr.y,
+                (vOverflow ? (rightEdge - m_ScrollbarWidth) : rightEdge) - cr.x,
+                bottomEdge - cr.y
             };
-            m_HScrollbar->ComputeLayout({cr.z, cr.w});
+            m_HScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
 
             m_HScrollbar->SetRange(viewportW, content.x);
             const float maxX = GetMaxScrollX();

@@ -381,9 +381,10 @@ void UITreeView::SyncScrollbars()
     if (m_VScrollbar) {
         m_VScrollbar->SetActive(vOverflow);
         if (vOverflow) {
+            // Relative to the tree + parentOffset={cr.xy} (no transient double).
             m_VScrollbar->GetRect().anchor = {0, 0, 0, 0};
-            m_VScrollbar->GetRect().offset = {rightEdge - kW, std::round(cr.y), rightEdge, hOverflow ? bottomEdge - kW : bottomEdge};
-            m_VScrollbar->ComputeLayout({cr.z, cr.w});
+            m_VScrollbar->GetRect().offset = {rightEdge - kW - cr.x, std::round(cr.y) - cr.y, rightEdge - cr.x, (hOverflow ? bottomEdge - kW : bottomEdge) - cr.y};
+            m_VScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
             m_VScrollbar->SetRange(viewport.y, content.y);
             float maxY = std::max(0.0f, content.y - viewport.y);
             m_VScrollbar->SetValue(maxY > 0 ? m_ScrollOffset.y / maxY : 0.0f);
@@ -393,8 +394,8 @@ void UITreeView::SyncScrollbars()
         m_HScrollbar->SetActive(hOverflow);
         if (hOverflow) {
             m_HScrollbar->GetRect().anchor = {0, 0, 0, 0};
-            m_HScrollbar->GetRect().offset = {std::round(cr.x), bottomEdge - kW, vOverflow ? rightEdge - kW : rightEdge, bottomEdge};
-            m_HScrollbar->ComputeLayout({cr.z, cr.w});
+            m_HScrollbar->GetRect().offset = {std::round(cr.x) - cr.x, bottomEdge - kW - cr.y, (vOverflow ? rightEdge - kW : rightEdge) - cr.x, bottomEdge - cr.y};
+            m_HScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
             m_HScrollbar->SetRange(viewport.x, content.x);
             float maxX = std::max(0.0f, content.x - viewport.x);
             m_HScrollbar->SetValue(maxX > 0 ? m_ScrollOffset.x / maxX : 0.0f);
@@ -528,17 +529,17 @@ void UITreeView::UpdateEditInputRect()
     int idx = -1;
     for (int i = 0; i < (int)m_FlatVisible.size(); ++i) if (m_FlatVisible[i]==m_EditingItem) idx=i;
     if (idx < 0) return;
-    float y = std::round(cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y);
+    float y = std::round(cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y) - cr.y;
     // Input must sit exactly over the row's TEXT: always reserve the arrow slot
     // (12px, even for leaves — matches the layout fix) plus the icon slot when
-    // icons are enabled and the item has one.
-    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + 12.0f + 4.0f - m_ScrollOffset.x);
+    // icons are enabled and the item has one. Relative to the tree + parentOffset.
+    float x = std::round(cr.x + (float)m_EditingItem->GetDepth() * m_Indent + 12.0f + 4.0f - m_ScrollOffset.x) - cr.x;
     if (m_IconsEnabled && m_EditingItem->HasIcon())
         x += m_IconSize + 4.0f;
-    float w = std::max(60.0f, GetViewportSize().x - (x - cr.x));
+    float w = std::max(60.0f, GetViewportSize().x - x);
     m_EditInput->GetRect().anchor = {0, 0, 0, 0};
     m_EditInput->GetRect().offset = {x, y, x + w, y + m_RowHeight};
-    m_EditInput->ComputeLayout({w, m_RowHeight});
+    m_EditInput->ComputeLayout({w, m_RowHeight}, {cr.x, cr.y});
 }
 
 bool UITreeView::IsItemVisible(UITreeViewItem* item) const
@@ -599,9 +600,14 @@ void UITreeView::OnLayoutComputed()
     // render over/under the scrollbars (they look "translucent" because content
     // drew on top) and horizontal scroll clips correctly.
     if (m_Viewport) {
+        // Positioned RELATIVE to the tree + parentOffset={cr.xy} (the tree's own
+        // Free pass passes the same) so no transient double-counting occurs.
         m_Viewport->GetRect().anchor = {0, 0, 0, 0};
-        m_Viewport->GetRect().offset = {std::round(cr.x), std::round(cr.y), std::round(cr.x + viewport.x), std::round(cr.y + viewport.y)};
-        m_Viewport->ComputeLayout({viewport.x, viewport.y});
+        m_Viewport->GetRect().offset = {
+            std::round(cr.x) - cr.x, std::round(cr.y) - cr.y,
+            std::round(cr.x + viewport.x) - cr.x, std::round(cr.y + viewport.y) - cr.y
+        };
+        m_Viewport->ComputeLayout({viewport.x, viewport.y}, {cr.x, cr.y});
     }
     const auto& vp = m_Viewport ? m_Viewport->GetComputedRect() : cr;
     // Row background spans max(viewport, content) so scrolled rows still cover the
@@ -614,12 +620,15 @@ void UITreeView::OnLayoutComputed()
         bool visible = (i >= first && i <= last);
         item->SetActive(visible);
         if (visible) {
-            float y = std::round(vp.y + (float)i * m_RowHeight - m_ScrollOffset.y);
-            float x0 = std::round(vp.x - m_ScrollOffset.x);
+            // Rows are children of the VIEWPORT: position RELATIVE to it and pass
+            // parentOffset={vp.xy} so m_ComputedRect lands on absolute coords (the
+            // viewport's Free pass passes the same offset — no transient double).
+            float y = std::round(vp.y + (float)i * m_RowHeight - m_ScrollOffset.y) - vp.y;
+            float x0 = std::round(vp.x - m_ScrollOffset.x) - vp.x;
             // Full-width row for selection background
             item->GetRect().anchor = {0, 0, 0, 0};
             item->GetRect().offset = {x0, y, x0 + bgW, y + m_RowHeight};
-            item->ComputeLayout({bgW, m_RowHeight});
+            item->ComputeLayout({bgW, m_RowHeight}, {vp.x, vp.y});
         }
     }
 
@@ -647,15 +656,16 @@ void UITreeView::OnLayoutComputed()
         UpdateEditInputRect();
     }
 
-    // FIX (2026-08-23): re-apply the ghost at its authoritative position AFTER
-    // ComputeFreeLayout accumulated the tree origin into its offset. Without
-    // this, a still mouse (no OnPointerMove) lets the offset accumulate tree.y
-    // every frame and the ghost flies down. Setting an ABSOLUTE offset here and
-    // re-computing makes it render at the cursor on every frame.
+    // Ghost is a Free child of the tree: positioned RELATIVE to it (m_GhostPos is
+    // absolute canvas coords) + parentOffset={cr.xy} so it renders at the cursor
+    // without any transient double from the tree's own Free pass.
     if (m_GhostLabel && m_GhostLabel->IsActive()) {
         m_GhostLabel->GetRect().anchor = {0, 0, 0, 0};
-        m_GhostLabel->GetRect().offset = {m_GhostPos.x + 12.0f, m_GhostPos.y + 8.0f, m_GhostPos.x + 200.0f, m_GhostPos.y + 28.0f};
-        m_GhostLabel->ComputeLayout({200, 20});
+        m_GhostLabel->GetRect().offset = {
+            m_GhostPos.x + 12.0f - cr.x, m_GhostPos.y + 8.0f - cr.y,
+            m_GhostPos.x + 200.0f - cr.x, m_GhostPos.y + 28.0f - cr.y
+        };
+        m_GhostLabel->ComputeLayout({200, 20}, {cr.x, cr.y});
     }
 
     // FIX (2026-08-23): drop feedback — a 2px line at the target row's bottom
@@ -680,18 +690,19 @@ void UITreeView::OnLayoutComputed()
         }
         if (tIdx >= first && tIdx <= last) {
             m_DropIndicator->SetActive(true);
-            float rowY = std::round(cr.y + (float)tIdx * m_RowHeight - m_ScrollOffset.y);
-            float x0 = std::round(cr.x - m_ScrollOffset.x);
+            // Relative to the tree + parentOffset={cr.xy} (no transient double).
+            float rowY = std::round(cr.y + (float)tIdx * m_RowHeight - m_ScrollOffset.y) - cr.y;
+            float x0 = std::round(cr.x - m_ScrollOffset.x) - cr.x;
             float indW = std::max(viewport.x, content.x);
             m_DropIndicator->GetRect().anchor = {0, 0, 0, 0};
             if (m_DropTarget.mode == DropMode::Below) {
                 m_DropIndicator->SetColor({0.65f, 0.45f, 1.0f, 0.95f});
                 m_DropIndicator->GetRect().offset = {x0, rowY + m_RowHeight - 1.0f, x0 + indW, rowY + m_RowHeight + 1.0f};
-                m_DropIndicator->ComputeLayout({indW, 2.0f});
+                m_DropIndicator->ComputeLayout({indW, 2.0f}, {cr.x, cr.y});
             } else { // Onto
                 m_DropIndicator->SetColor({0.55f, 0.40f, 1.0f, 0.35f});
                 m_DropIndicator->GetRect().offset = {x0, rowY, x0 + indW, rowY + m_RowHeight};
-                m_DropIndicator->ComputeLayout({indW, m_RowHeight});
+                m_DropIndicator->ComputeLayout({indW, m_RowHeight}, {cr.x, cr.y});
             }
         } else {
             m_DropIndicator->SetActive(false);
@@ -835,23 +846,23 @@ void UITreeView::OnPointerMove(const Vector2& pos)
             m_GhostLabel->SetActive(true);
             m_GhostPos = pos;
             // FIX (2026-08-23): on the FIRST drag the ghost is created with a
-            // default {0,0,0,0} rect. The stale ComputeFreeLayout pass then laid
-            // it out with height 0, so UILabel::Rebuild built the glyphs with
-            // cr.w=0 (offsetY=(0-blockH)/2+ascender) — the text rendered ~10px
-            // ABOVE the box on the first drag only. Give the ghost a proper
-            // height immediately so the first rebuild uses correct centering.
+            // default {0,0,0,0} rect. The stale Free pass then laid it out with
+            // height 0, so UILabel::Rebuild built the glyphs with cr.w=0
+            // (offsetY=(0-blockH)/2+ascender) — the text rendered ~10px ABOVE
+            // the box on the first drag only. Give the ghost a proper height
+            // immediately so the first rebuild uses correct centering. Relative
+            // to the tree + parentOffset={cr.xy} (no transient double).
             m_GhostLabel->GetRect().anchor = {0, 0, 0, 0};
-            m_GhostLabel->GetRect().offset = {m_GhostPos.x + 12.0f, m_GhostPos.y + 8.0f, m_GhostPos.x + 200.0f, m_GhostPos.y + 28.0f};
-            m_GhostLabel->ComputeLayout({200, 20});
+            m_GhostLabel->GetRect().offset = {
+                m_GhostPos.x + 12.0f - cr.x, m_GhostPos.y + 8.0f - cr.y,
+                m_GhostPos.x + 200.0f - cr.x, m_GhostPos.y + 28.0f - cr.y
+            };
+            m_GhostLabel->ComputeLayout({200, 20}, {cr.x, cr.y});
         }
     }
     if (m_Dragging && m_GhostLabel) {
-        // FIX (2026-08-23): TreeView::ComputeFreeLayout adds this tree's
-        // cr.x/cr.y to every child offset on EVERY layout. When the mouse is
-        // still, OnPointerMove isn't called, so the ghost's offset accumulates
-        // tree.y each frame and it flies down. The authoritative position is
-        // m_GhostPos (set on every move); OnLayoutComputed re-applies it AFTER
-        // the accumulation so it always renders at the cursor.
+        // Ghost position is authoritative in m_GhostPos (set on every move);
+        // OnLayoutComputed re-applies it each frame so it tracks the cursor.
         m_GhostPos = pos;
         // Drop target highlight
         auto target = HitTestDropTarget(pos);

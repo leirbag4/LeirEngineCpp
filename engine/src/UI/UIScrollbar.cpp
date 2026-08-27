@@ -94,18 +94,20 @@ void UIScrollbar::OnLayoutComputed()
     tr.anchor = AnchorSet::TopLeft();
     // Snap to integer pixels so the thumb thickness (grosor - 2*inset) and its
     // symmetric inset margins are never degraded by fractional edge rows.
+    // Positioned RELATIVE to the scrollbar + parentOffset={cr.xy} (no transient
+    // double from the scrollbar's own Free pass).
     if (m_Vertical) {
-        tr.offset.left = std::round(cr.x + inset);
-        tr.offset.top = std::round(cr.y + start);
-        tr.offset.right = std::round(cr.x + cr.z - inset);
-        tr.offset.bottom = std::round(cr.y + start + len);
+        tr.offset.left = std::round(cr.x + inset) - cr.x;
+        tr.offset.top = std::round(cr.y + start) - cr.y;
+        tr.offset.right = std::round(cr.x + cr.z - inset) - cr.x;
+        tr.offset.bottom = std::round(cr.y + start + len) - cr.y;
     } else {
-        tr.offset.left = std::round(cr.x + start);
-        tr.offset.top = std::round(cr.y + inset);
-        tr.offset.right = std::round(cr.x + start + len);
-        tr.offset.bottom = std::round(cr.y + cr.w - inset);
+        tr.offset.left = std::round(cr.x + start) - cr.x;
+        tr.offset.top = std::round(cr.y + inset) - cr.y;
+        tr.offset.right = std::round(cr.x + start + len) - cr.x;
+        tr.offset.bottom = std::round(cr.y + cr.w - inset) - cr.y;
     }
-    m_Thumb->ComputeLayout({cr.z, cr.w});
+    m_Thumb->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
 }
 
 bool UIScrollbar::OnPointerDown(const Vector2& pos)

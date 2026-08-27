@@ -143,9 +143,12 @@ void UITreeViewItem::OnLayoutComputed()
     float arrowW = 12.0f;
     float arrowH = 12.0f;
     float indent = (float)GetDepth() * m_Indent;
+    // Children are positioned RELATIVE to this item and parentOffset={cr.xy} is
+    // passed so their m_ComputedRect lands on absolute coords (the item's own
+    // Free layout passes the same parentOffset — no transient double-counting;
+    // see TODO_COMPUTE_FREE_LAYOUT_FIX.md).
     // Arrow centered vertically in row
-    float arrowX = cr.x + indent;
-    float arrowY = cr.y + (cr.w - arrowH) * 0.5f;
+    float arrowTop = (cr.w - arrowH) * 0.5f;
     if (m_ArrowLabel) {
         // TreeView does a manual double-layout: first a stale Free pass (item at
         // 0x0 or double-x) builds glyphs with wrong height, then the correct
@@ -156,32 +159,30 @@ void UITreeViewItem::OnLayoutComputed()
         float prevH = m_ArrowLabel->GetComputedRect().w;
         if (prevW != arrowW || prevH != arrowH) m_ArrowLabel->Invalidate();
         m_ArrowLabel->GetRect().anchor = {0, 0, 0, 0};
-        m_ArrowLabel->GetRect().offset = {arrowX, arrowY, arrowX + arrowW, arrowY + arrowH};
-        m_ArrowLabel->ComputeLayout({arrowW, arrowH});
+        m_ArrowLabel->GetRect().offset = {indent, arrowTop, indent + arrowW, arrowTop + arrowH};
+        m_ArrowLabel->ComputeLayout({arrowW, arrowH}, {cr.x, cr.y});
     }
     // Cursor starts AFTER the reserved arrow slot (12px) + gap, so leaves align
     // with nodes that have children (a leaf at depth N starts where depth N's
     // arrow slot would be). Previously leaves used only +4 -> barely indented.
-    float cursor = arrowX + arrowW + 4.0f;
+    float cursor = indent + arrowW + 4.0f;
     // Icon (12x12) between the arrow and the text, vertically centered.
     if (m_ShowIcon && m_IconImage && m_IconImage->IsActive()) {
-        float iconX = cursor;
-        float iconY = cr.y + (cr.w - m_IconSize) * 0.5f;
+        float iconTop = (cr.w - m_IconSize) * 0.5f;
         m_IconImage->GetRect().anchor = {0, 0, 0, 0};
-        m_IconImage->GetRect().offset = {iconX, iconY, iconX + m_IconSize, iconY + m_IconSize};
-        m_IconImage->ComputeLayout({m_IconSize, m_IconSize});
+        m_IconImage->GetRect().offset = {cursor, iconTop, cursor + m_IconSize, iconTop + m_IconSize};
+        m_IconImage->ComputeLayout({m_IconSize, m_IconSize}, {cr.x, cr.y});
         cursor += m_IconSize + 4.0f;
     }
-    float textX = cursor;
-    float textW = std::max(0.0f, cr.x + cr.z - textX - 2.0f);
+    float textW = std::max(0.0f, cr.z - cursor - 2.0f);
     float textH = cr.w;
     if (m_TextLabel) {
         float prevW = m_TextLabel->GetComputedRect().z;
         float prevH = m_TextLabel->GetComputedRect().w;
         if (prevW != textW || prevH != textH) m_TextLabel->Invalidate();
         m_TextLabel->GetRect().anchor = {0, 0, 0, 0};
-        m_TextLabel->GetRect().offset = {textX, cr.y, textX + textW, cr.y + textH};
-        m_TextLabel->ComputeLayout({textW, textH});
+        m_TextLabel->GetRect().offset = {cursor, 0.0f, cursor + textW, textH};
+        m_TextLabel->ComputeLayout({textW, textH}, {cr.x, cr.y});
     }
 }
 

@@ -288,12 +288,13 @@ void UITextArea::SyncScrollbars()
     if (m_VScrollbar) {
         m_VScrollbar->SetActive(vOverflow);
         if (vOverflow) {
+            // Relative to the text area + parentOffset={cr.xy} (no transient double).
             m_VScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_VScrollbar->GetRect().offset = {
-                rightEdge - m_ScrollbarWidth, std::round(cr.y),
-                rightEdge, hOverflow ? (bottomEdge - m_ScrollbarWidth) : bottomEdge
+                rightEdge - m_ScrollbarWidth - cr.x, std::round(cr.y) - cr.y,
+                rightEdge - cr.x, (hOverflow ? (bottomEdge - m_ScrollbarWidth) : bottomEdge) - cr.y
             };
-            m_VScrollbar->ComputeLayout({cr.z, cr.w});
+            m_VScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
             m_VScrollbar->SetRange(vp.y, content.y);
             const float maxY = GetMaxScrollY();
             if (maxY > 0.0f)
@@ -306,11 +307,11 @@ void UITextArea::SyncScrollbars()
         if (hOverflow) {
             m_HScrollbar->GetRect().anchor = AnchorSet::TopLeft();
             m_HScrollbar->GetRect().offset = {
-                std::round(cr.x), bottomEdge - m_ScrollbarWidth,
-                vOverflow ? (rightEdge - m_ScrollbarWidth) : rightEdge,
-                bottomEdge
+                std::round(cr.x) - cr.x, bottomEdge - m_ScrollbarWidth - cr.y,
+                (vOverflow ? (rightEdge - m_ScrollbarWidth) : rightEdge) - cr.x,
+                bottomEdge - cr.y
             };
-            m_HScrollbar->ComputeLayout({cr.z, cr.w});
+            m_HScrollbar->ComputeLayout({cr.z, cr.w}, {cr.x, cr.y});
             m_HScrollbar->SetRange(vp.x, content.x);
             const float maxX = GetMaxScrollX();
             if (maxX > 0.0f)
