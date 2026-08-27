@@ -790,7 +790,6 @@ void UITreeView::OnPointerMove(const Vector2& pos)
     // Hover tracking — full-width rows, driven by parent (B). Works even when
     // the hit is TreeText/TreeArrow (deepest child) and full-width selection.
     // vieja lógica con IsHovered() del canvas solo funcionaba a la izquierda.
-    // TEMP LOG: diagnosticar por qué hover nunca se prende (pedido usuario 2026-08-23)
     RebuildFlatCache();
     const auto& cr = GetComputedRect();
     Vector2 viewport = GetViewportSize();
