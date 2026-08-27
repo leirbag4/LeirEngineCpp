@@ -45,6 +45,44 @@
 // ============================================================================
 #define LEIR_UI_OUTLINES_ON_TOP 1
 
+// ============================================================================
+// SNAP DEL RECT DE LOS OUTLINES DE DEBUG (debug.ui_outlines)
+// ----------------------------------------------------------------------------
+// Trilema a DPI fraccionario (125%): el texto se dibuja sub-pixel SIN snapnear,
+// pero el outline se deriva de un rect snapneado. Según cómo se snapnee, se
+// cumplen 2 de 3 cosas (imposible las 3 a la vez):
+//   (a) el contenido NUNCA asoma afuera del outline,
+//   (b) las líneas dobles de elementos adyacentes se ven como 2,
+//   (c) las líneas individuales son nítidas de 1px.
+//
+//   0 = ROUND   -> usa SnapToPhysicalPixels (round). Cumple (b) y (c); NO (a):
+//       el round desplaza el outline hasta ~0.5px lógico y un texto pegado al
+//       borde puede asomar ~1px a la izquierda de la línea.
+//
+//   1 = (DEFAULT) ENCLOSE -> usa SnapToPhysicalPixelsEnclose (floor/ceil, la
+//       misma convención conservadora del scissor). Cumple (a) y (c); NO (b):
+//       el outline SIEMPRE encierra el contenido (nada asoma), pero dos
+//       elementos que comparten borde fusionan su línea en 1px en 125% (el
+//       borde compartido, mostrado una vez — discutiblemente más fiel).
+//       Es el comportamiento profesional: un outline de debug debe mostrar los
+//       bounds reales del elemento con el contenido adentro.
+//
+//   2 = HYBRID -> ENCLOSE para elementos que dibujan texto (UILabel,
+//       UITextInput, UITextArea) + ROUND para el resto (dock, tabs, botones,
+//       paneles). Lo mejor de ambos en la práctica: arregla el texto sin
+//       fusionar los tabs. Costo: otra heurística implícita (dynamic_cast).
+//
+//   3 = ORIGINAL (el que estaba en el último commit/push) -> SIN snap: se usa
+//       el rect lógico exacto (cr) y grosor t = 1.0 px LÓGICO (no 1/scale).
+//       Es el comportamiento previo a toda esta saga de snapping. A 125% una
+//       línea de 1px lógico son 1.25 físicos, así que se ve de 1 o 2px según
+//       la alineación (inconsistente), pero es 100% fiel al rect lógico real.
+//       La capa sigue la controla LEIR_UI_OUTLINES_ON_TOP (Batch/BuildBatchDebug).
+//
+// Para comparar: cambiá el valor, recompilá y activá debug.ui_outlines.
+// ============================================================================
+#define LEIR_UI_OUTLINE_SNAP 1
+
 namespace Leir {
 
 namespace {
@@ -108,6 +146,29 @@ Vector4 SnapToPhysicalPixels(const Vector4& r, float scale)
     const float y0 = std::round(r.y * scale + kSnapEps) / scale;
     const float x1 = std::round((r.x + r.z) * scale - kSnapEps) / scale;
     const float y1 = std::round((r.y + r.w) * scale - kSnapEps) / scale;
+    return { x0, y0, x1 - x0, y1 - y0 };
+}
+
+// Conservative enclosure variant of SnapToPhysicalPixels (floor min / ceil
+// max), the same convention as ScissorFromLogicalClip. The returned rect is
+// guaranteed to cover EVERY physical pixel that the logical rect touches, so
+// anything rendered at the logical rect — including sub-pixel-positioned text
+// glyphs, which are NOT snapped — is always INSIDE the result.
+//
+// Use for DEBUG OUTLINES when the content must not stick out (the round variant
+// can shift the outline up to ~0.5 logical px away from the content, leaving a
+// 1-px sliver of text outside the line). Trade-off: adjacent elements that
+// share a boundary both claim the boundary pixel, so their 1-px outlines merge
+// into one line at fractional DPI (see LEIR_UI_OUTLINE_SNAP).
+Vector4 SnapToPhysicalPixelsEnclose(const Vector4& r, float scale)
+{
+    if (scale <= 1.0f)
+        return r;
+    constexpr float kSnapEps = 1e-3f;
+    const float x0 = std::floor(r.x * scale + kSnapEps) / scale;
+    const float y0 = std::floor(r.y * scale + kSnapEps) / scale;
+    const float x1 = std::ceil((r.x + r.z) * scale - kSnapEps) / scale;
+    const float y1 = std::ceil((r.y + r.w) * scale - kSnapEps) / scale;
     return { x0, y0, x1 - x0, y1 - y0 };
 }
 
@@ -766,8 +827,36 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
         // the middle layer and would otherwise cover the viewport's own outline —
         // can hide an outline. Set to 0 to use Batch (regular layer, the old
         // behavior) when the on-top lines overlap too much to read.
-        const Vector4 sr = SnapToPhysicalPixels(cr, m_ContentScale);
-        const float t = 1.0f / m_ContentScale;
+        //
+        // Snap: controlled by LEIR_UI_OUTLINE_SNAP (0 = round, 1 = enclose,
+        // 2 = hybrid, 3 = original). Enclose (default) guarantees the content
+        // never sticks out of the outline; round keeps adjacent double-lines
+        // separate but can leave a 1-px sliver of text outside; original is the
+        // pre-snapping behavior (exact logical rect, 1 logical px). See the
+        // define for the trilemma.
+        Vector4 sr;
+        float t = 1.0f / m_ContentScale;
+#if LEIR_UI_OUTLINE_SNAP == 0
+        sr = SnapToPhysicalPixels(cr, m_ContentScale);
+#elif LEIR_UI_OUTLINE_SNAP == 1
+        sr = SnapToPhysicalPixelsEnclose(cr, m_ContentScale);
+#elif LEIR_UI_OUTLINE_SNAP == 2
+        // Hybrid: enclose for text-bearing elements (content sits near the left
+        // edge and is drawn sub-pixel), round for structural elements (dock,
+        // tabs, buttons) whose adjacency must stay visible as separate lines.
+        sr = (dynamic_cast<UILabel*>(elem) || dynamic_cast<UITextInput*>(elem) ||
+              dynamic_cast<UITextArea*>(elem))
+                 ? SnapToPhysicalPixelsEnclose(cr, m_ContentScale)
+                 : SnapToPhysicalPixels(cr, m_ContentScale);
+#elif LEIR_UI_OUTLINE_SNAP == 3
+        // Original (last committed/pushed behavior): NO snapping — the exact
+        // logical rect and a 1 LOGICAL px hairline. At fractional DPI this is
+        // 1.25 physical px, so lines render 1 or 2 px depending on alignment.
+        sr = cr;
+        t = 1.0f;
+#else
+        #error "LEIR_UI_OUTLINE_SNAP: valor inválido (0=round 1=enclose 2=hybrid 3=original)"
+#endif
 #if LEIR_UI_OUTLINES_ON_TOP
         BuildBatchDebug(nullptr, {sr.x, sr.y, sr.z, t}, {0,0,1,1}, debugOutlineColor);
         BuildBatchDebug(nullptr, {sr.x, sr.y + sr.w - t, sr.z, t}, {0,0,1,1}, debugOutlineColor);
