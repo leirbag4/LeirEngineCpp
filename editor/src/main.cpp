@@ -47,6 +47,7 @@
 #include "UI/ToolbarPanel.h"
 #include "UI/GizmoLogPanel.h"
 #include "UI/TreeViewDebugPanel.h"
+#include "UI/HierarchyPanel.h"
 #include <LeirEngine/UI/UITreeViewItem.h>
 #include <LeirEngine/UI/UITextureCache.h>
 #include "Camera/EditorCamera.h"
@@ -452,22 +453,15 @@ protected:
         m_GridLodLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
         m_ViewportPanel->AddChild(m_GridLodLabel);
 
-        // Hierarchy panel (left dock pane)
-        auto* hierarchy = new Leir::UIPanel();
+        // Hierarchy panel (left dock pane) — real scene hierarchy (Fase 0.2):
+        // a virtualized UITreeView grouped by family, with per-family icons.
+        // Family/selection/rename/drag wiring is added in later fases; this
+        // step populates and refreshes the tree from the active scene.
+        auto* hierarchy = new HierarchyPanel();
         m_HierarchyPanel = hierarchy;
-        hierarchy->SetName("Hierarchy");
-        hierarchy->SetColor({0.16f, 0.16f, 0.18f, 1.0f});
-        hierarchy->SetLayoutMode(Leir::LayoutMode::Column);
-        hierarchy->SetPadding(6.0f, 6.0f, 6.0f, 6.0f);
-        hierarchy->SetSpacing(2.0f);
-
-        auto* hierarchyTitle = new Leir::UILabel();
-        hierarchyTitle->SetName("HierarchyTitle");
-        hierarchyTitle->SetText("-- Hierarchy --");
-        hierarchyTitle->SetFont(m_FontSmall.get());
-        hierarchyTitle->SetColor({0.7f, 0.7f, 0.7f, 1.0f});
-        hierarchyTitle->SetSizePolicy(Leir::SizePolicy::Fixed);
-        hierarchy->AddChild(hierarchyTitle);
+        hierarchy->SetFont(m_FontSmall.get());
+        hierarchy->SetBackend(m_Backend.get());
+        hierarchy->SetContentScale(GetContentScale());
 
         // Inspector panel (right dock pane)
         auto* inspector = new Leir::UIPanel();
@@ -839,6 +833,8 @@ protected:
             m_InspectorTransformPanel->Refresh();
         if (m_TreeViewDebugPanel)
             m_TreeViewDebugPanel->Refresh();
+        if (m_HierarchyPanel)
+            m_HierarchyPanel->Refresh();
 
 #ifdef LEIR_EDITOR_SLANG
         // Shader hot-reload poll (cheap: one stat per .slang file per frame).
@@ -1056,6 +1052,8 @@ protected:
         if (m_FontSmall) m_FontSmall->SetContentScale(GetContentScale());
         // Re-load tree icons at the new DPI (cache keys on the scale) so they stay crisp.
         ApplyTreeIcons();
+        if (m_HierarchyPanel)
+            m_HierarchyPanel->SetContentScale(GetContentScale()); // reloads its icons + rebuilds
     }
 
 private:
@@ -1260,7 +1258,7 @@ private:
 
     // Dock system
     Leir::DockManager* m_DockManager = nullptr;
-    Leir::UIPanel* m_HierarchyPanel = nullptr;
+    HierarchyPanel* m_HierarchyPanel = nullptr;
     Leir::UIPanel* m_InspectorPanel = nullptr;
     ToolbarPanel* m_Toolbar = nullptr;
 

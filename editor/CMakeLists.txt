@@ -18,6 +18,7 @@ src/Gizmos/GizmoRenderer.cpp
     src/UI/DebugPanel.cpp
     src/UI/GizmoLogPanel.cpp
     src/UI/TreeViewDebugPanel.cpp
+    src/UI/HierarchyPanel.cpp
     src/UI/ToolbarPanel.cpp
 )
 

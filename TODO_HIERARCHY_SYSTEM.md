@@ -46,15 +46,15 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
 - [ ] Build + tests engine (sin romper la escena actual).
 
 ### Fase 2 — HierarchyPanel (editor)
-- [ ] `editor/src/UI/HierarchyPanel.{h,cpp}`: envuelve un `UITreeView` + mapea
+- [x] `editor/src/UI/HierarchyPanel.{h,cpp}`: envuelve un `UITreeView` + mapea
       `CoreObject* ↔ UITreeViewItem*` (mapa en el panel, sin tocar el engine).
-- [ ] **Poblar**: caminar `scene->GetObjects()`, raíces = `GetParent()==nullptr`, recursar
+- [x] **Poblar**: caminar `scene->GetObjects()`, raíces = `GetParent()==nullptr`, recursar
       `GetChildren()`. Item = texto `GetName()` + icono de familia.
-- [ ] **3 grupos de raíces** por familia (Object3D / Object2D / UI), colapsables, todos
+- [x] **3 grupos de raíces** por familia (Object3D / Object2D / UI), colapsables, todos
       expandidos por defecto.
-- [ ] **Refresh** de la escena: reconstruir cuando cambia la estructura (conteo/firma) y
+- [x] **Refresh** de la escena: reconstruir cuando cambia la estructura (conteo/firma) y
       sincronizar nombres. Detectar mutations sin re-Crear todo cada frame.
-- [ ] Reemplazar el placeholder en `main.cpp` (tab no-cerrable "Hierarchy"). Font + refresh
+- [x] Reemplazar el placeholder en `main.cpp` (tab no-cerrable "Hierarchy"). Font + refresh
       en `OnUpdate`.
 
 ### Fase 3 — Selección (multi) + sync
