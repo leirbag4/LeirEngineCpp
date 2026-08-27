@@ -1,6 +1,7 @@
 #pragma once
 #include <LeirEngine/UI/UIPanel.h>
 #include <LeirEngine/Core/CoreObject.h>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -55,9 +56,19 @@ public:
     void Refresh();
 
     Leir::UITreeView* GetTreeView() const { return m_TreeView; }
+
+    // Selection (Fase 0.2 Paso 3): bidirectional sync with the editor's gizmo/
+    // inspector. The panel maps UITreeViewItem* <-> CoreObject* via m_ItemMap
+    // (family-root items are not in the map and never participate).
+    void SetOnSelectionChanged(std::function<void(const std::vector<Leir::CoreObject*>&)> cb)
+    { m_OnSelectionChanged = std::move(cb); }
+    std::vector<Leir::CoreObject*> GetSelectedObjects() const;
+    void SetSelectedObjects(const std::vector<Leir::CoreObject*>& objs);
+
     Leir::Vector2 GetMinSize() const override;
 
 private:
+    void NotifySelectionChanged();
     enum class Family { Object3D, Object2D, UI };
     static Family FamilyOf(Leir::CoreObject* obj);
     static const char* FamilyName(Family f);
@@ -76,6 +87,7 @@ private:
     size_t m_LastSignature = 0;
     std::vector<Leir::UITreeViewItem*> m_OwnedItems;
     std::unordered_map<Leir::CoreObject*, Leir::UITreeViewItem*> m_ItemMap;
+    std::function<void(const std::vector<Leir::CoreObject*>&)> m_OnSelectionChanged;
     std::shared_ptr<Leir::Texture2D> m_Icon3D;
     std::shared_ptr<Leir::Texture2D> m_Icon2D;
     std::shared_ptr<Leir::Texture2D> m_IconUI;

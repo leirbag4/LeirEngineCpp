@@ -773,7 +773,22 @@ bool UITreeView::OnPointerDown(const Vector2& pos)
 
     // Find row under pos
     int idx = (int)std::floor((pos.y - cr.y + m_ScrollOffset.y) / m_RowHeight);
-    if (idx < 0 || idx >= (int)m_FlatVisible.size()) return false;
+    if (idx < 0 || idx >= (int)m_FlatVisible.size()) {
+        // Click on empty space inside the tree: clear the selection (Unity/Godot
+        // style). Clicks outside the viewport bounds (e.g. the header above)
+        // bubble up untouched.
+        if (pos.x >= cr.x && pos.x <= cr.x + viewport.x &&
+            pos.y >= cr.y && pos.y <= cr.y + viewport.y) {
+            if (!m_SelectedItems.empty()) {
+                for (auto* it : m_SelectedItems) it->SetSelected(false);
+                m_SelectedItems.clear();
+                m_LastSelectedIndex = -1;
+                NotifySelectionChanged();
+            }
+            return true; // consumed
+        }
+        return false;
+    }
     auto* item = m_FlatVisible[idx];
     if (!item || !item->IsItemEnabled()) return true; // consume but not selectable
 

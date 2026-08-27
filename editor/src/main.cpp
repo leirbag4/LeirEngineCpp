@@ -463,6 +463,24 @@ protected:
         hierarchy->SetBackend(m_Backend.get());
         hierarchy->SetContentScale(GetContentScale());
 
+        // Fase 0.2 Paso 3: Hierarchy -> gizmo + inspector. Primary = the most
+        // recently selected Object3D (reverse scan); empty = deselect. The
+        // m_SyncingHierarchySelection guard prevents feedback loops (the gizmo
+        // change would otherwise bounce back via the OnUpdate scene->hierarchy
+        // sync). Gizmo/inspector are Object3D-only for now (Object2D/UI sync
+        // arrives with the 2D/UI gizmos in P1).
+        hierarchy->SetOnSelectionChanged([this](const std::vector<Leir::CoreObject*>& objs) {
+            if (m_SyncingHierarchySelection) return;
+            m_SyncingHierarchySelection = true;
+            Leir::Object3D* primary = nullptr;
+            for (auto it = objs.rbegin(); it != objs.rend(); ++it)
+                if (auto* o3d = dynamic_cast<Leir::Object3D*>(*it)) { primary = o3d; break; }
+            m_TransformGizmo.SetSelected(primary);
+            m_InspectorTransformPanel->SetTargetObject(primary);
+            m_LastGizmoSelection = primary;
+            m_SyncingHierarchySelection = false;
+        });
+
         // Inspector panel (right dock pane)
         auto* inspector = new Leir::UIPanel();
         m_InspectorPanel = inspector;
@@ -835,6 +853,26 @@ protected:
             m_TreeViewDebugPanel->Refresh();
         if (m_HierarchyPanel)
             m_HierarchyPanel->Refresh();
+
+        // Fase 0.2 Paso 3: scene -> hierarchy + inspector sync. When the gizmo
+        // selection changed externally (viewport click-pick, gizmo pick), reflect
+        // it in the hierarchy highlight and the inspector. Runs AFTER the panel
+        // Refresh so the tree is built. The guard avoids echoing a programmatic
+        // change back (the hierarchy handler already updated m_LastGizmoSelection).
+        if (m_TransformGizmo.GetSelected() != m_LastGizmoSelection) {
+            m_LastGizmoSelection = m_TransformGizmo.GetSelected();
+            if (!m_SyncingHierarchySelection) {
+                m_SyncingHierarchySelection = true;
+                if (m_HierarchyPanel) {
+                    std::vector<Leir::CoreObject*> objs;
+                    if (m_LastGizmoSelection) objs.push_back(m_LastGizmoSelection);
+                    m_HierarchyPanel->SetSelectedObjects(objs);
+                }
+                if (m_InspectorTransformPanel)
+                    m_InspectorTransformPanel->SetTargetObject(m_LastGizmoSelection);
+                m_SyncingHierarchySelection = false;
+            }
+        }
 
 #ifdef LEIR_EDITOR_SLANG
         // Shader hot-reload poll (cheap: one stat per .slang file per frame).
@@ -1264,6 +1302,9 @@ private:
 
     // Transform gizmo system (toolbar + gizmos + selection)
     TransformGizmo m_TransformGizmo;
+    // Fase 0.2 Paso 3: bidirectional hierarchy selection sync (guards + last seen).
+    bool m_SyncingHierarchySelection = false;
+    Leir::Object3D* m_LastGizmoSelection = nullptr;
 
     // Viewport system
     std::unique_ptr<Leir::RenderTexture> m_ViewportRT;

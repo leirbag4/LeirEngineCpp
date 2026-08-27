@@ -10,6 +10,7 @@
 #include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/Scene/SceneManager.h>
 #include <LeirEngine/Core/Log.h>
+#include <algorithm>
 #include <cmath>
 
 // Hierarchy background = the same gray as the TreeViewDebugPanel reference the
@@ -74,6 +75,11 @@ HierarchyPanel::HierarchyPanel()
     m_TreeView->SetMultipleSelectionEnabled(true);
     m_TreeView->SetEditable(true); // F2 rename (wired to SetName in Fase 4)
     m_TreeView->SetIconsEnabled(true);
+    // Fase 0.2 Paso 3: bridge the tree's selection events to the panel callback
+    // (maps items -> CoreObjects, skipping family roots).
+    m_TreeView->SetOnSelectedItemsChanged([this](const std::vector<Leir::UITreeViewItem*>&) {
+        NotifySelectionChanged();
+    });
     AddChild(m_TreeView);
 }
 
@@ -103,6 +109,37 @@ void HierarchyPanel::SetContentScale(float scale)
 Leir::Vector2 HierarchyPanel::GetMinSize() const
 {
     return {160.0f, 120.0f};
+}
+
+std::vector<Leir::CoreObject*> HierarchyPanel::GetSelectedObjects() const
+{
+    std::vector<Leir::CoreObject*> objs;
+    if (!m_TreeView) return objs;
+    const auto sel = m_TreeView->GetSelectedItems();
+    if (sel.empty()) return objs;
+    for (const auto& kv : m_ItemMap)
+        if (std::find(sel.begin(), sel.end(), kv.second) != sel.end())
+            objs.push_back(kv.first);
+    return objs;
+}
+
+void HierarchyPanel::NotifySelectionChanged()
+{
+    if (m_OnSelectionChanged)
+        m_OnSelectionChanged(GetSelectedObjects());
+}
+
+void HierarchyPanel::SetSelectedObjects(const std::vector<Leir::CoreObject*>& objs)
+{
+    if (!m_TreeView) return;
+    std::vector<Leir::UITreeViewItem*> items;
+    for (auto* obj : objs) {
+        auto it = m_ItemMap.find(obj);
+        if (it != m_ItemMap.end()) items.push_back(it->second);
+    }
+    // Fires the tree's selection callback -> NotifySelectionChanged -> the editor
+    // (guarded there against feedback loops).
+    m_TreeView->SetSelectedItems(items);
 }
 
 void HierarchyPanel::Refresh()

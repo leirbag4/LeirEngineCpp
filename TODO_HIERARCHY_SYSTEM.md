@@ -58,14 +58,15 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
       en `OnUpdate`.
 
 ### Fase 3 — Selección (multi) + sync
-- [ ] `SetMultipleSelectionEnabled(true)` en el tree.
-- [ ] **Hierarchy → escena**: `SetOnSelectedItemsChanged` → `m_TransformGizmo.SetSelectedItems(...)`
-      + `m_InspectorTransformPanel.SetTargetObject(...)` (para el primero / multi→ último click).
-- [ ] **Escena → Hierarchy**: al cambiar `m_TransformGizmo.GetSelected()`, resaltar los items
-      correspondientes (`SetSelectedItems`). Sync en `OnUpdate` del editor.
+- [x] `SetMultipleSelectionEnabled(true)` en el tree.
+- [x] **Hierarchy → escena**: `SetOnSelectedItemsChanged` → `m_TransformGizmo.SetSelected(...)`
+      + `m_InspectorTransformPanel.SetTargetObject(...)` (primario = Object3D más reciente).
+- [x] **Escena → Hierarchy**: al cambiar `m_TransformGizmo.GetSelected()`, resaltar los items
+      (`SetSelectedObjects`). Sync en `OnUpdate` del editor (con guards anti-loop).
 - [ ] Al seleccionar de distinta familia → **cambiar la vista** del viewport (3D/2D/UI) —
-      ver `TODO_VIEWPORT_VIEW_MODES.md`.
-- [ ] Deseleccionar al clickear vacío.
+      ver `TODO_VIEWPORT_VIEW_MODES.md` (P1; hoy el gizmo/inspector son Object3D-only).
+- [x] Deseleccionar al clickear vacío (en el tree — core `UITreeView::OnPointerDown` — y en
+      el viewport).
 
 ### Fase 4 — Rename inline + drag&drop
 - [ ] `SetEditable(true)` + `SetOnItemRenamed` → `obj->SetName(newName)` (el item ya actualiza su texto).
