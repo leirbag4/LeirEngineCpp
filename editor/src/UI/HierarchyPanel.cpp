@@ -89,20 +89,20 @@ HierarchyPanel::HierarchyPanel()
         if (Leir::CoreObject* obj = ObjectOfItem(item)) obj->SetName(newText);
     });
 
-    // Fase 0.2 Paso 4 — drag&drop. Returns whether the scene accepted the change:
-    // the tree only mutates its structure when true, so a rejected drop never
-    // desyncs tree from scene. Handles:
-    //   * Onto a real object      -> SetParent (append, matches the tree).
-    //   * Below a real object     -> InsertChildAt (reorder siblings, matches).
-    //   * Onto/Below a FAMILY ROOT (pseudo-group [Object3D]/[Object2D]/[UI]) ->
-    //     make the dragged a root of that family and reorder it among the
-    //     family's roots (Onto = end, Unity style). The tree's own mutation is
-    //     not trusted here (below a group header it would become a top-level
-    //     sibling) -> we do NOT skip the next rebuild, so the tree re-syncs.
+    // Fase 0.2 Paso 4 — drag&drop (3-zone). Returns whether the scene accepted the
+    // change: the tree only mutates its structure when true, so a rejected drop
+    // never desyncs tree from scene. targetItem is the row, mode its zone:
+    //   * Onto   -> nest into the target (SetParent, append — matches the tree).
+    //   * Above  -> insert as a sibling BEFORE the target (post-removal index).
+    //   * Below  -> insert as a sibling AFTER the target (post-removal index).
+    //   * target = FAMILY ROOT ([Object3D]/[Object2D]/[UI]) -> make the dragged
+    //     a root of that family; Above = front, Below/Onto = end (Unity style).
+    //     The tree's own mutation is not trusted there -> we do NOT skip the next
+    //     rebuild, so the tree re-syncs.
     // Warnings on every rejection (family root dragged / cross-family / cycle).
     m_TreeView->SetOnItemDragged([this](const std::vector<Leir::UITreeViewItem*>& draggedItems,
-        Leir::UITreeViewItem* newParent, int newIndex, bool onto) -> bool {
-        if (draggedItems.empty()) return false;
+        Leir::UITreeViewItem* targetItem, Leir::UITreeView::DropMode mode) -> bool {
+        if (draggedItems.empty() || !targetItem) return false;
         // Reverse map item -> CoreObject (O(N), once per drop).
         std::unordered_map<Leir::UITreeViewItem*, Leir::CoreObject*> rev;
         rev.reserve(m_ItemMap.size());
@@ -118,15 +118,15 @@ HierarchyPanel::HierarchyPanel()
             objs.push_back(it->second);
         }
         // Resolve the target: a real object, or a family-root group header.
-        Leir::CoreObject* parentObj = nullptr;
+        Leir::CoreObject* targetObj = nullptr;
         bool familyRootTarget = false;
         Family targetFamily = Family::Object3D;
-        if (newParent) {
-            auto it = rev.find(newParent);
+        {
+            auto it = rev.find(targetItem);
             if (it != rev.end()) {
-                parentObj = it->second;
+                targetObj = it->second;
             } else {
-                auto fit = m_FamilyRootItems.find(newParent);
+                auto fit = m_FamilyRootItems.find(targetItem);
                 if (fit == m_FamilyRootItems.end()) {
                     Leir::XConsole::PrintWarning("Hierarchy: invalid drop target");
                     return false;
@@ -134,16 +134,14 @@ HierarchyPanel::HierarchyPanel()
                 familyRootTarget = true;
                 targetFamily = fit->second;
             }
-        } else {
-            familyRootTarget = true; // root-level drop -> keep the dragged's family
-            targetFamily = FamilyOf(objs[0]);
         }
+        const bool above = (mode == Leir::UITreeView::DropMode::Above);
         // Validate: no self/cycle, family match.
         for (auto* obj : objs) {
-            if (obj == parentObj) return false;
-            if (parentObj && FamilyOf(obj) != FamilyOf(parentObj)) {
+            if (obj == targetObj) return false;
+            if (targetObj && FamilyOf(obj) != FamilyOf(targetObj)) {
                 Leir::XConsole::PrintWarning("Hierarchy: cannot reparent '{}' to '{}' — cross-family drop",
-                    obj->GetName(), parentObj->GetName());
+                    obj->GetName(), targetObj->GetName());
                 return false;
             }
             if (familyRootTarget && FamilyOf(obj) != targetFamily) {
@@ -151,18 +149,19 @@ HierarchyPanel::HierarchyPanel()
                     obj->GetName(), FamilyName(targetFamily));
                 return false;
             }
-            if (parentObj && IsDescendantOf(obj, parentObj)) {
+            if (targetObj && IsDescendantOf(obj, targetObj)) {
                 Leir::XConsole::PrintWarning("Hierarchy: cannot reparent '{}' into its own descendant '{}'",
-                    obj->GetName(), parentObj->GetName());
+                    obj->GetName(), targetObj->GetName());
                 return false;
             }
         }
+        auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+        if (!scene) return false;
+
         if (familyRootTarget) {
-            // Make the dragged a root of that family and reorder among the roots.
-            auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-            if (!scene) return false;
-            // Onto -> end (large k = end); Below -> newIndex among the family roots.
-            int k = onto ? 0x3FFFFFFF : std::max(0, newIndex);
+            // Group-header target: the dragged becomes a root of that family.
+            // Above = front (0), Below/Onto = end (large k).
+            int k = above ? 0 : 0x3FFFFFFF;
             for (auto* obj : objs) {
                 obj->SetParent(nullptr, false);
                 scene->MoveObject(obj, RootInsertIndex(scene, targetFamily, k));
@@ -170,13 +169,43 @@ HierarchyPanel::HierarchyPanel()
             }
             return true; // do NOT skip the rebuild (the tree re-syncs from the scene)
         }
-        if (onto) {
-            for (auto* obj : objs) obj->SetParent(parentObj, false);
+
+        if (mode == Leir::UITreeView::DropMode::Onto) {
+            for (auto* obj : objs) obj->SetParent(targetObj, false);
         } else {
-            for (auto* obj : objs) parentObj->InsertChildAt(obj, (size_t)std::max(0, newIndex));
+            Leir::CoreObject* parentObj = targetObj->GetParent();
+            if (parentObj) {
+                for (auto* obj : objs) {
+                    // Remove obj first so the target's index is post-removal.
+                    if (obj->GetParent()) obj->GetParent()->RemoveChild(obj);
+                    const auto& kids = parentObj->GetChildren();
+                    auto it = std::find(kids.begin(), kids.end(), targetObj);
+                    size_t ti = (size_t)(it - kids.begin());
+                    size_t idx = above ? ti : ti + 1;
+                    parentObj->InsertChildAt(obj, idx);
+                }
+            } else {
+                // Target is a root object: reorder among the family's roots.
+                const Family f = FamilyOf(targetObj);
+                for (auto* obj : objs) {
+                    obj->SetParent(nullptr, false);
+                    // Recompute the target's index among the family roots (fresh,
+                    // post-removal of obj) and insert before/after it.
+                    int ti = -1, seen = 0;
+                    for (const auto& o : scene->GetObjects()) {
+                        if (o->GetParent()) continue;
+                        if (FamilyOf(o.get()) != f) continue;
+                        if (o.get() == targetObj) { ti = seen; break; }
+                        ++seen;
+                    }
+                    if (ti < 0) return false;
+                    const int k = above ? ti : ti + 1;
+                    scene->MoveObject(obj, RootInsertIndex(scene, f, k));
+                }
+            }
         }
-        // The tree already reflects the change (append/insert at the same index)
-        // -> skip the next rebuild so the list never flickers.
+        // The tree already reflects the change (same relative semantics) -> skip
+        // the next rebuild so the list never flickers.
         m_LastSignature = BuildSignature();
         return true;
     });

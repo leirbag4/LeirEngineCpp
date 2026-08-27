@@ -618,8 +618,12 @@ UITreeView::DropTarget UITreeView::HitTestDropTarget(const Vector2& pos) const
     auto* item = m_FlatVisible[idx];
     float rowY = cr.y + (float)idx * m_RowHeight - m_ScrollOffset.y;
     float relY = pos.y - rowY;
+    // 3-zone row (industry standard): top edge = insert before, center = nest
+    // into, bottom edge = insert after.
     DropMode mode = DropMode::Onto;
-    if (relY > m_RowHeight - 4.0f) mode = DropMode::Below;
+    const float edge = 4.0f;
+    if (relY < edge) mode = DropMode::Above;
+    else if (relY > m_RowHeight - edge) mode = DropMode::Below;
     return {item, mode};
 }
 
@@ -755,7 +759,11 @@ void UITreeView::OnLayoutComputed()
             float x0 = std::round(cr.x - m_ScrollOffset.x) - cr.x;
             float indW = std::max(viewport.x, content.x);
             m_DropIndicator->GetRect().anchor = {0, 0, 0, 0};
-            if (m_DropTarget.mode == DropMode::Below) {
+            if (m_DropTarget.mode == DropMode::Above) {
+                m_DropIndicator->SetColor({0.65f, 0.45f, 1.0f, 0.95f});
+                m_DropIndicator->GetRect().offset = {x0, rowY - 1.0f, x0 + indW, rowY + 1.0f};
+                m_DropIndicator->ComputeLayout({indW, 2.0f}, {cr.x, cr.y});
+            } else if (m_DropTarget.mode == DropMode::Below) {
                 m_DropIndicator->SetColor({0.65f, 0.45f, 1.0f, 0.95f});
                 m_DropIndicator->GetRect().offset = {x0, rowY + m_RowHeight - 1.0f, x0 + indW, rowY + m_RowHeight + 1.0f};
                 m_DropIndicator->ComputeLayout({indW, 2.0f}, {cr.x, cr.y});
@@ -985,29 +993,17 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
                 for (auto* di2 : m_DragItems) if (isDesc(di2, target.item)) valid = false;
             }
             if (valid) {
-                // Compute the drop target for the callback BEFORE mutating.
-                const bool onto = (target.mode == DropMode::Onto);
-                UITreeViewItem* newParent = onto ? target.item : target.item->GetTreeParent();
-                int newIndex = -1;
-                if (onto) {
-                    newIndex = (int)target.item->GetTreeChildren().size();
-                } else if (newParent) {
-                    const auto& tc = newParent->GetTreeChildren();
-                    auto it = std::find(tc.begin(), tc.end(), target.item);
-                    newIndex = (int)(it - tc.begin()) + 1;
-                } else {
-                    auto it = std::find(m_Roots.begin(), m_Roots.end(), target.item);
-                    newIndex = (int)(it - m_Roots.begin()) + 1;
-                }
                 // Ask the scene owner (editor/panel) to apply the change FIRST —
                 // only mutate the tree structure if it accepted (it validates
                 // family/cycles at the scene level). Keeps tree + scene in sync
                 // even when the drop is rejected (no desync on cross-family).
                 bool accepted = true;
                 if (m_OnItemDragged)
-                    accepted = m_OnItemDragged(m_DragItems, newParent, newIndex, onto);
+                    accepted = m_OnItemDragged(m_DragItems, target.item, target.mode);
                 if (accepted) {
-                    // Remove from old locations
+                    // Remove from old locations FIRST so the target's position is
+                    // computed post-removal (correct Above/Below regardless of
+                    // where the dragged items were).
                     for (auto* di : m_DragItems) {
                         if (di->GetTreeParent()) di->GetTreeParent()->RemoveTreeChild(di);
                         else {
@@ -1016,19 +1012,26 @@ bool UITreeView::OnPointerUp(const Vector2& pos)
                         }
                         if (m_Viewport) m_Viewport->RemoveChild(di);
                     }
-                    // Insert at target
+                    // Insert relative to the target (post-removal): Onto = append
+                    // child; Above = sibling BEFORE; Below = sibling AFTER.
                     for (auto* di : m_DragItems) {
                         if (target.mode == DropMode::Onto) {
                             target.item->AddTreeChild(di);
                             target.item->SetExpanded(true);
                             if (m_Viewport) m_Viewport->AddChild(di);
-                        } else { // Below
+                        } else {
+                            UITreeViewItem* newParent = target.item->GetTreeParent();
                             if (newParent) {
-                                newParent->InsertTreeChildAt(di, (size_t)newIndex);
+                                auto& tc = newParent->GetTreeChildren();
+                                auto it = std::find(tc.begin(), tc.end(), target.item);
+                                size_t ti = (size_t)(it - tc.begin());
+                                size_t idx = (target.mode == DropMode::Above) ? ti : ti + 1;
+                                newParent->InsertTreeChildAt(di, idx);
                             } else {
-                                int idx = -1;
-                                for (int i = 0; i < (int)m_Roots.size(); ++i) if (m_Roots[i]==target.item) idx=i;
-                                m_Roots.insert(m_Roots.begin() + idx + 1, di);
+                                auto it = std::find(m_Roots.begin(), m_Roots.end(), target.item);
+                                size_t ti = (size_t)(it - m_Roots.begin());
+                                size_t idx = (target.mode == DropMode::Above) ? ti : ti + 1;
+                                m_Roots.insert(m_Roots.begin() + (ptrdiff_t)idx, di);
                                 di->SetIndent(m_Indent);
                             }
                             if (m_Viewport) m_Viewport->AddChild(di);

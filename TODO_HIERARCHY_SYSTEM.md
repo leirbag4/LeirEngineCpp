@@ -69,12 +69,19 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
       el viewport).
 
 ### Fase 4 — Rename inline + drag&drop
-- [ ] `SetEditable(true)` + `SetOnItemRenamed` → `obj->SetName(newName)` (el item ya actualiza su texto).
-- [ ] **Drag&drop (Onto)** → reparent: `SetOnItemDragged` → `child->SetParent(newParent)`
+- [x] `SetEditable(true)` + `SetOnItemRenamed` → `obj->SetName(newName)` (el item ya actualiza su texto).
+- [x] **Drag&drop (Onto)** → reparent: `SetOnItemDragged` → `child->SetParent(newParent)`
       (respetando familia — el guard del engine + validación del drag rechazan cross-family).
-- [ ] **Drag&drop (Below = reordenar hermanos)**: requiere reordenar `m_Children` de CoreObject
-      (agregar `InsertChildAt`/reorder al engine, chico) — opcional para esta fase.
-- [ ] Al reparentar, actualizar el mapa CoreObject↔Item y el refresco.
+- [x] **Drag&drop (Below = reordenar hermanos)**: `CoreObject::InsertChildAt` (engine) +
+      reordenar `m_Children`; el panel reordena los roots de familia vía `Scene::MoveObject`.
+- [x] **3 zonas por fila (Kendo/estándar)**: borde superior = insertar ANTES (`DropMode::Above`),
+      centro = nest (`Onto`), borde inferior = insertar DESPUÉS (`Below`). Índices **post-remoción**
+      (el tree remueve primero) → reordenar en cualquier dirección es correcto. Callback del drag
+      pasa a `(items, targetItem, mode)`.
+- [x] Al reparentar, actualizar el mapa CoreObject↔Item y el refresco. **Sin flicker**: en drops
+      sobre objetos reales se salta el rebuild (el tree ya refleja el cambio); en drops sobre
+      raíces de familia se rebuilda (el tree re-sincroniza). **Fix crash**: `ClearItems` desprende
+      TODOS los items + `RebuildAll` limpia el hover/focus del canvas (use-after-free).
 
 ### Fase 5 — "Convert to Atom" / preview de families
 - [ ] Integrar `TODO_ATOM.md` (Convert to Atom, Unpack, Isolate, Open Separately).

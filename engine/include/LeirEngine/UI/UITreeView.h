@@ -26,6 +26,11 @@ public:
     UITreeView();
     ~UITreeView() override;
 
+    // Drag&drop drop zones (industry-standard 3-zone row: top edge = insert
+    // before, center = nest into, bottom edge = insert after).
+    enum class DropMode { None, Onto, Above, Below };
+    struct DropTarget { UITreeViewItem* item = nullptr; DropMode mode = DropMode::None; };
+
     bool OwnsChild(const UIElement* child) const override;
 
     // Roots of the tree (top-level items). Children are stored in each item's
@@ -115,8 +120,15 @@ public:
     void SetOnSelectedItemsChanged(std::function<void(const std::vector<UITreeViewItem*>&)> cb) { m_OnSelectedItemsChanged = std::move(cb); }
     void SetOnItemExpanded(std::function<void(UITreeViewItem*)> cb) { m_OnItemExpanded = std::move(cb); }
     void SetOnItemCollapsed(std::function<void(UITreeViewItem*)> cb) { m_OnItemCollapsed = std::move(cb); }
+    // Drag&drop: called BEFORE the tree mutates. Returns whether the scene accepted
+    // the change; the tree only applies its own structural update when true, so a
+    // rejected drop never desyncs tree from scene. targetItem is the row under the
+    // cursor and mode is its drop zone (Onto = nest into, Above = insert as a
+    // sibling before, Below = insert as a sibling after). Both the caller and the
+    // tree implement the SAME relative semantics (compute the target's position
+    // AFTER removing the dragged items), so they always agree.
     void SetOnItemDragged(std::function<bool(const std::vector<UITreeViewItem*>& draggedItems,
-        UITreeViewItem* newParent, int newIndex, bool onto)> cb) { m_OnItemDragged = std::move(cb); }
+        UITreeViewItem* targetItem, DropMode mode)> cb) { m_OnItemDragged = std::move(cb); }
     void SetOnItemDoubleClicked(std::function<void(UITreeViewItem*)> cb) { m_OnItemDoubleClicked = std::move(cb); }
     void SetOnItemRenamed(std::function<void(UITreeViewItem*, const std::string& oldText, const std::string& newText)> cb) { m_OnItemRenamed = std::move(cb); }
 
@@ -145,8 +157,6 @@ private:
     bool IsItemVisible(UITreeViewItem* item) const;
 
     // Drop handling
-    enum class DropMode { None, Onto, Below };
-    struct DropTarget { UITreeViewItem* item = nullptr; DropMode mode = DropMode::None; };
     DropTarget HitTestDropTarget(const Vector2& pos) const;
     void ClearDropHighlight();
 
@@ -231,7 +241,7 @@ private:
     std::function<void(const std::vector<UITreeViewItem*>&)> m_OnSelectedItemsChanged;
     std::function<void(UITreeViewItem*)> m_OnItemExpanded;
     std::function<void(UITreeViewItem*)> m_OnItemCollapsed;
-    std::function<bool(const std::vector<UITreeViewItem*>&, UITreeViewItem*, int, bool)> m_OnItemDragged;
+    std::function<bool(const std::vector<UITreeViewItem*>&, UITreeViewItem*, DropMode)> m_OnItemDragged;
     std::function<void(UITreeViewItem*)> m_OnItemDoubleClicked;
     std::function<void(UITreeViewItem*, const std::string&, const std::string&)> m_OnItemRenamed;
 };
