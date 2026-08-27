@@ -91,6 +91,18 @@ public:
     // when the hit is TreeText/TreeArrow (deepest child) and clears when leaving.
     void SetTreeHovered(bool hovered);
 
+    // Filtering (driven by UITreeView::SetFilter): transient view-state flags, set
+    // by the tree on every filter change. A filtered item is excluded from the
+    // flat cache/virtualization (not rendered, not hit-tested) but NOT destroyed —
+    // items reappear when the filter clears, preserving selection/expansion.
+    void SetTreeFiltered(bool filtered) { m_TreeFiltered = filtered; }
+    bool IsTreeFiltered() const { return m_TreeFiltered; }
+    // FilterExcluded: the item never matches by its OWN text, only via a visible
+    // descendant. Used for group headers (e.g. the hierarchy's family roots) so
+    // they collapse away when empty while filtering.
+    void SetFilterExcluded(bool excluded) { m_FilterExcluded = excluded; }
+    bool IsFilterExcluded() const { return m_FilterExcluded; }
+
 protected:
     void OnLayoutComputed() override;
     void OnPointerEnter(const Vector2& pos) override;
@@ -114,6 +126,8 @@ private:
     bool m_ItemEnabled = true;
     bool m_Selected = false;
     bool m_TreeHovered = false;
+    bool m_TreeFiltered = false;
+    bool m_FilterExcluded = false;
     bool m_Expanded = true;
     float m_Indent = 16.0f;
 

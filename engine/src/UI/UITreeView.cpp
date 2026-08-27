@@ -8,6 +8,7 @@
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Input/Keyboard.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace Leir {
@@ -356,6 +357,9 @@ void UITreeView::RebuildFlatCache() const
     auto* self = const_cast<UITreeView*>(this);
     self->m_FlatVisible.clear();
     std::function<void(UITreeViewItem*)> dfs = [&](UITreeViewItem* item) {
+        // Filtered nodes (and their subtrees) are excluded from the flat view —
+        // they are NOT destroyed, just hidden (SetFilter computes the flags).
+        if (item->IsTreeFiltered()) return;
         self->m_FlatVisible.push_back(item);
         if (item->IsExpanded()) {
             for (auto* c : item->GetTreeChildren()) dfs(c);
@@ -363,6 +367,41 @@ void UITreeView::RebuildFlatCache() const
     };
     for (auto* r : m_Roots) dfs(r);
     self->m_FlatDirty = false;
+}
+
+bool UITreeView::FilterMatches(const std::string& text) const
+{
+    if (m_Filter.empty()) return true;
+    if (m_Filter.size() > text.size()) return false;
+    for (size_t i = 0; i + m_Filter.size() <= text.size(); ++i) {
+        size_t j = 0;
+        for (; j < m_Filter.size(); ++j) {
+            if (std::tolower((unsigned char)text[i + j]) != (unsigned char)m_Filter[j])
+                break;
+        }
+        if (j == m_Filter.size()) return true;
+    }
+    return false;
+}
+
+// Godot-style bottom-up visibility: an item is visible if it matches (and is not
+// filter-excluded) OR any descendant is visible. Sets the transient filtered flag
+// on the item. Post-order so children are decided before their parent.
+bool UITreeView::ComputeFilterVisibility(UITreeViewItem* item)
+{
+    bool visible = !item->IsFilterExcluded() && FilterMatches(item->GetText());
+    for (auto* c : item->GetTreeChildren())
+        if (ComputeFilterVisibility(c)) visible = true;
+    item->SetTreeFiltered(!visible);
+    return visible;
+}
+
+void UITreeView::SetFilter(const std::string& filter)
+{
+    m_Filter.clear();
+    for (char ch : filter) m_Filter += (char)std::tolower((unsigned char)ch);
+    for (auto* r : m_Roots) ComputeFilterVisibility(r);
+    InvalidateFlatCache();
 }
 
 void UITreeView::SyncScrollbars()

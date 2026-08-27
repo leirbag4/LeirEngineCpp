@@ -94,5 +94,12 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
   exponía la acumulación de `ComputeFreeLayout` (`child->m_Rect.offset += parent.xy` cada
   frame → los elementos volaban). Se arregló de raíz con el parámetro `parentOffset`
   (ver `TODO_COMPUTE_FREE_LAYOUT_FIX.md`). El panel quedó simple (Stretch), sin workaround.
+- **Paso 2.5 (2026-08-27)**: el panel es Column con un header arriba (`#55555E` lineal —
+  ver nota de color abajo) con botón "+" (placeholder del `UIContextMenu` futuro) + input
+  de filtro (`Fill` → sigue al splitter). **El filtrado es Godot-style y vive en el CORE**:
+  `UITreeView::SetFilter` + flags `SetTreeFiltered`/`SetFilterExcluded` — sin rebuild, sin
+  parpadeo, selección/expansión conservadas. **Los colores de UI son LINEALES** (el RTV
+  `UNORM_SRGB` encoda a sRGB al guardar): un literal `#55555E` (0.333 lineal) se muestra
+  ~#9C9CA4; para un gris así se usa el valor lineal del `TreeViewDebugPanel` `{0.08,0.08,0.10}`.
 
 ---

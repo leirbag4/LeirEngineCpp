@@ -89,6 +89,15 @@ public:
     void SetEditable(bool editable) { m_Editable = editable; }
     bool IsEditable() const { return m_Editable; }
 
+    // Filtering (Godot-style, no rebuild — see the UITreeViewItem flags). A node
+    // stays visible if it matches the (case-insensitive substring) filter OR has a
+    // visible descendant; everything else is hidden via the transient filtered
+    // flags. Items are NOT destroyed, so selection/expansion survive and there is
+    // no flicker. Items marked SetFilterExcluded never match by their own text.
+    // O(N) per call; empty string clears the filter. The flat cache rebuilds on
+    // the next layout (items just hide/show).
+    void SetFilter(const std::string& filter);
+
     // Scrollbar visibility toggles (like ScrollView/UITextArea)
     void SetVerticalScrollbarEnabled(bool e);
     bool IsVerticalScrollbarEnabled() const { return m_VScrollbarEnabled; }
@@ -140,6 +149,9 @@ private:
     DropTarget HitTestDropTarget(const Vector2& pos) const;
     void ClearDropHighlight();
 
+    bool FilterMatches(const std::string& text) const; // case-insensitive substring vs m_Filter
+    bool ComputeFilterVisibility(UITreeViewItem* item); // bottom-up; sets m_TreeFiltered; returns visible
+
     std::vector<UITreeViewItem*> m_Roots;
     mutable std::vector<UITreeViewItem*> m_FlatVisible;
     mutable bool m_FlatDirty = true;
@@ -168,6 +180,7 @@ private:
     Font* m_Font = nullptr;
     bool m_Editable = false;
     bool m_MultipleSelection = false;
+    std::string m_Filter; // lowercased filter text (empty = no filtering)
     bool m_VScrollbarEnabled = true;
     bool m_HScrollbarEnabled = true;
 

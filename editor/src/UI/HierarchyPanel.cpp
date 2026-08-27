@@ -1,6 +1,8 @@
 #include "HierarchyPanel.h"
 #include <LeirEngine/UI/UITreeView.h>
 #include <LeirEngine/UI/UITreeViewItem.h>
+#include <LeirEngine/UI/UIButton.h>
+#include <LeirEngine/UI/UITextInput.h>
 #include <LeirEngine/UI/UITextureCache.h>
 #include <LeirEngine/UI/Font.h>
 #include <LeirEngine/Objects/Object3D.h>
@@ -10,22 +12,68 @@
 #include <LeirEngine/Core/Log.h>
 #include <cmath>
 
+// Hierarchy background = the same gray as the TreeViewDebugPanel reference the
+// user wants to match. NOTE: UI colors are LINEAR (UI.frag returns them as-is
+// and the swapchain RTV is UNORM_SRGB, so the GPU encodes linear->sRGB on
+// store). A literal #55555E value (0.333, 0.333, 0.369) would therefore render
+// as ~#9C9CA4; the linear value below is what displays as the dark gray.
+static const Leir::Vector4 kHierarchyBg = {0.08f, 0.08f, 0.10f, 0.85f};
+
 HierarchyPanel::HierarchyPanel()
 {
     SetName("Hierarchy");
-    SetColor({0.16f, 0.16f, 0.18f, 1.0f});
+    SetColor(kHierarchyBg);
+    SetLayoutMode(Leir::LayoutMode::Column);
+    SetPadding(0.0f, 0.0f, 0.0f, 0.0f);
+    SetSpacing(0.0f);
+
+    // Header bar: "+" add button (left) + search filter (right), fills the row.
+    m_Header = new Leir::UIPanel();
+    m_Header->SetName("HierarchyHeader");
+    m_Header->SetColor(kHierarchyBg);
+    m_Header->SetLayoutMode(Leir::LayoutMode::Row);
+    m_Header->SetPadding(4.0f, 4.0f, 4.0f, 4.0f);
+    m_Header->SetSpacing(4.0f);
+    // SizePolicy::Content: the Column above gives a Fixed UIPanel child its
+    // GetMinSize().y height, and UIElement::GetMinSize defaults to {0,0} unless
+    // overridden — the header would collapse to ~0px (tiny button/input, no
+    // events). Content sizes the header from its children (~32px) automatically.
+    m_Header->SetSizePolicy(Leir::SizePolicy::Content);
+    AddChild(m_Header);
+
+    m_AddButton = new Leir::UIButton();
+    m_AddButton->SetName("HierarchyAddButton");
+    m_AddButton->SetText("+");
+    m_AddButton->SetTextAlign(Leir::ButtonTextAlign::Center);
+    m_AddButton->SetMinSize({22.0f, 22.0f});
+    // Placeholder (Paso 2.5): the intended behavior is to open a UIContextMenu
+    // with Object2D / Object3D / UIElement that creates the object in the scene.
+    // Programmed together with the ContextMenu (P1, TODO_UI_CONTEXT_MENU.md).
+    m_AddButton->SetOnClick([this]() {
+        Leir::XConsole::Debug("Hierarchy: '+' pressed — UIContextMenu pendiente (Object2D/Object3D/UIElement)");
+    });
+    m_Header->AddChild(m_AddButton);
+
+    m_FilterInput = new Leir::UITextInput();
+    m_FilterInput->SetName("HierarchyFilter");
+    m_FilterInput->SetPlaceholder("Filter...");
+    // Fill: in the header Row the input takes the leftover width, docking its
+    // right edge to the header's right edge (follows the dock splitter resize).
+    m_FilterInput->SetSizePolicy(Leir::SizePolicy::Fill);
+    m_FilterInput->SetOnChange([this](const std::string& text) {
+        // Godot-style filtering lives in the CORE (UITreeView::SetFilter): nodes
+        // are hidden in place (no rebuild) so typing never flickers and
+        // selection/expansion survive. Re-applied after rebuilds from m_FilterText.
+        m_FilterText = text;
+        if (m_TreeView) m_TreeView->SetFilter(text);
+    });
+    m_Header->AddChild(m_FilterInput);
 
     m_TreeView = new Leir::UITreeView();
     m_TreeView->SetName("HierarchyTreeView");
     m_TreeView->SetMultipleSelectionEnabled(true);
     m_TreeView->SetEditable(true); // F2 rename (wired to SetName in Fase 4)
     m_TreeView->SetIconsEnabled(true);
-    // Stretch = the tree fills the panel. Safe now: the layout core no longer
-    // mutates Free-layout children's offsets with += every frame (the old
-    // accumulation bug that made this fly downward — see
-    // TODO_COMPUTE_FREE_LAYOUT_FIX.md), so an anchor-based child stays put.
-    m_TreeView->GetRect().anchor = Leir::AnchorSet::Stretch();
-    m_TreeView->GetRect().offset = {};
     AddChild(m_TreeView);
 }
 
@@ -34,6 +82,8 @@ HierarchyPanel::~HierarchyPanel() = default; // teardown via editor DeleteUiSubt
 void HierarchyPanel::SetFont(Leir::Font* font)
 {
     if (m_TreeView) m_TreeView->SetFont(font);
+    if (m_AddButton) m_AddButton->SetFont(font);
+    if (m_FilterInput) m_FilterInput->SetFont(font);
 }
 
 void HierarchyPanel::SetBackend(Leir::RHI::RenderBackend* backend)
@@ -46,8 +96,8 @@ void HierarchyPanel::SetContentScale(float scale)
     if (scale < 1.0f) scale = 1.0f;
     if (std::fabs(scale - m_ContentScale) < 1e-4f) return;
     m_ContentScale = scale;
-    m_IconsLoaded = false;  // reload icons at the new DPI
-    m_LastSignature.clear(); // force a rebuild so items pick up the new icons
+    m_IconsLoaded = false;   // reload icons at the new DPI
+    m_LastSignature = 0;     // force a rebuild so items pick up the new icons
 }
 
 Leir::Vector2 HierarchyPanel::GetMinSize() const
@@ -58,10 +108,19 @@ Leir::Vector2 HierarchyPanel::GetMinSize() const
 void HierarchyPanel::Refresh()
 {
     if (!m_TreeView) return;
-    const std::string sig = BuildSignature();
+    const size_t sig = BuildSignature();
     if (sig != m_LastSignature) {
         RebuildAll();
         m_LastSignature = sig;
+    } else {
+        // Name sync (cheap O(N) pass): renames don't change the structural
+        // signature, so update item texts without rebuilding (no collapse).
+        for (auto& kv : m_ItemMap) {
+            auto* obj = kv.first;
+            auto* item = kv.second;
+            if (obj && item && item->GetText() != obj->GetName())
+                item->SetText(obj->GetName());
+        }
     }
 }
 
@@ -82,18 +141,20 @@ const char* HierarchyPanel::FamilyName(Family f)
     return "?";
 }
 
-std::string HierarchyPanel::BuildSignature() const
+// Structural signature (O(N), no allocation): object count + raw parent pointers
+// (stable within a session — unique_ptr pointees never move). Detects creation/
+// deletion/reparenting but NOT renames; renames are handled by the name-sync
+// pass in Refresh so the tree never rebuilds/collapses on a rename.
+size_t HierarchyPanel::BuildSignature() const
 {
     auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-    if (!scene) return "";
-    std::string sig;
-    sig.reserve(256);
-    // Cheap change detection: names + parent wiring. Any structural change or
-    // rename rebuilds; a static scene yields the same string every frame.
-    for (const auto& obj : scene->GetObjects()) {
-        sig += obj->GetName();
-        sig += obj->GetParent() ? (">" + obj->GetParent()->GetName()) : "^";
-        sig += ';';
+    if (!scene) return 0;
+    const auto& objs = scene->GetObjects();
+    size_t sig = 14695981039346656037ull; // FNV-1a offset basis
+    sig = (sig ^ objs.size()) * 1099511628211ull;
+    for (const auto& obj : objs) {
+        Leir::CoreObject* p = obj->GetParent();
+        sig = (sig ^ (uintptr_t)(p ? p : (Leir::CoreObject*)(uintptr_t)1)) * 1099511628211ull;
     }
     return sig;
 }
@@ -124,19 +185,22 @@ void HierarchyPanel::RebuildAll()
     auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
     if (!scene) return;
 
-    // 3 family roots, expanded by default (UITreeViewItem default).
+    // 3 family roots, expanded by default. Filter-excluded: while filtering they
+    // only stay visible via visible descendants, so empty families collapse away
+    // (the core UITreeView::SetFilter handles the Godot-style hiding).
     Leir::UITreeViewItem* roots[3] = {nullptr, nullptr, nullptr};
     for (int f = 0; f < 3; ++f) {
         auto* r = new Leir::UITreeViewItem();
         r->SetText(FamilyName((Family)f));
         r->SetShowIcon(true);
+        r->SetFilterExcluded(true);
         r->SetIcon(f == 0 ? m_Icon3D : (f == 1 ? m_Icon2D : m_IconUI));
         m_OwnedItems.push_back(r);
         m_TreeView->AddItem(r);
         roots[f] = r;
     }
 
-    // One item per scene object (icon by family). Wiring happens next so a
+    // Items for every scene object (icon by family). Wiring happens next so a
     // child that appears before its parent in the list still lands correctly.
     for (const auto& obj : scene->GetObjects()) {
         auto* item = new Leir::UITreeViewItem();
@@ -159,4 +223,9 @@ void HierarchyPanel::RebuildAll()
             m_TreeView->AddItem(it, roots[(int)FamilyOf(obj.get())]);
         }
     }
+
+    // Re-apply the active filter to the freshly built items (new items default
+    // to unfiltered; SetFilter is O(N) and idempotent for the empty string).
+    if (!m_FilterText.empty())
+        m_TreeView->SetFilter(m_FilterText);
 }
