@@ -45,9 +45,6 @@ public:
     Leir::UITreeView* GetTreeView() const { return m_TreeView; }
     Leir::Vector2 GetMinSize() const override;
 
-protected:
-    void OnLayoutComputed() override;
-
 private:
     enum class Family { Object3D, Object2D, UI };
     static Family FamilyOf(Leir::CoreObject* obj);

@@ -41,7 +41,7 @@ public:
     float GetSplitterWidth() const { return 6.0f; }
 
     Vector2 GetMinSize() const override;
-    void ComputeLayout(const Vector2& availableSize) override;
+    void ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset = Vector2(0.0f, 0.0f)) override;
 
 private:
     void RebuildSplitters();

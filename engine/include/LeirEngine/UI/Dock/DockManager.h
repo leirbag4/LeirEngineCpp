@@ -77,7 +77,7 @@ public:
     // Free layout would ADD this manager's position to every child offset on
     // each call, accumulating frame over frame whenever the manager is not at
     // (0,0) — the dock below the top toolbar would slide down 30px per frame.
-    void ComputeLayout(const Vector2& availableSize) override;
+    void ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset = Vector2(0.0f, 0.0f)) override;
 
     DockManager(const DockManager&) = delete;
     DockManager& operator=(const DockManager&) = delete;

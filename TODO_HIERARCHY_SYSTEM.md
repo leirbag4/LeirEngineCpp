@@ -90,5 +90,9 @@ es dueña de `m_Objects` (lista plana) y la jerarquía es ortogonal (`GetParent(
 - El panel Hierarchy reusa el `UITreeView` virtualizado (miles de objetos sin problema).
 - Los tabs de escenas (Godot-style) afectan qué escena muestra el Hierarchy — ver
   `TODO_VIEWPORT_VIEW_MODES.md`.
+- **Fase 2 requirió un fix del core de layout**: el `HierarchyPanel` (Free + Stretch)
+  exponía la acumulación de `ComputeFreeLayout` (`child->m_Rect.offset += parent.xy` cada
+  frame → los elementos volaban). Se arregló de raíz con el parámetro `parentOffset`
+  (ver `TODO_COMPUTE_FREE_LAYOUT_FIX.md`). El panel quedó simple (Stretch), sin workaround.
 
 ---

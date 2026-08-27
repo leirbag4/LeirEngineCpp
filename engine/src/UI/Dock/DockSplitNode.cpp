@@ -120,9 +120,11 @@ Vector2 DockSplitNode::GetMinSize() const
     return horiz ? Vector2{main, cross} : Vector2{cross, main};
 }
 
-void DockSplitNode::ComputeLayout(const Vector2& availableSize)
+void DockSplitNode::ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
 
     const size_t n = m_NodeChildren.size();
     if (n == 0)

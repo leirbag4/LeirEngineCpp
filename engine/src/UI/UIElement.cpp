@@ -105,29 +105,41 @@ Vector2 UIElement::GetContentSize() const
             m_Padding[1] + mainTotal + m_Padding[3]};
 }
 
-void UIElement::ComputeLayout(const Vector2& availableSize)
+void UIElement::ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     if (!m_Active)
         return;
 
     switch (m_LayoutMode) {
         case LayoutMode::Free:
-            ComputeFreeLayout(availableSize);
+            ComputeFreeLayout(availableSize, parentOffset);
             break;
         case LayoutMode::Row:
-            ComputeRowLayout(availableSize);
+            ComputeRowLayout(availableSize, parentOffset);
             break;
         case LayoutMode::Column:
-            ComputeColumnLayout(availableSize);
+            ComputeColumnLayout(availableSize, parentOffset);
             break;
     }
 
     OnLayoutComputed();
 }
 
-void UIElement::ComputeFreeLayout(const Vector2& availableSize)
+// FIX (2026-08-27, TODO_COMPUTE_FREE_LAYOUT_FIX.md): layout position propagation
+// is now done through a parentOffset PARAMETER that is added to the child's
+// m_ComputedRect each pass, NOT by mutating the child's m_Rect.offset with +=.
+// The old code (child->m_Rect.offset.left += m_ComputedRect.x) permanently grew
+// every Free-layout child's offset by the parent's position EVERY frame, so any
+// child whose offset was anchor-based / set once (a Stretch child, a panel that
+// re-positions once) accumulated the parent's origin and "flew" down/right
+// (the Hierarchy panel bug; DockManager/DockDropOverlay worked around it with
+// ComputeLayout overrides that bypassed this pass). Offsets are now stable
+// anchor-relative inputs; the absolute position comes only from parentOffset.
+void UIElement::ComputeFreeLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
 
     for (auto* child : m_Children) {
         if (!child->IsActive())
@@ -136,17 +148,15 @@ void UIElement::ComputeFreeLayout(const Vector2& availableSize)
             m_ComputedRect.z - m_Padding[0] - m_Padding[2],
             m_ComputedRect.w - m_Padding[1] - m_Padding[3]
         };
-        child->m_Rect.offset.left += m_ComputedRect.x;
-        child->m_Rect.offset.top += m_ComputedRect.y;
-        child->m_Rect.offset.right += m_ComputedRect.x;
-        child->m_Rect.offset.bottom += m_ComputedRect.y;
-        child->ComputeLayout(childSize);
+        child->ComputeLayout(childSize, {m_ComputedRect.x, m_ComputedRect.y});
     }
 }
 
-void UIElement::ComputeRowLayout(const Vector2& availableSize)
+void UIElement::ComputeRowLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
 
     float innerX = m_Padding[0];
     float innerY = m_Padding[1];
@@ -224,9 +234,11 @@ void UIElement::ComputeRowLayout(const Vector2& availableSize)
     }
 }
 
-void UIElement::ComputeColumnLayout(const Vector2& availableSize)
+void UIElement::ComputeColumnLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
 
     float innerX = m_Padding[0];
     float innerY = m_Padding[1];

@@ -20,6 +20,12 @@ HierarchyPanel::HierarchyPanel()
     m_TreeView->SetMultipleSelectionEnabled(true);
     m_TreeView->SetEditable(true); // F2 rename (wired to SetName in Fase 4)
     m_TreeView->SetIconsEnabled(true);
+    // Stretch = the tree fills the panel. Safe now: the layout core no longer
+    // mutates Free-layout children's offsets with += every frame (the old
+    // accumulation bug that made this fly downward — see
+    // TODO_COMPUTE_FREE_LAYOUT_FIX.md), so an anchor-based child stays put.
+    m_TreeView->GetRect().anchor = Leir::AnchorSet::Stretch();
+    m_TreeView->GetRect().offset = {};
     AddChild(m_TreeView);
 }
 
@@ -47,29 +53,6 @@ void HierarchyPanel::SetContentScale(float scale)
 Leir::Vector2 HierarchyPanel::GetMinSize() const
 {
     return {160.0f, 120.0f};
-}
-
-void HierarchyPanel::OnLayoutComputed()
-{
-    Leir::UIPanel::OnLayoutComputed();
-    if (!m_TreeView) return;
-
-    // Pin the tree to the FULL panel rect every frame, with an ABSOLUTE offset
-    // (anchor TopLeft). This mirrors how UITreeView itself positions its
-    // internal viewport/items (UITreeView.cpp OnLayoutComputed) and is REQUIRED
-    // because the UI core's ComputeFreeLayout accumulates the parent's position
-    // into child offsets with `+=` each pass (it assumes Free-layout children
-    // re-assign their offsets every frame — see UIElement.cpp). Using a Stretch
-    // anchor here made the tree's offset grow by the panel position every frame
-    // ("elements fly downward" as soon as the panel becomes visible). Column/
-    // Row parents are safe (they re-assign with `=`); a Free parent must too.
-    const auto& cr = GetComputedRect();
-    m_TreeView->GetRect().anchor = {0.0f, 0.0f, 0.0f, 0.0f};
-    m_TreeView->GetRect().offset = {
-        std::round(cr.x), std::round(cr.y),
-        std::round(cr.x + cr.z), std::round(cr.y + cr.w)
-    };
-    m_TreeView->ComputeLayout({cr.z, cr.w});
 }
 
 void HierarchyPanel::Refresh()

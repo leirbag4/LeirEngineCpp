@@ -63,14 +63,17 @@ void DockDropOverlay::HideZone()
     m_Zone->SetActive(false);
 }
 
-void DockDropOverlay::ComputeLayout(const Vector2& availableSize)
+void DockDropOverlay::ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
     // The ghost/zone are positioned in ABSOLUTE screen coordinates by
-    // SetGhostRect/SetZoneRect. Lay them out directly from their own rects:
-    // the base Free layout would += this panel's origin onto their offsets
-    // EVERY frame (permanent mutation), which accumulates when the overlay is
-    // not at (0,0) and drifts the drag ghost down each frame.
+    // SetGhostRect/SetZoneRect, so lay them out directly from their own rects
+    // with parentOffset={} (they are already absolute). The old core Free
+    // layout used to += this panel's origin into every child offset every frame
+    // (see TODO_COMPUTE_FREE_LAYOUT_FIX.md), drifting the ghost; that is fixed
+    // in UIElement.cpp.
     for (auto* child : GetChildren()) {
         if (!child->IsActive())
             continue;

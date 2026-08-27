@@ -91,7 +91,12 @@ public:
     bool HasMinSizeOverride() const { return m_MinSizeOverride.has_value(); }
 
     virtual Vector2 GetContentSize() const;
-    virtual void ComputeLayout(const Vector2& availableSize);
+    // Lays out this element (and children) given an available size. parentOffset
+    // is the absolute position of the parent: it is ADDED to this element's own
+    // m_ComputedRect (never accumulated into m_Rect.offset), so the whole tree
+    // ends up with absolute positions without mutating anchor-relative offsets.
+    virtual void ComputeLayout(const Vector2& availableSize,
+        const Vector2& parentOffset = Vector2(0.0f, 0.0f));
 
     UIElement* FindChildByName(const std::string& name);
 
@@ -139,9 +144,9 @@ private:
     std::vector<UIElement*> m_Children;
     std::optional<Vector2> m_MinSizeOverride;
     Vector2 GetNaturalSize() const;
-    void ComputeFreeLayout(const Vector2& availableSize);
-    void ComputeRowLayout(const Vector2& availableSize);
-    void ComputeColumnLayout(const Vector2& availableSize);
+    void ComputeFreeLayout(const Vector2& availableSize, const Vector2& parentOffset);
+    void ComputeRowLayout(const Vector2& availableSize, const Vector2& parentOffset);
+    void ComputeColumnLayout(const Vector2& availableSize, const Vector2& parentOffset);
 };
 
 } // namespace Leir

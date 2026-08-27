@@ -508,15 +508,18 @@ void DockManager::NotifyLayoutChanged()
         m_OnLayoutChanged();
 }
 
-void DockManager::ComputeLayout(const Vector2& availableSize)
+void DockManager::ComputeLayout(const Vector2& availableSize, const Vector2& parentOffset)
 {
     m_ComputedRect = m_Rect.GetRect(availableSize);
+    m_ComputedRect.x += parentOffset.x;
+    m_ComputedRect.y += parentOffset.y;
 
-    // Lay out the dock tree with ABSOLUTE rects (set, not +=). The base Free
-    // layout permanently adds this panel's position to every child offset on
-    // each call (ComputeFreeLayout: child->m_Rect.offset.top += m_ComputedRect.y),
-    // which accumulates frame over frame whenever the manager is not at (0,0) —
-    // the dock below the top toolbar (y=30) would slide down 30px every frame.
+    // Lay out the dock tree with ABSOLUTE rects (set, not +=). (The base Free
+    // layout used to permanently += this panel's position into every child
+    // offset, accumulating when the manager was not at (0,0) — the dock below
+    // the toolbar at y=30 slid down 30px/frame; that core bug is fixed in
+    // UIElement.cpp, and this override passes parentOffset={} since the child
+    // offsets below are already absolute.)
     const float innerX = m_ComputedRect.x + m_Padding[0];
     const float innerY = m_ComputedRect.y + m_Padding[1];
     const float innerW = m_ComputedRect.z - m_Padding[0] - m_Padding[2];
