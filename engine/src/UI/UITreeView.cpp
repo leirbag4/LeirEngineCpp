@@ -387,9 +387,13 @@ bool UITreeView::FilterMatches(const std::string& text) const
 // Godot-style bottom-up visibility: an item is visible if it matches (and is not
 // filter-excluded) OR any descendant is visible. Sets the transient filtered flag
 // on the item. Post-order so children are decided before their parent.
+// An EMPTY filter matches everything (even filter-excluded items), so clearing
+// the filter always brings every item back — exclusion only applies while a
+// non-empty filter is active.
 bool UITreeView::ComputeFilterVisibility(UITreeViewItem* item)
 {
-    bool visible = !item->IsFilterExcluded() && FilterMatches(item->GetText());
+    const bool matches = m_Filter.empty() || (!item->IsFilterExcluded() && FilterMatches(item->GetText()));
+    bool visible = matches;
     for (auto* c : item->GetTreeChildren())
         if (ComputeFilterVisibility(c)) visible = true;
     item->SetTreeFiltered(!visible);

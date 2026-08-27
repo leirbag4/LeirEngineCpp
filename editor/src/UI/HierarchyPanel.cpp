@@ -185,15 +185,15 @@ void HierarchyPanel::RebuildAll()
     auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
     if (!scene) return;
 
-    // 3 family roots, expanded by default. Filter-excluded: while filtering they
-    // only stay visible via visible descendants, so empty families collapse away
-    // (the core UITreeView::SetFilter handles the Godot-style hiding).
+    // 3 family roots, expanded by default. NOT filter-excluded: they behave like
+    // normal items while filtering — they match by their own text (searching "UI"
+    // or "[" shows them) and the core's Godot rule still collapses empty families
+    // when the filter matches nothing in them (e.g. "cube" hides [Object2D]/[UI]).
     Leir::UITreeViewItem* roots[3] = {nullptr, nullptr, nullptr};
     for (int f = 0; f < 3; ++f) {
         auto* r = new Leir::UITreeViewItem();
         r->SetText(FamilyName((Family)f));
         r->SetShowIcon(true);
-        r->SetFilterExcluded(true);
         r->SetIcon(f == 0 ? m_Icon3D : (f == 1 ? m_Icon2D : m_IconUI));
         m_OwnedItems.push_back(r);
         m_TreeView->AddItem(r);
