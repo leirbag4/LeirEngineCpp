@@ -11,7 +11,7 @@ namespace Leir {
 UIContextMenu::UIContextMenu()
 {
     SetName("ContextMenu");
-    SetColor({0.13f, 0.13f, 0.15f, 0.96f});
+    SetColor({0.13f, 0.13f, 0.15f, 1.0f}); // opaque container (items are transparent)
     SetLayoutMode(LayoutMode::Column);
     SetPadding(4.0f, 4.0f, 4.0f, 4.0f);
     SetSpacing(0.0f);
@@ -147,6 +147,10 @@ UIContextMenu::MenuItem::MenuItem(const std::string& label, std::function<void()
     m_Label->SetName("CtxLabel");
     m_Label->SetText(label);
     m_Label->SetSizePolicy(SizePolicy::Fill);
+    // NOT hit-testable: otherwise the canvas hover lands on the label (the
+    // deepest child) and the MenuItem's OnPointerEnter/Exit never fire, so the
+    // row would never highlight on hover. The row is the hover/click target.
+    m_Label->SetHitTestable(false);
     AddChild(m_Label);
     UpdateColors();
 }
@@ -177,7 +181,8 @@ void UIContextMenu::MenuItem::SetFont(Font* font)
 
 void UIContextMenu::MenuItem::UpdateColors()
 {
-    SetColor(m_Hovered ? m_BgHover : m_BgNormal);
+    // Disabled rows never highlight (m_Hovered is ignored for them).
+    SetColor(m_Hovered && !m_Disabled ? m_BgHover : m_BgNormal);
     if (m_Label) m_Label->SetColor(m_Disabled ? m_TextDisabled : m_TextNormal);
 }
 
@@ -192,6 +197,8 @@ bool UIContextMenu::MenuItem::OnPointerDown(const Vector2&)
 
 void UIContextMenu::MenuItem::OnPointerEnter(const Vector2&)
 {
+    if (m_Disabled)
+        return; // disabled rows never highlight (no background, only grayed text)
     m_Hovered = true;
     UpdateColors();
 }

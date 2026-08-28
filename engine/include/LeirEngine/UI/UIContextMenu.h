@@ -76,8 +76,10 @@ private:
     std::function<void()> m_Activate;
     bool m_Disabled = false;
     bool m_Hovered = false;
-    Vector4 m_BgNormal = {0.20f, 0.20f, 0.23f, 1.0f};
-    Vector4 m_BgHover = {0.32f, 0.34f, 0.40f, 1.0f};
+    // Transparent rows (the menu's panel background shows through uniformly);
+    // only the hover tint is visible. #846FC0 in LINEAR (the RTV encodes sRGB).
+    Vector4 m_BgNormal = {0.0f, 0.0f, 0.0f, 0.0f};
+    Vector4 m_BgHover = {0.263f, 0.159f, 0.527f, 1.0f};
     Vector4 m_TextNormal = {0.88f, 0.88f, 0.90f, 1.0f};
     Vector4 m_TextDisabled = {0.55f, 0.55f, 0.58f, 1.0f};
 };
