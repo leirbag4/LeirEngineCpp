@@ -307,9 +307,10 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       lifecycle** (`World::GetHybrids()` → `Component::Tick`) → `obj->OnUpdate` (recursión) →
       `m_Transforms.Update()`. **`ECSScene` se BORRA** (fue absorbida). `ECSDemo` migrado a `Scene`.
       Verificado: build limpio, ctest 3/3, `PhysicsDemo` (RigidBody/Collider hybrids corriendo su
-      lifecycle, `objs=10`), `ECSDemo`/`ECSBackedDemo` (`renderables=5`, kid lossy 1,1,1), smoke del
-      editor limpio. **PENDIENTE: verificación VISUAL del usuario** (jerarquía, gizmos, inspector,
-      picking, "+", drag&drop).
+      lifecycle, `objs=10`), `ECSDemo` (`renderables=5`, kid lossy 1,1,1), smoke del editor limpio, y
+      **verificación VISUAL del usuario en d3d12/vulkan/webgpu** (jerarquía, gizmos, inspector, picking,
+      "+", drag&drop). **`ECSBackedDemo` se BORRÓ** (el proof de A con `BackedScene` propio quedó
+      redundante — `Scene` ya es la implementación ECS y `ECSDemo` lo demuestra con la `Scene` real).
 - [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +
       `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/GetComponent/
       RemoveComponent` delegan al tree + pools + HybridComponent.
