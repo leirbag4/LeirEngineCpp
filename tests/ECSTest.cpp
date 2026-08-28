@@ -541,6 +541,31 @@ int main()
     // macOS doesn't abort in Jolt's thread teardown at process exit.
     PhysicsWorld::GetInstance().Shutdown();
 
+    // --- Fase 2: SIMD mat4x4 multiply matches the scalar glm result ---
+    {
+        uint32_t seed = 12345u;
+        auto rnd = [&seed]() {
+            seed = seed * 1664525u + 1013904223u;
+            return (float)(seed >> 8) / 16777216.0f * 20.0f - 10.0f;
+        };
+        bool simdOk = true;
+        float maxDiff = 0.0f;
+        for (int t = 0; t < 200; ++t) {
+            Matrix4x4 a, b;
+            for (float& v : a.m) v = rnd();
+            for (float& v : b.m) v = rnd();
+            Matrix4x4 c1 = a * b; // glm scalar
+            Matrix4x4 c2 = Matrix4x4::MultiplySimd(a, b);
+            for (int i = 0; i < 16; ++i) {
+                float d = std::fabs(c1.m[i] - c2.m[i]);
+                if (d > maxDiff) maxDiff = d;
+            }
+        }
+        // FMA accumulates with a single rounding per term vs glm's two — the
+        // results agree to float precision, not bit-exactly.
+        Check(maxDiff < 5e-3f, "SIMD mat4x4 multiply matches scalar (float precision)");
+    }
+
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;
 }

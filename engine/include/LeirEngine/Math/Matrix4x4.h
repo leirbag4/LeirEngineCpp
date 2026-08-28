@@ -3,6 +3,7 @@
 #include "Vector4.h"
 #include "Quaternion.h"
 #include "Mathf.h"
+#include "Simd.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <array>
@@ -39,6 +40,19 @@ struct Matrix4x4 {
     Vector3 MultiplyPoint(const Vector3& point) const;
     Vector3 MultiplyVector(const Vector3& vec) const;
     Vector3 MultiplyPoint3x4(const Vector3& point) const;
+
+    // SIMD 4x4 multiply (Fase 2): C = A*B computed per output column with
+    // splat+FMA over A's columns. Equivalent to glm's scalar mat4*mat4.
+    static Matrix4x4 MultiplySimd(const Matrix4x4& a, const Matrix4x4& b) {
+        Matrix4x4 c;
+        for (int j = 0; j < 4; ++j) {
+            Mathf::Simd4f acc = Mathf::SimdMul(Mathf::SimdLoad(&a.m[0]), Mathf::SimdSplat(b(0, j)));
+            for (int k = 1; k < 4; ++k)
+                acc = Mathf::SimdFma(Mathf::SimdLoad(&a.m[k * 4]), Mathf::SimdSplat(b(k, j)), acc);
+            Mathf::SimdStore(&c.m[j * 4], acc);
+        }
+        return c;
+    }
 
     Matrix4x4 Inverse() const;
     Matrix4x4 Transpose() const;

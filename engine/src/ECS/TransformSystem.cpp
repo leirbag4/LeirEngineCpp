@@ -22,7 +22,8 @@ static void ComputeWorld(const LocalTransform& lt, const WorldTransform* parentW
         out.worldPosition = lt.position;
         out.worldRotation = lt.rotation;
     } else {
-        out.worldMatrix = parentWT->worldMatrix * local;
+        // SIMD 4x4 multiply (Fase 2): the hot transform-propagation path.
+        out.worldMatrix = Matrix4x4::MultiplySimd(parentWT->worldMatrix, local);
         out.worldRotation = parentWT->worldRotation * lt.rotation;
         out.worldPosition = parentWT->worldMatrix.MultiplyPoint3x4(lt.position);
     }

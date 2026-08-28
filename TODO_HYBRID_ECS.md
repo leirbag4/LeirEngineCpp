@@ -469,12 +469,23 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       andan idénticos — verificado por el usuario.
 
 ### Fase 2 — SIMD + Multithreading
-- [ ] Wrappers SIMD en el módulo Math (SSE/AVX + dispatcher x86, NEON ARM, SIMD128 wasm).
-- [ ] Transform propagation SIMD (4×4 por lanes).
+
+**Estado**: inicio de SIMD (wrappers en Math + matmul + transform propagation).
+
+- [x] **Wrappers SIMD en el módulo Math** (`Math/Simd.h`): `Simd4f` (4 floats) con
+      load/store/add/mul/fma/splat/lane por plataforma — **SSE2** (x64, baseline), **NEON**
+      (`float32x4_t`, arm64), **SIMD128** (`v128_t`, wasm), **escalar** (fallback). Todo wrappeado en el
+      módulo Math (regla Mathf). `Matrix4x4::MultiplySimd(a,b)` = mat4×mat4 por columnas con splat+FMA
+      (16 FMA, 4 stores) — verificado en `ECSTest` (**ALL PASS**: coincide con glm a precisión float en
+      200 pares aleatorios; FMA acumula con una sola redondez vs las dos de glm).
+- [x] **Transform propagation SIMD (4×4 por lanes)**: `TransformSystem::ComputeWorld` usa
+      `Matrix4x4::MultiplySimd` para el hot path `parentWorld × local`. Verificado: build limpio, ctest
+      3/3, ECSDemo (`renderables=5`), smoke editor OK.
 - [ ] Render list / draw command build vectorizado.
 - [ ] Job system + scheduler de sistemas por dependencias de acceso.
 - [ ] Command buffer aplicado en sync points (paralelo seguro).
 - [ ] Benchmarks: fps / frame time / cache misses por plataforma (targets en §11).
+- [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).
 
 ### Fase 3 — Tier advanced ECS (opcional, para power users)
 - [ ] Exponer el `World` ECS público (crear entidades/sistemas directamente, estilo Unity DOTS).

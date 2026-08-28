@@ -1055,6 +1055,25 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2 inicio: wrappers SIMD en Math + transform propagation SIMD** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §5/§10): nuevo `Math/Simd.h` — `Simd4f` (4 floats) con load/store/add/mul/fma/
+  splat/lane por plataforma (**SSE2** x64, **NEON** arm64, **SIMD128** wasm, **escalar** fallback), todo
+  wrappeado en el módulo Math (regla). `Matrix4x4::MultiplySimd(a,b)` = mat4×mat4 por columnas con
+  splat+FMA. `TransformSystem::ComputeWorld` usa `MultiplySimd` para `parentWorld × local`. Bug real
+  encontrado y corregido: el término k=0 estaba transpuesto (`b(j,0)` → `b(0,j)`). Verificado en
+  `ECSTest` (**ALL PASS**: SIMD == glm a precisión float en 200 pares; FMA = una sola redondez vs las
+  dos de glm), build limpio, ctest 3/3, ECSDemo, smoke editor OK.
+
+- **Hybrid ECS — Fase 1 restos COMPLETOS (tags + orden estable + render sobre grupos)** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7/§10): (a) `HierarchyPanel::FamilyOf` usa `Tag3D/Tag2D` del ECS en vez de
+  `dynamic_cast`; (b) `OwnedGroup` con **orden ESTABLE** (tombstones + free-list + `m_RowOf` O(1),
+  re-add reutiliza el slot original); (c) **`RenderPipeline` itera los `OwnedGroup`s journal-synced**
+  (`SceneGroups::Renderables/Sprites/Cameras/Lights` = `OwnedGroup<HybridComponent<X>, Active,
+  WorldTransform>`) — sin GetObjects/GetComponent/GetTransform por frame. Nuevo `ECS::Active` (espejo
+  de `CoreObject::SetActive`) para que el render salte inactivos; `ISceneStorage` expone los 4 grupos;
+  `Scene::OnUpdate` sincroniza grupos + `ClearJournal`. Verificado: build limpio, ctest 3/3, ECSDemo
+  (`renderables=5`), PhysicsDemo (`objs=10`), smoke editor OK (verificado visualmente por el usuario).
+
 - **Hybrid ECS — Etapa A FINAL: storage OOP de componentes ELIMINADO de `CoreObject`** (2026-08-28,
   `TODO_HYBRID_ECS.md` §7): `m_Components`/`m_ComponentIndex` y los branches OOP de
   `AddComponent/GetComponent/RemoveComponent` borrados — todo componente vive como `HybridComponent<T>`
