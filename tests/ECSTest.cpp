@@ -411,6 +411,28 @@ int main()
     Check(es.GetObjects().size() == 4, "ecsscene GetObjects lists all objects");
     Check(es.FindObjectByUUID(root->GetUUID()) == root, "ecsscene FindObjectByUUID");
 
+    // AddChild links the transform (Unity semantics): a child created at world
+    // (5,5,5) under a parent at (1,2,3) STAYS at (5,5,5) and its local becomes
+    // (4,3,2). Before the fix AddChild only wired the tree -> the child drifted.
+    ECSScene es2;
+    Object3D* pa = es2.CreateObject3D("pa");
+    pa->GetTransform().SetLocalPosition(Leir::Vector3(1, 2, 3));
+    Object3D* ca = es2.CreateObject3D("ca");
+    ca->GetTransform().SetLocalPosition(Leir::Vector3(5, 5, 5));
+    pa->AddChild(ca);
+    es2.OnUpdate(0.0f);
+    Vector3 wca = ca->GetTransform().GetWorldPosition();
+    Vector3 lca = ca->GetTransform().GetLocalPosition();
+    Check(std::fabs(wca.x - 5) < 1e-3f && std::fabs(wca.y - 5) < 1e-3f && std::fabs(wca.z - 5) < 1e-3f,
+          "AddChild keeps child world");
+    Check(std::fabs(lca.x - 4) < 1e-3f && std::fabs(lca.y - 3) < 1e-3f && std::fabs(lca.z - 2) < 1e-3f,
+          "AddChild re-derives child local");
+    // Second frame must NOT drift (the old bug: local<-world each frame).
+    es2.OnUpdate(0.0f);
+    Vector3 wca2 = ca->GetTransform().GetWorldPosition();
+    Check(std::fabs(wca2.x - 5) < 1e-3f && std::fabs(wca2.y - 5) < 1e-3f && std::fabs(wca2.z - 5) < 1e-3f,
+          "AddChild child world stable across frames (no drift)");
+
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;
 }

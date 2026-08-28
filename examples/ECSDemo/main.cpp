@@ -101,7 +101,9 @@ protected:
         light.SetColor({1.0f, 0.95f, 0.9f});
         light.SetIntensity(1.5f);
 
-        // Parent cube with a child cube (hierarchy through the ECS tree).
+        // Parent cube with a child cube (hierarchy through the ECS tree). AddChild
+        // preserves the child's WORLD: created at (0.5,1,0), it stays there and
+        // its local is re-derived from the new parent (2,0,0 in parent space).
         m_Parent = m_Scene->CreateObject3D("Parent");
         m_Parent->GetTransform().SetLocalPosition(Leir::Vector3(-1.5f, 1.0f, 0.0f));
         auto& pr = m_Parent->AddComponent<Leir::MeshRenderer>();
@@ -109,20 +111,22 @@ protected:
         pr.SetMaterial(m_ParentMat);
 
         auto* child = m_Scene->CreateObject3D("Child");
-        child->GetTransform().SetLocalPosition(Leir::Vector3(2.0f, 0.0f, 0.0f));
+        child->GetTransform().SetLocalPosition(Leir::Vector3(0.5f, 1.0f, 0.0f));
         auto& cr = child->AddComponent<Leir::MeshRenderer>();
         cr.SetMesh(m_BoxMesh);
         cr.SetMaterial(m_ChildMat);
-        m_Parent->AddChild(child); // mirrored to the ECS tree
+        m_Parent->AddChild(child); // mirrored to the ECS tree, world stays
 
-        // Rotated + non-uniform-scaled parent with a kid reparented with
+        // Rotated + UNIFORM-scaled parent with a kid reparented with
         // worldPositionStays: the ECS TransformSystem preserves the kid's world
-        // exactly (lossy scale 1,1,1 — no deformation).
+        // EXACTLY (lossy scale 1,1,1, no deformation, no shear — uniform parent
+        // scale commutes with the rotation). A separate Stretched cube below
+        // shows non-uniform scale on its own (no children -> no shear).
         auto* rotated = m_Scene->CreateObject3D("Rotated");
         rotated->GetTransform().SetLocalPosition(Leir::Vector3(2.5f, 1.0f, 0.0f));
         rotated->GetTransform().SetLocalRotation(
             Leir::Quaternion::AngleAxis(45.0f, Leir::Vector3::Forward()));
-        rotated->GetTransform().SetLocalScale(Leir::Vector3(2.0f, 1.0f, 1.0f));
+        rotated->GetTransform().SetLocalScale(Leir::Vector3(2.0f, 2.0f, 2.0f));
         auto& rr = rotated->AddComponent<Leir::MeshRenderer>();
         rr.SetMesh(m_BoxMesh);
         rr.SetMaterial(m_ParentMat);
@@ -133,6 +137,15 @@ protected:
         kr.SetMesh(m_BoxMesh);
         kr.SetMaterial(m_KidMat);
         m_Kid->SetParent(rotated, true); // worldPositionStays via the ECS
+
+        auto* stretched = m_Scene->CreateObject3D("Stretched");
+        stretched->GetTransform().SetLocalPosition(Leir::Vector3(1.2f, 0.5f, -1.8f));
+        stretched->GetTransform().SetLocalRotation(
+            Leir::Quaternion::AngleAxis(30.0f, Leir::Vector3::Up()));
+        stretched->GetTransform().SetLocalScale(Leir::Vector3(1.5f, 0.75f, 0.75f));
+        auto& sr = stretched->AddComponent<Leir::MeshRenderer>();
+        sr.SetMesh(m_BoxMesh);
+        sr.SetMaterial(m_ParentMat);
 
         m_Scene->OnUpdate(0.0f); // initial ECS sync so renderables have worlds
 
@@ -158,7 +171,7 @@ protected:
             m_OrbitDistance * std::cos(m_OrbitPitch) * std::sin(m_OrbitYaw),
             m_OrbitDistance * std::sin(m_OrbitPitch),
             m_OrbitDistance * std::cos(m_OrbitPitch) * std::cos(m_OrbitYaw));
-        Leir::Vector3 f = camPos.Normalized();
+        Leir::Vector3 f = (Leir::Vector3::Zero() - camPos).Normalized(); // look toward origin
         Leir::Vector3 right = Leir::Vector3::Cross(Leir::Vector3::Up(), f).Normalized();
         Leir::Vector3 u = Leir::Vector3::Cross(f, right);
         Leir::Quaternion camRot = Leir::Quaternion::LookRotation(f, u);

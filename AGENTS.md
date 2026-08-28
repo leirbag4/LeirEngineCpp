@@ -1055,6 +1055,8 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Fix `CoreObject::AddChild` — linkea el transform (semántica Unity) + ajuste `SetParent(false)` + demo ECS corregido** (2026-08-28): el `ECSDemo` mostraba 4 cubos y el hijo rojo no aparecía (derivaba y se tapaba). Causa raíz: **`AddChild` solo armaba el tree, NO sincronizaba el transform** → con el write-back del ECS (`ECSScene::OnUpdate`), el hijo hacía `local←world` cada frame y volaba. Fix: `CoreObject::AddChild` ahora llama `child->m_Transform.SetParent(&m_Transform, true)` (preserva el world, re-deriva el local) + `NotifyStructuralChange`; `CoreObject::SetParent` captura el local ANTES del `AddChild` y lo restaura para `worldPositionStays=false` (porque `AddChild` ahora sincroniza con stays=true; el `false` conserva el local original). El demo crea el hijo en su posición de mundo deseada (0.5,1,0) → queda 2 unidades a la derecha del padre. Tests de regresión en `ECSTest` (**ALL PASS**): AddChild mantiene el world, re-deriva el local, y es estable entre frames (sin drift). Verificado por el usuario: 5 cubos (padre celeste + hijo rojo + kid verde/amarillo en el centro + rotated azul 2×2×2 + stretched), hijo rojo 2 unidades a la derecha del padre, 1×1×1. Build limpio, ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Etapa B COMPLETA: Prueba de B con `ECSDemo` (render por ECS)** (2026-08-28,
   `TODO_HYBRID_ECS.md` §7): nuevo ejemplo `examples/ECSDemo` (`LeirEngineECSDemo`) — escena creada por
   `ECSScene` (cámara + luz + padre/hijo + padre rotado+escalado con un kid reparentado con

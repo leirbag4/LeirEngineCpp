@@ -37,15 +37,27 @@ void CoreObject::SetParent(CoreObject* parent, bool worldPositionStays)
     if (m_Parent == parent)
         return;
 
+    // AddChild links the transform preserving the world (stays=true); for the
+    // stays=false request we restore the ORIGINAL local transform afterwards.
+    const Vector3 localPos = m_Transform.GetLocalPosition();
+    const Quaternion localRot = m_Transform.GetLocalRotation();
+    const Vector3 localScale = m_Transform.GetLocalScale();
+
     if (m_Parent)
         m_Parent->RemoveChild(this);
 
     m_Parent = parent;
 
-    if (m_Parent)
-        m_Parent->AddChild(this);
-
-    m_Transform.SetParent(parent ? &parent->m_Transform : nullptr, worldPositionStays);
+    if (m_Parent) {
+        m_Parent->AddChild(this); // tree link + transform parent (world preserved)
+        if (!worldPositionStays) {
+            m_Transform.SetLocalPosition(localPos);
+            m_Transform.SetLocalRotation(localRot);
+            m_Transform.SetLocalScale(localScale); // keep the child's local as-is
+        }
+    } else {
+        m_Transform.SetParent(nullptr, worldPositionStays);
+    }
 
     // Reparenting changes the DFS render order -> invalidate scene query caches.
     NotifyStructuralChange();
@@ -75,6 +87,12 @@ void CoreObject::AddChild(CoreObject* child)
     if (std::find(m_Children.begin(), m_Children.end(), child) == m_Children.end()) {
         m_Children.push_back(child);
         child->m_Parent = this;
+        // Link the TRANSFORM hierarchy too and preserve the child's WORLD
+        // (Unity AddChild semantics: the child stays in place, its locals are
+        // re-derived from the new parent). Without this, a reparented child
+        // keeps a stale local and its world drifts.
+        child->m_Transform.SetParent(&m_Transform, true);
+        NotifyStructuralChange();
     }
 }
 
