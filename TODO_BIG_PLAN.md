@@ -27,7 +27,9 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
   - [x] Owned groups / query cache (`OwnedGroup<Ts...>`), journal-synced, iteración O(miembros).
   - [x] Hierarchy tree unificado (`HierarchyTree`) + Transform system (`LocalTransform`/`WorldTransform`
         con dirty-frontier y lossy-preserve exacto) → `ECSTest`.
-  - [ ] Systems pipeline + bridge CoreObject/Scene + migración de componentes.
+  - [x] Systems pipeline (`ISystem`/`SystemPipeline` Fixed/Update/Render) + `CommandBuffer` (cambios
+        estructurales diferidos) → `ECSTest`.
+  - [ ] Bridge CoreObject/Scene → tree+ECS + migración de componentes.
 - [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
 - [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
 

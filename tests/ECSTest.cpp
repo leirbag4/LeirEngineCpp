@@ -2,6 +2,8 @@
 #include "LeirEngine/ECS/OwnedGroup.h"
 #include "LeirEngine/ECS/HierarchyTree.h"
 #include "LeirEngine/ECS/TransformSystem.h"
+#include "LeirEngine/ECS/System.h"
+#include "LeirEngine/ECS/CommandBuffer.h"
 
 #include <cmath>
 #include <cstdio>
@@ -230,6 +232,74 @@ int main()
     auto* zw = ts6.GetWorld(z);
     Check(zw && std::isfinite(zw->worldScale.x) && std::isfinite(zw->worldScale.y)
            && std::isfinite(zw->worldPosition.x), "zero-scaled axis stays finite");
+
+    // --- Systems pipeline + command buffer (deferred structural changes) ---
+    class MoveSystem : public ISystem {
+    public:
+        MoveSystem(OwnedGroup<Position, Velocity>* g) : ISystem("Move"), m_G(g) {}
+        void Update(float dt) override
+        {
+            m_G->ForEach([dt](Position& p, Velocity& v, Entity) {
+                p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
+            });
+        }
+    private:
+        OwnedGroup<Position, Velocity>* m_G;
+    };
+
+    class ExpireSystem : public ISystem {
+    public:
+        ExpireSystem(OwnedGroup<Health>* g, CommandBuffer* cb) : ISystem("Expire"), m_G(g), m_CB(cb) {}
+        void Update(float) override
+        {
+            m_G->ForEach([this](Health& h, Entity e) {
+                if (h.hp <= 0.0f) m_CB->Destroy(e);
+            });
+        }
+    private:
+        OwnedGroup<Health>* m_G;
+        CommandBuffer* m_CB;
+    };
+
+    World w7;
+    OwnedGroup<Position, Velocity> moveGroup(&w7);
+    OwnedGroup<Health> healthGroup(&w7);
+    CommandBuffer cb7;
+    MoveSystem moveSys(&moveGroup);
+    ExpireSystem expireSys(&healthGroup, &cb7);
+    SystemPipeline pipeline;
+    pipeline.Add(&moveSys, SystemPhase::Update);
+    pipeline.Add(&expireSys, SystemPhase::Update);
+
+    Entity m1 = w7.Create();
+    w7.Add<Position>(m1).x = 0.0f; w7.Add<Velocity>(m1).x = 1.0f;
+    Entity m2 = w7.Create();
+    w7.Add<Position>(m2).x = 0.0f; w7.Add<Velocity>(m2).x = 2.0f;
+    Entity dead = w7.Create();
+    w7.Add<Health>(dead).hp = 0.0f; // expires -> deferred destroy
+    moveGroup.Sync(w7);
+    healthGroup.Sync(w7);
+    w7.ClearJournal();
+
+    pipeline.Run(0.0f, 1.0f); // fixedDt unused here
+    Check(w7.Get<Position>(m1)->x == 1.0f && w7.Get<Position>(m2)->x == 2.0f,
+          "MoveSystem ran in Update phase (velocity * dt)");
+    Check(!cb7.IsEmpty(), "ExpireSystem enqueued a deferred destroy");
+    cb7.Replay(w7); // sync point
+    Check(!w7.IsAlive(dead), "command buffer destroy applied at replay");
+    Check(w7.IsAlive(m1) && w7.IsAlive(m2), "replay did not touch living entities");
+
+    // Deferred add with data.
+    CommandBuffer cb8;
+    World w8;
+    Entity n = w8.Create();
+    cb8.Add<Position>(n, Position{7.0f, 8.0f, 9.0f});
+    cb8.Replay(w8);
+    auto* np = w8.Get<Position>(n);
+    Check(np && np->x == 7.0f && np->y == 8.0f && np->z == 9.0f, "deferred add carries data");
+    cb8.Remove<Position>(n);
+    cb8.Replay(w8);
+    Check(!w8.Has<Position>(n), "deferred remove applied");
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

@@ -9,6 +9,7 @@ add_library(LeirEngine SHARED
     src/ECS/World.cpp
     src/ECS/HierarchyTree.cpp
     src/ECS/TransformSystem.cpp
+    src/ECS/System.cpp
     src/Scene/Scene.cpp
     src/Scene/SceneManager.cpp
     src/Objects/Object3D.cpp

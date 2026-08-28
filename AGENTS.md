@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 1 Systems pipeline + CommandBuffer (ver `TODO_HYBRID_ECS.md` §10 + §4.6)**: nuevo
+  `ECS/System.h` (`ISystem` con nombre + `Update(dt)`; `SystemPipeline` con fases **FixedUpdate →
+  Update → Render** en orden de registro — el orden declarado es la dependencia para v1; el scheduler
+  paralelo por read/write llega en Fase 2) + `ECS/CommandBuffer.h/.cpp` (cambios estructurales
+  diferidos estilo EntityCommandBuffer/Bevy Commands: `Destroy`/`Add<T>(valor)`/`Remove<T>` encolados
+  mientras se itera, `Replay(world)` en el sync point — no invalida iteradores). Verificado: `ECSTest`
+  (MoveSystem mueve Position por Velocity×dt en fase Update; ExpireSystem encola destroy diferido;
+  add/remove diferidos con datos), build limpio, ctest 3/3, smoke test (crashLog delta=0).
+
 - **Hybrid ECS — Fase 1 HierarchyTree + TransformSystem (ver `TODO_HYBRID_ECS.md` §10 + §4.7/§4.8)**:
   **(1) `HierarchyTree`** (`ECS/HierarchyTree.{h,cpp}`): scene-graph compacto por índice de entidad
   (parent/firstChild/lastChild/nextSibling/prevSibling/depth), O(1) getters, `SetParent` con

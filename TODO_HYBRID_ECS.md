@@ -316,7 +316,14 @@ cube->GetComponent<MeshRenderer>();
           re-sync al add de fila) y (b) grupo dueño del pool (una sola fuente, sin copia) — el patrón
           enTT de sección "owned" al frente del dense con reordenación. La opción (b) elimina la
           duplicación y es la que rinde a escala; evaluarla al migrar los componentes.
-- [ ] **Systems pipeline** básico (FixedUpdate/Update/Render, command buffer).
+- [x] **Systems pipeline básico** (`ECS/System.h` + `System.cpp`): `ISystem` (nombre + `Update(dt)`),
+      `SystemPipeline` con fases **FixedUpdate → Update → Render** en orden de registro (el orden
+      declarado ES la dependencia para v1; el scheduler paralelo por read/write llega en Fase 2).
+      **`CommandBuffer`** (deferred structural changes — patrón EntityCommandBuffer/Bevy Commands):
+      sistemas encolan `Destroy`/`Add<T>(valor)`/`Remove<T>` mientras iteran y el buffer hace
+      `Replay(world)` en el sync point (no invalida iteradores). Verificado en `ECSTest` (MoveSystem
+      mueve Position por Velocity×dt en Update; ExpireSystem encola destroy diferido; add/remove
+      diferidos con datos).
 - [x] **Transform system** (`ECS/TransformSystem.{h,cpp}` + PODs `LocalTransform`/`WorldTransform`):
       computa `WorldTransform` desde `LocalTransform` + el tree, top-down, **dirty-frontier**
       (solo subtrees mutados; el padre se asegura limpio antes que el hijo — recursión `EnsureClean`).
