@@ -20,6 +20,7 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/Core/Component.cpp
     ${LEIR_ROOT}/engine/src/Core/Transform.cpp
     ${LEIR_ROOT}/engine/src/Core/UUID.cpp
+    ${LEIR_ROOT}/engine/src/Core/JobSystem.cpp
     ${LEIR_ROOT}/engine/src/ECS/World.cpp
     ${LEIR_ROOT}/engine/src/ECS/HierarchyTree.cpp
     ${LEIR_ROOT}/engine/src/ECS/TransformSystem.cpp

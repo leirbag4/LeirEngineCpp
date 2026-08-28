@@ -8,10 +8,12 @@
 #include "LeirEngine/ECS/Tags.h"
 #include "LeirEngine/Scene/Scene.h"
 #include "LeirEngine/Physics/PhysicsWorld.h"
+#include "LeirEngine/Core/JobSystem.h"
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/Objects/Object3D.h"
 #include "LeirEngine/Components/MeshRenderer.h"
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 
@@ -564,6 +566,21 @@ int main()
         // FMA accumulates with a single rounding per term vs glm's two — the
         // results agree to float precision, not bit-exactly.
         Check(maxDiff < 5e-3f, "SIMD mat4x4 multiply matches scalar (float precision)");
+    }
+
+    // --- Fase 2: JobSystem (thread pool + ParallelFor + Dispatch/WaitAll) ---
+    {
+        JobSystem js;
+        const size_t n = 10000;
+        std::atomic<long long> sum{0};
+        js.ParallelFor(n, [&sum](size_t i) { sum += (long long)i; });
+        Check(sum == (long long)n * (long long)(n - 1) / 2, "JobSystem ParallelFor sums correctly");
+
+        std::atomic<int> tasks{0};
+        for (int i = 0; i < 50; ++i)
+            js.Dispatch([&tasks]() { tasks.fetch_add(1); });
+        js.WaitAll();
+        Check(tasks == 50, "JobSystem Dispatch/WaitAll runs every task");
     }
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);

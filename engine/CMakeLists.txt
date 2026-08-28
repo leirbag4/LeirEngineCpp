@@ -6,6 +6,7 @@ add_library(LeirEngine SHARED
     src/Core/Component.cpp
     src/Core/Transform.cpp
     src/Core/UUID.cpp
+    src/Core/JobSystem.cpp
     src/ECS/World.cpp
     src/ECS/HierarchyTree.cpp
     src/ECS/TransformSystem.cpp

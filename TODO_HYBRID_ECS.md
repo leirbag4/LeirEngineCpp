@@ -482,7 +482,13 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       `Matrix4x4::MultiplySimd` para el hot path `parentWorld × local`. Verificado: build limpio, ctest
       3/3, ECSDemo (`renderables=5`), smoke editor OK.
 - [ ] Render list / draw command build vectorizado.
-- [ ] Job system + scheduler de sistemas por dependencias de acceso.
+- [x] **Job system** (`Core/JobSystem.{h,cpp}`): thread pool con `ParallelFor` (rango dividido por
+      contador atómico compartido; el caller participa + workers) y `Dispatch`/`WaitAll` (cola de tareas
+      con mutex+cv, `m_Pending`). **Web = inline** (`__EMSCRIPTEN__` — decisión single-thread, sin
+      pthreads/SharedArrayBuffer; misma API, cero threads). Verificado en `ECSTest` (**ALL PASS**):
+      ParallelFor suma correctamente (10k iters, atómico) y Dispatch/WaitAll ejecuta todas las tareas.
+- [ ] Scheduler de sistemas por dependencias de acceso (paraleliza los sistemas del pipeline según
+      read/write de tipos).
 - [ ] Command buffer aplicado en sync points (paralelo seguro).
 - [ ] Benchmarks: fps / frame time / cache misses por plataforma (targets en §11).
 - [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).

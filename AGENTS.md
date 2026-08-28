@@ -1055,6 +1055,14 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: `JobSystem` (thread pool)** (2026-08-28, `TODO_HYBRID_ECS.md` §6):
+  `Core/JobSystem.{h,cpp}` — `ParallelFor` (rango dividido por contador atómico compartido; el caller
+  participa + los workers ayudan, `m_RangeActive`/`m_ActiveWorkers` + cv para el sync) y
+  `Dispatch`/`WaitAll` (cola de tareas con mutex+cv, `m_Pending`). **Web = inline** (`__EMSCRIPTEN__`,
+  decisión single-thread sin pthreads; misma API, cero threads). Verificado en `ECSTest` (**ALL PASS**):
+  ParallelFor suma 10k iters correctamente con atómico; Dispatch/WaitAll ejecuta 50 tareas. Build
+  limpio, ctest 3/3, smoke editor OK. (El scheduler de sistemas por dependencias es el siguiente paso.)
+
 - **Hybrid ECS — Fase 2 inicio: wrappers SIMD en Math + transform propagation SIMD** (2026-08-28,
   `TODO_HYBRID_ECS.md` §5/§10): nuevo `Math/Simd.h` — `Simd4f` (4 floats) con load/store/add/mul/fma/
   splat/lane por plataforma (**SSE2** x64, **NEON** arm64, **SIMD128** wasm, **escalar** fallback), todo
