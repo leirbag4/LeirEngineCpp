@@ -168,7 +168,7 @@ HierarchyPanel::HierarchyPanel()
         if (!scene) return false;
 
         if (mode == Leir::UITreeView::DropMode::Onto) {
-            for (auto* obj : objs) obj->SetParent(targetObj, false);
+            for (auto* obj : objs) obj->SetParent(targetObj, true);
         } else {
             Leir::CoreObject* parentObj = targetObj->GetParent();
             if (parentObj) {
@@ -185,7 +185,7 @@ HierarchyPanel::HierarchyPanel()
                 // Target is a level-0 root: reorder it in m_Objects (the free top
                 // level). MoveObject adjusts the index for the dragged's removal.
                 for (auto* obj : objs) {
-                    obj->SetParent(nullptr, false);
+                    obj->SetParent(nullptr, true);
                     const auto& mo = scene->GetObjects();
                     size_t ti = mo.size();
                     for (size_t i = 0; i < mo.size(); ++i)

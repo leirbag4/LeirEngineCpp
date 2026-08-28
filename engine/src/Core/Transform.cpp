@@ -1,6 +1,7 @@
 #include "LeirEngine/Core/Transform.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace Leir {
 
@@ -226,10 +227,21 @@ void Transform::UpdateWorldMatrix() const
 
         m_WorldRotation = m_Parent->GetWorldRotation() * m_LocalRotation;
         m_WorldPosition = m_Parent->GetLocalToWorldMatrix().MultiplyPoint3x4(m_LocalPosition);
+        // LOSSY world scale (Unity's Transform.lossyScale): the lengths of the
+        // rotation-scale part's columns. Unlike a naive component-wise product of
+        // parent*local scales, this factors the parent's ROTATION, so a nested
+        // non-uniform scale under a rotated parent is preserved correctly (used by
+        // SetWorldScale / SetParent(worldPositionStays) for exact round-trips).
         m_WorldScale = Vector3(
-            m_Parent->GetWorldScale().x * m_LocalScale.x,
-            m_Parent->GetWorldScale().y * m_LocalScale.y,
-            m_Parent->GetWorldScale().z * m_LocalScale.z
+            std::sqrt(m_WorldMatrix(0,0) * m_WorldMatrix(0,0) +
+                      m_WorldMatrix(1,0) * m_WorldMatrix(1,0) +
+                      m_WorldMatrix(2,0) * m_WorldMatrix(2,0)),
+            std::sqrt(m_WorldMatrix(0,1) * m_WorldMatrix(0,1) +
+                      m_WorldMatrix(1,1) * m_WorldMatrix(1,1) +
+                      m_WorldMatrix(2,1) * m_WorldMatrix(2,1)),
+            std::sqrt(m_WorldMatrix(0,2) * m_WorldMatrix(0,2) +
+                      m_WorldMatrix(1,2) * m_WorldMatrix(1,2) +
+                      m_WorldMatrix(2,2) * m_WorldMatrix(2,2))
         );
     }
 

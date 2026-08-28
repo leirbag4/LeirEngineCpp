@@ -84,6 +84,10 @@ void CoreObject::InsertChildAt(CoreObject* child, size_t index)
     index = std::min(index, m_Children.size());
     m_Children.insert(m_Children.begin() + (ptrdiff_t)index, child);
     child->m_Parent = this;
+    // Keep the TRANSFORM hierarchy in sync with the CoreObject hierarchy AND
+    // preserve the child's WORLD transform (Unity worldPositionStays): after
+    // reparenting, recompute the child's local from its world so it never jumps.
+    child->m_Transform.SetParent(&m_Transform, true);
 }
 
 void CoreObject::RemoveChild(CoreObject* child)
