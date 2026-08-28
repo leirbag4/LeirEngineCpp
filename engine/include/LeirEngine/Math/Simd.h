@@ -58,7 +58,7 @@ inline Simd4f SimdMul(Simd4f a, Simd4f b) { return vmulq_f32(a, b); }
 inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return vfmaq_f32(c, a, b); }
 inline Simd4f SimdSplat(float f) { return vdupq_n_f32(f); }
 inline float SimdGetX(Simd4f v) { return vgetq_lane_f32(v, 0); }
-inline float SimdGetLane(Simd4f v, int lane) { return vgetq_lane_f32(v, lane); }
+inline float SimdGetLane(Simd4f v, int lane) { float f[4]; vst1q_f32(f, v); return f[lane]; }
 
 #elif defined(LEIR_SIMD_WASM)
 using Simd4f = v128_t;
@@ -69,7 +69,7 @@ inline Simd4f SimdMul(Simd4f a, Simd4f b) { return f32x4_mul(a, b); }
 inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return f32x4_add(f32x4_mul(a, b), c); }
 inline Simd4f SimdSplat(float f) { return f32x4_splat(f); }
 inline float SimdGetX(Simd4f v) { return wasm_f32x4_extract_lane(v, 0); }
-inline float SimdGetLane(Simd4f v, int lane) { return wasm_f32x4_extract_lane(v, lane); }
+inline float SimdGetLane(Simd4f v, int lane) { float f[4]; wasm_v128_store(f, v); return f[lane]; }
 
 #else // LEIR_SIMD_SCALAR (portable fallback — e.g. RISC-V, or x86 without SSE2)
 struct LEIR_API Simd4f {
