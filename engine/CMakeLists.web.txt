@@ -20,6 +20,10 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/Core/Component.cpp
     ${LEIR_ROOT}/engine/src/Core/Transform.cpp
     ${LEIR_ROOT}/engine/src/Core/UUID.cpp
+    ${LEIR_ROOT}/engine/src/ECS/World.cpp
+    ${LEIR_ROOT}/engine/src/ECS/HierarchyTree.cpp
+    ${LEIR_ROOT}/engine/src/ECS/TransformSystem.cpp
+    ${LEIR_ROOT}/engine/src/ECS/System.cpp
     ${LEIR_ROOT}/engine/src/Scene/Scene.cpp
     ${LEIR_ROOT}/engine/src/Scene/SceneManager.cpp
     ${LEIR_ROOT}/engine/src/Objects/Object3D.cpp

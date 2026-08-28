@@ -198,11 +198,14 @@ private:
 
     std::unordered_map<std::type_index, uint32_t> m_TypeToId;
     std::vector<ComponentTypeInfo> m_TypeInfos;
+    // Declared BEFORE m_Pools so it is DESTROYED AFTER them: when the pools die
+    // they destroy the HybridComponent boxes, whose dtor calls the unregister
+    // callback (EraseHybrid) against this registry — it must still be alive.
+    std::vector<Component*> m_Hybrids;
     std::vector<std::unique_ptr<ComponentPoolBase>> m_Pools;
 
     std::vector<ChangeRecord> m_Journal;
     uint64_t m_ChangeVersion = 0;
-    std::vector<Component*> m_Hybrids; // lifecycle registry (boxed OOP instances)
 };
 
 } // namespace ECS

@@ -7,6 +7,7 @@
 #include "LeirEngine/ECS/HybridComponent.h"
 #include "LeirEngine/ECS/Tags.h"
 #include "LeirEngine/Scene/Scene.h"
+#include "LeirEngine/Physics/PhysicsWorld.h"
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/Objects/Object3D.h"
 #include "LeirEngine/Components/MeshRenderer.h"
@@ -507,6 +508,10 @@ int main()
     lo->RemoveComponent<TestComp>();
     Check(wL.GetHybrids().empty(), "removing hybrid unregisters it from the registry");
     delete lo;
+
+    // The fused Scene::OnUpdate steps physics (lazy-inits Jolt); shut it down so
+    // macOS doesn't abort in Jolt's thread teardown at process exit.
+    PhysicsWorld::GetInstance().Shutdown();
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

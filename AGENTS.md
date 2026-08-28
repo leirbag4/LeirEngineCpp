@@ -1055,6 +1055,18 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Fix CI macOS+emscripten (ECSTest teardown + web ECS link)** (2026-08-28): (1) **macOS**: el `ECSTest`
+  tiraba ALL PASS y abortaba al salir (`system_error: mutex lock failed`) — la `Scene` fused ahora llama
+  `StepPhysics` en `OnUpdate` (lazy-init de Jolt) y el test nunca lo apagaba → teardown de threads en
+  macOS. Fix: `PhysicsWorld::Shutdown()` al final del test. (2) **UB real**: en `~World`, `m_Hybrids`
+  se destruía ANTES que `m_Pools` → los boxes `HybridComponent` (dtor → `EraseHybrid`) tocaban el
+  registro ya liberado. Fix: reordenar los miembros (m_Hybrids declarado antes de m_Pools → se destruye
+  después). (3) **emscripten**: undefined symbols de `World`/`TransformSystem`/`HierarchyTree` →
+  faltaban los cpps ECS en `LeirEngineCore` (`engine/CMakeLists.web.txt`): agregados `World.cpp`,
+  `HierarchyTree.cpp`, `TransformSystem.cpp`, `System.cpp`. Y warning `-Wshift-count-overflow` en
+  `Entity.h` (`size_t` es 32-bit en wasm32 → hash con `uint64_t` explícito). Build limpio, ctest 3/3,
+  smoke editor OK.
+
 - **Hybrid ECS — Etapa A A3: `Scene` = implementación ECS (fusión de `ECSScene`) + `ECSScene` BORRADA** (2026-08-28, `TODO_HYBRID_ECS.md` §7): `Scene` gana `World` + `HierarchyTree` +
   `TransformSystem` + `EntityOf`; `CreateObject3D/2D` crea entity (tag `Tag3D/Tag2D` + `LocalTransform`
   vía backing + tree node) y **backea el transform del objeto** (`SetEcsBacked`); `DestroyObject` limpia

@@ -31,7 +31,9 @@ namespace std {
 template<>
 struct hash<Leir::ECS::Entity> {
     size_t operator()(const Leir::ECS::Entity& e) const noexcept {
-        return (size_t(e.generation) << 32) | e.index;
+        // Explicit uint64 so it is correct on 32-bit targets (wasm32: size_t is
+        // 32 bits -> a bare `<< 32` would shift past the width).
+        return (size_t)(((uint64_t)e.generation << 32) | e.index);
     }
 };
 } // namespace std
