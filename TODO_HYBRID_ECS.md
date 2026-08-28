@@ -258,13 +258,19 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       Nota honesta: en Etapa B los handles son `Object3D` OOP reales (componentes + sync de transform por
       frame, patrón "dos mundos con capa de sync" de la industria); el `ECSScene` de B se BORRA al hacer
       Etapa A (ver lista de limpieza abajo).
-- [ ] **Handle provisional** para B: un `CoreObject` mínimo cuyo `GetTransform()` lee/escribe
-      `LocalTransform`/`WorldTransform` del ECS (facade) y cuyo `GetComponent<T>` busca
-      `HybridComponent<T>`. NO es el handle final (A); es solo para que el renderer/picking prueben B.
-- [ ] **Prueba de B**: un demo/test que crea la escena por `ECSScene` y la renderiza con el
-      `RenderPipeline` real (que ya consume `ISceneStorage`) → jerarquía + transform + renderables
-      por ECS, verificado visualmente y en `ECSTest`.
-- [ ] Resultado: **el seam queda probado de punta a punta** sin tocar la API ni el editor actual.
+- [x] **Handle provisional** para B: en vez de una clase nueva, los handles son `Object3D`/`Object2D`
+      OOP reales (componentes OOP) y `ECSScene::OnUpdate` sincroniza: locals del handle → ECS,
+      TransformSystem computa el world, y **escribe el WorldTransform del ECS de vuelta al handle** →
+      `GetTransform().GetLocalToWorldMatrix()` devuelve el resultado ECS (patrón "dos mundos con capa
+      de sync" de la industria). NO es el handle final (A); solo para probar B.
+- [x] **Prueba de B** — nuevo ejemplo `examples/ECSDemo` (`LeirEngineECSDemo`): escena creada por
+      `ECSScene` (cámara + luz + padre/hijo + padre rotado+escalado con un kid reparentado con
+      worldPositionStays) y **renderizada con el `RenderPipeline` REAL** (`Render(scene)` recibe
+      `ISceneStorage*` → `ECSScene`). Verificado al correrlo: `renderables=4` (los 4 MeshRenderers
+      dibujados por ECS) y `kidWorldScale=(1,1,1)` (lossy-preserve por ECS, sin deformación), sin
+      crash, stderr vacío, cierre limpio. La prueba la puede ver el usuario (orbita con mouse).
+- [x] Resultado: **el seam quedó probado de punta a punta** (crear/hierarchy/transform/renderables por
+      ECS con la API amigable) sin tocar el editor actual. Pasamos a Etapa A.
 
 #### Etapa A — `CoreObject` → handle del ECS (migración definitiva)
 

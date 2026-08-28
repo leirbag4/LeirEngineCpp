@@ -1055,6 +1055,16 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa B COMPLETA: Prueba de B con `ECSDemo` (render por ECS)** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7): nuevo ejemplo `examples/ECSDemo` (`LeirEngineECSDemo`) — escena creada por
+  `ECSScene` (cámara + luz + padre/hijo + padre rotado+escalado con un kid reparentado con
+  worldPositionStays) y **renderizada con el `RenderPipeline` real** (que consume `ISceneStorage*`).
+  Verificado al correrlo: `renderables=4` (los 4 MeshRenderers dibujados por ECS) y
+  `kidWorldScale=(1,1,1)` (lossy-preserve por ECS, sin deformación), sin crash, stderr vacío, cierre
+  limpio. El seam quedó probado de punta a punta (crear/hierarchy/transform/renderables por ECS con la
+  API amigable) sin tocar el editor actual → **Etapa B cerrada, pasamos a Etapa A** (CoreObject →
+  handle del ECS; el código de B a borrar está listado en §7).
+
 - **Hybrid ECS — Etapa B paso 2: `ECSScene` (seam probado) + `Tags` de familia** (2026-08-28,
   `TODO_HYBRID_ECS.md` §7): `Scene/ECSScene.{h,cpp}` implementa `ISceneStorage` sobre el ECS (World +
   HierarchyTree + TransformSystem + `Tag3D`/`Tag2D`). `CreateObject3D/2D` crea entity + LocalTransform
