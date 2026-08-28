@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa A FINAL: storage OOP de componentes ELIMINADO de `CoreObject`** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7): `m_Components`/`m_ComponentIndex` y los branches OOP de
+  `AddComponent/GetComponent/RemoveComponent` borrados — todo componente vive como `HybridComponent<T>`
+  en el ECS (one-per-type, `assert` de backing). `CoreObject::OnUpdate` ya no itera componentes (el
+  lifecycle lo maneja `Scene::OnUpdate` vía `World::GetHybrids`). Quedan `m_Transform` (facade) +
+  `m_Parent`/`m_Children` (espejo del tree ECS para la API de jerarquía) — camino activo, no viejo.
+  Verificado: build limpio, ctest 3/3, PhysicsDemo (`objs=10`), ECSDemo (`renderables=5`), smoke editor
+  OK.
+
 - **Fix CI macOS+emscripten (ECSTest teardown + web ECS link)** (2026-08-28): (1) **macOS**: el `ECSTest`
   tiraba ALL PASS y abortaba al salir (`system_error: mutex lock failed`) — la `Scene` fused ahora llama
   `StepPhysics` en `OnUpdate` (lazy-init de Jolt) y el test nunca lo apagaba → teardown de threads en

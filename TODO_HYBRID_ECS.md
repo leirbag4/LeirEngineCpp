@@ -311,9 +311,13 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       **verificación VISUAL del usuario en d3d12/vulkan/webgpu** (jerarquía, gizmos, inspector, picking,
       "+", drag&drop). **`ECSBackedDemo` se BORRÓ** (el proof de A con `BackedScene` propio quedó
       redundante — `Scene` ya es la implementación ECS y `ECSDemo` lo demuestra con la `Scene` real).
-- [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +
-      `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/GetComponent/
-      RemoveComponent` delegan al tree + pools + HybridComponent.
+- [x] **Storage OOP de componentes ELIMINADO de `CoreObject`**: `m_Components`/`m_ComponentIndex` y los
+      branches OOP de `AddComponent/GetComponent/RemoveComponent` borrados — todo componente vive como
+      `HybridComponent<T>` en el ECS (one-per-type; `assert` de backing). `CoreObject::OnUpdate` ya no
+      itera componentes (el lifecycle lo maneja `Scene::OnUpdate` vía el registro de hybrids). Quedan
+      `m_Transform` (facade) + `m_Parent`/`m_Children` (espejo del tree ECS, usado por la API de
+      jerarquía) — el camino activo, no código viejo. Verificado: build limpio, ctest 3/3, PhysicsDemo
+      (`objs=10`), ECSDemo (`renderables=5`), smoke editor OK.
 - [ ] `Scene` pasa a ser la implementación ECS (funde lo aprendido en `ECSScene`); `ECSScene` se
       BORRA (ya no hay dos implementaciones).
 - [ ] `GetTransform()` → facade sobre `LocalTransform`/`WorldTransform` con la semántica exacta actual

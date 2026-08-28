@@ -19,7 +19,6 @@ CoreObject::CoreObject(const std::string& name)
 
 CoreObject::~CoreObject()
 {
-    m_Components.clear();
     if (m_Parent)
         m_Parent->RemoveChild(this);
     for (auto child : m_Children)
@@ -133,9 +132,9 @@ void CoreObject::OnUpdate(float deltaTime)
     if (!m_Active)
         return;
 
-    for (auto& comp : m_Components)
-        comp->Tick(deltaTime);
-
+    // Components live as ECS hybrids; their lifecycle (OnStart/OnUpdate) is
+    // driven by Scene::OnUpdate via the world's hybrid registry. Here we just
+    // recurse the (OOP-mirrored) hierarchy.
     for (auto child : m_Children)
         child->OnUpdate(deltaTime);
 }

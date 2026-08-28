@@ -7,11 +7,10 @@
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/ECS/World.h"
 
+#include <cassert>
 #include <string>
 #include <vector>
 #include <memory>
-#include <typeindex>
-#include <unordered_map>
 
 namespace Leir {
 
@@ -51,55 +50,35 @@ public:
     // Scene
     Scene* GetScene() const { return m_Scene; }
 
-    // Components
+    // Components (Etapa A: every scene object is ECS-backed, so components live as
+    // HybridComponent<T> in the ECS world — one per type per object).
     template<typename T, typename... Args>
     T& AddComponent(Args&&... args) {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        // ECS-backed (Etapa A): the component lives as a HybridComponent<T> in
-        // the ECS world; returns the live OOP instance (one per type).
-        if (m_Transform.IsEcsBacked()) {
-            if (T* existing = GetComponent<T>())
-                return *existing;
-            T& ref = m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
-            ref.m_Owner = this;
-            ref.OnAwake();
-            NotifyStructuralChange();
-            return ref;
-        }
-        // One component per type (Unity/Godot semantics): adding an existing type
-        // returns the live instance instead of creating a duplicate.
+        assert(m_Transform.IsEcsBacked() && "CoreObject must be ECS-backed to hold components");
         if (T* existing = GetComponent<T>())
             return *existing;
-        auto comp = std::make_unique<T>(std::forward<Args>(args)...);
-        comp->m_Owner = this;
-        T* ptr = comp.get();
-        m_ComponentIndex[std::type_index(typeid(T))] = m_Components.size();
-        m_Components.push_back(std::move(comp));
-        ptr->OnAwake();
+        T& ref = m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
+        ref.m_Owner = this;
+        ref.OnAwake();
         NotifyStructuralChange();
-        return *ptr;
+        return ref;
     }
 
     template<typename T>
     T* GetComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        if (m_Transform.IsEcsBacked())
-            return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
-        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
-        if (it == m_ComponentIndex.end())
+        if (!m_Transform.IsEcsBacked())
             return nullptr;
-        return static_cast<T*>(m_Components[it->second].get());
+        return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
     }
 
     template<typename T>
     const T* GetComponent() const {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        if (m_Transform.IsEcsBacked())
-            return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
-        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
-        if (it == m_ComponentIndex.end())
+        if (!m_Transform.IsEcsBacked())
             return nullptr;
-        return static_cast<const T*>(m_Components[it->second].get());
+        return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
     }
 
     template<typename T>
@@ -110,23 +89,9 @@ public:
     template<typename T>
     void RemoveComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        if (m_Transform.IsEcsBacked()) {
-            m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
-            NotifyStructuralChange();
+        if (!m_Transform.IsEcsBacked())
             return;
-        }
-        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
-        if (it == m_ComponentIndex.end())
-            return;
-        size_t idx = it->second;
-        m_Components[idx]->OnDestroy();
-        m_Components.erase(m_Components.begin() + (ptrdiff_t)idx);
-        m_ComponentIndex.erase(it);
-        // Components after the removed slot shifted down: refresh their index.
-        for (size_t i = idx; i < m_Components.size(); ++i) {
-            Component& comp = *m_Components[i];
-            m_ComponentIndex[std::type_index(typeid(comp))] = i;
-        }
+        m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
         NotifyStructuralChange();
     }
 
@@ -148,11 +113,6 @@ protected:
 
     CoreObject* m_Parent = nullptr;
     std::vector<CoreObject*> m_Children;
-
-    std::vector<std::unique_ptr<Component>> m_Components;
-    // Component type → index into m_Components (O(1) GetComponent<T>; kills the
-    // old linear dynamic_cast scans). Refreshed on add/remove (slot shift).
-    std::unordered_map<std::type_index, size_t> m_ComponentIndex;
 
     Scene* m_Scene = nullptr;
 };
