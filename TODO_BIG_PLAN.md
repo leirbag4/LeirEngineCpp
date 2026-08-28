@@ -22,6 +22,9 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
   - [x] Aislar el almacenamiento de Scene detrás de `ISceneStorage`.
 - [ ] **Fase 1 — Núcleo ECS custom** (entity, pools sparse-set, journal, groups SoA, query cache,
       systems, transform system con lossy-preserve, hierarchy tree unificado, bridge CoreObject/Scene).
+  - [x] Núcleo base: Entity generacional + pools sparse-set + registro por type_index + journal + `Each`
+        variadic → `tests/ECSTest.cpp` (ctest 3/3).
+  - [ ] Groups SoA + query cache + systems pipeline + transform system + hierarchy tree + bridge.
 - [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
 - [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
 

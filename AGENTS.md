@@ -25,6 +25,21 @@ $ctest = "$vsp\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
 $vcvars = "$vsp\VC\Auxiliary\Build\vcvars64.bat"
 ```
 
+**REGLA ANTI-COLGADO del build (aprendida 2026-08-28)**: NO ejecutar `cmake --build ... 2>&1 | Select-String ...`
+directamente. MSBuild deja **nodos en background** que mantienen abiertas las tuberías stdout/stderr → el shell
+se cuelga esperando el cierre del pipe y nunca devuelve el resultado. SIEMPRE: (a) `set MSBUILDDISABLENODEREUSE=1`
+(destruye los nodos al terminar), y (b) redirigir a un **archivo de log** (nunca a un pipe). Si el build falla
+con `C1041: cannot open ...vc143.pdb` → hay un `cl.exe` huérfano de un build colgado previo: matarlo
+(`Get-Process cl,msbuild -ErrorAction SilentlyContinue | Stop-Process -Force`) y rebuildear.
+
+```powershell
+$log = "$env:TEMP\leir_build.log"; Remove-Item $log -ErrorAction SilentlyContinue
+cmd /c "set MSBUILDDISABLENODEREUSE=1 && `"$cmake`" --build build/windows-debug --target LeirEngineEditor --config Debug > `"$log`" 2>&1"
+# luego grepear el log (NO Select-String sobre un pipe del build):
+Select-String -Path $log -Pattern "error C|error LNK|warning C" | Select-Object -First 15
+Select-String -Path $log -Pattern "vcxproj ->" | Select-Object -Last 3
+```
+
 ### 1) Build del engine + editor (la forma normal)
 ```powershell
 & $cmake --build build/windows-debug --target LeirEngineEditor --config Debug 2>&1 | Select-String -Pattern "error|warning C"
@@ -42,7 +57,12 @@ $vcvars = "$vsp\VC\Auxiliary\Build\vcvars64.bat"
 ```powershell
 & $ctest --test-dir build/windows-debug -C Debug --output-on-failure
 ```
-Esperar `100% tests passed, 0 tests failed out of 2` (PhysicsTest + SlangExportTest).
+Esperar `100% tests passed, 0 tests failed out of 3` (PhysicsTest + SlangExportTest + **ECSTest**).
+**OJO (2026-08-28)**: `CMakePresets.json` define `LEIR_BUILD_TESTS=OFF` en TODOS los presets, así que un
+`--preset windows-debug` a secas deja los tests STALE (ctest sigue corriendo los exes viejos y no se
+reconstruyen). Para el build local con tests reales hay que reconfigurar forzando ON:
+`cmake --preset windows-debug -DLEIR_BUILD_TESTS=ON` (y si se agrega un target de test nuevo, hay que
+reconfigurar para que se genere su `.vcxproj`). Convendría corregir los presets a ON.
 
 ### 3) Smoke test del editor (arrancar y cerrar sin crash)
 ```powershell
@@ -1034,6 +1054,8 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
   `~/.local/share/icons` is optional, install-time work.
 
 ## Previous Changes Summary
+
+- **Hybrid ECS — Fase 1 núcleo custom COMPLETO (ver `TODO_HYBRID_ECS.md` §10 + §4)**: nuevo módulo `engine/include/LeirEngine/ECS/` + `engine/src/ECS/` (`World.cpp` en el CMake del engine), 100% independiente del OOP actual (invisible). **(1) `Entity` generacional** (`Entity.h`, `World`): handle `{index, generation}`, índice 0 reservado como null (estilo EnTT), free-list con bump de generación (handle stale jamás resuelve), `Destroy` limpia los componentes del índice (reciclaje seguro). **(2) Registro de tipos por `type_index`** (`World::ComponentType<T>`): `typeId` entero secuencial + metadata `{name, size, align}` (semilla de la reflection; JSON en Fase 3). **(3) `TypedPool<T>` sparse-set** (`ComponentPool.h`): dense contiguo (SoA-ready) + sparse `entity→dense`, add/remove O(1) swap-and-pop sin migración, one-component-per-type por entidad. **Sin `LEIR_API` en la plantilla** (dllexport en templates rompe el link: MSVC espera símbolos importados en vez de instanciar → LNK2019). **(4) Journal de cambios estructurales** (`ChangeRecord`, `GetJournal/ClearJournal`, `GetChangeVersion`) — los grupos SoA y query caches lo consumen en el siguiente paso. **(5) `World::Each<Ts...>` variadic**: itera el pool del primer tipo y hace join por sparse-membership en los demás (patrón sparse-set multi-tipo). Verificado: **ctest 3/3** (nuevo `tests/ECSTest.cpp` → `LeirECSTests` → `add_test(NAME ECSTest)`; regenerar CMake con `-DLEIR_BUILD_TESTS=ON` para que se genere el `.vcxproj`) + smoke test (crashLog delta=0, stderr vacío). **Aprendizaje de build (2026-08-28)**: MSBuild deja nodos en background que mantienen abiertas las tuberías → `cmake --build ... | Select-String` SE CUELGA; usar `set MSBUILDDISABLENODEREUSE=1` + redirigir a archivo de log (documentado en "COMPILACIÓN EN WINDOWS").
 
 - **Hybrid ECS — Fase 0 COMPLETA (data-oriented, ver `TODO_HYBRID_ECS.md` §10 + `TODO_BIG_PLAN.md`)**: prepara el terreno del ECS propio con refactors que NO cambian la API pública y arreglan perf/bugs reales. (1) **Registro de componentes por `type_index`** en `CoreObject` — `GetComponent/RemoveComponent` pasan de `dynamic_cast` lineal a **O(1)** (`m_ComponentIndex` tipo→índice, refresh en add/remove), semántica **one-component-per-type** (Unity/Godot): `AddComponent<T>` con el tipo presente devuelve la instancia viva. (2) **Caches de escena data-oriented** (`Scene::GetRenderables/GetCameras/GetLights`, reconstruidas lazy) — `RenderPipeline` y el picking ya NO escanean `GetObjects()+GetComponent` por frame. Hook de invalidación: `CoreObject::NotifyStructuralChange()` (definido en el `.cpp` donde `Scene.h` está completo) desde `Add/RemoveComponent`, `SetParent`, `InsertChildAt`; y `Scene` desde `Create/Destroy/MoveObject`. **Hallazgo del modelo real**: `m_Objects` contiene TODOS los objetos (hijos incluidos — `AddChild` no los remueve); el render viejo sí dibujaba hijos pero en orden de creación; `RebuildCaches` usa DFS desde **roots sin padre** (regla del `HierarchyPanel`) para orden de jerarquía correcto sin duplicados. (3) **Seam ECS**: nuevo `ISceneStorage` (Scene/ISceneStorage.h) con operaciones estructurales + queries + caches; `Scene` la implementa y `RenderPipeline` recibe `ISceneStorage*` (upcast de `Scene*` en editor/ejemplos) — la Fase 1 implementará el mismo contrato sobre el ECS sin tocar la API. Verificado: build limpio (editor + `LeirEnginePhysicsDemo`), ctest 2/2, smoke test (crashLog delta=0, stderr vacío), test standalone `leir_fase0_test.cpp` (**ALL PASS**: cache incluye hijos/hojas profundas, invalidación por add/remove/reparent, one-per-type sin duplicados).
 

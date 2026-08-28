@@ -6,6 +6,7 @@ add_library(LeirEngine SHARED
     src/Core/Component.cpp
     src/Core/Transform.cpp
     src/Core/UUID.cpp
+    src/ECS/World.cpp
     src/Scene/Scene.cpp
     src/Scene/SceneManager.cpp
     src/Objects/Object3D.cpp

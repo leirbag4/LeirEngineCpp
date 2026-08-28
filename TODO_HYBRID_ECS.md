@@ -277,16 +277,30 @@ cube->GetComponent<MeshRenderer>();
       one-per-type sin duplicados → ALL PASS).
 
 ### Fase 1 — Núcleo ECS custom (después de estabilizar P1 del editor)
-- [ ] `Entity` generacional + allocator + sparse set de entidades vivas.
-- [ ] Reflection de componentes (nombre, layout, JSON) + registro por `type_index`.
-- [ ] Pools sparse-set por tipo + máscara por entidad.
-- [ ] Journal de cambios estructurales + sync points.
-- [ ] Owned groups SoA (Renderables, Transforms, PhysicsBodies, Audio3D, Sprites).
-- [ ] Query cache (With/Without).
-- [ ] Systems pipeline básico (FixedUpdate/Update/Render, command buffer).
-- [ ] Transform system: LocalTransform/WorldTransform + dirty-frontier + **lossy-preserve exacto**.
-- [ ] Hierarchy tree unificado (parent/firstChild/nextSibling) + reparent con worldPositionStays.
-- [ ] Bridge: CoreObject/Scene delegando al tree + ECS; tags de familia (Tag3D/2D/UI).
+
+**Estado**: núcleo base implementado y testeado (ctest 3/3). El módulo vive en
+`engine/include/LeirEngine/ECS/` + `engine/src/ECS/` y es 100% independiente del OOP actual (invisible).
+
+- [x] **`Entity` generacional + allocator** (`ECS/Entity.h`, `World` en `World.cpp`): handle
+      `{index, generation}`, índice 0 reservado como null entity (estilo EnTT), free-list de reciclaje con
+      bump de generación → un handle stale jamás resuelve a una entidad reutilizada. `Destroy` limpia los
+      componentes del índice (por si se recicla). `Create/Destroy/IsAlive` + journal.
+- [x] **Registro de tipos por `type_index`** (`World::ComponentType<T>`): asigna un `typeId` entero
+      secuencial + metadata `{name, size, align}` (semilla de la reflection; el JSON es un paso de Fase 3).
+- [x] **Pools sparse-set por tipo** (`ECS/ComponentPool.h`, `TypedPool<T>`): dense contiguo (SoA-ready) +
+      sparse `entity→dense`; add/remove O(1) swap-and-pop sin migración. One-component-per-type por
+      entidad (Unity/Godot). La máscara por entidad se implementa vía los sparse arrays (O(1)); el
+      bitset explícito se decide en el paso de query cache si aporta.
+- [x] **Journal de cambios estructurales + sync points** (`ChangeRecord`, `GetJournal/ClearJournal`,
+      `GetChangeVersion`): version monótona + registros de create/destroy/component add/remove; los
+      owned groups y query caches (siguiente paso) lo consumen para sync incremental.
+- [ ] **Owned groups SoA** (Renderables, Transforms, PhysicsBodies, Audio3D, Sprites) alimentados por el
+      journal.
+- [ ] **Query cache** (With/Without) invalidado por el journal.
+- [ ] **Systems pipeline** básico (FixedUpdate/Update/Render, command buffer).
+- [ ] **Transform system**: LocalTransform/WorldTransform + dirty-frontier + **lossy-preserve exacto**.
+- [ ] **Hierarchy tree unificado** (parent/firstChild/nextSibling) + reparent con worldPositionStays.
+- [ ] **Bridge**: CoreObject/Scene delegando al tree + ECS; tags de familia (Tag3D/2D/UI).
 - [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas.
 - [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía).
 - [ ] Tests de regresión: el editor y los demos deben verse/andar idénticos.

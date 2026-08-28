@@ -23,6 +23,26 @@ endif()
 
 add_test(NAME PhysicsTest COMMAND LeirEngineTests)
 
+# ---- Hybrid ECS core test (Entity + sparse-set pools + World + journal) ----
+add_executable(LeirECSTests
+    ECSTest.cpp
+)
+target_link_libraries(LeirECSTests PRIVATE LeirEngine)
+target_include_directories(LeirECSTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(APPLE OR UNIX)
+    set_target_properties(LeirECSTests PROPERTIES
+        BUILD_RPATH "${CMAKE_BINARY_DIR}/engine"
+    )
+endif()
+if(WIN32)
+    add_custom_command(TARGET LeirECSTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:LeirEngine>"
+            "$<TARGET_FILE_DIR:LeirECSTests>"
+    )
+endif()
+add_test(NAME ECSTest COMMAND LeirECSTests)
+
 # ---- Shader export smoke test (CI runtime validation of vendored Slang) ----
 # Compiles the 6 .slang shaders to all 5 targets through the editor's
 # SlangShaderCompiler + ShaderExporter. Runs on every platform in CI, proving
