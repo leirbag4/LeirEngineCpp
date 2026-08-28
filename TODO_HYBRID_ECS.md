@@ -286,8 +286,13 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       sigue en el camino clásico. `TransformSystem` ganó los 3 world-setters. Verificado en `ECSTest`
       (**ALL PASS**): world de root desde ECS, child reparentado con worldPositionStays → lossy (1,1,1)
       y rotación identity, `SetWorldScale` recomputa el local (0.632,0.632,1) con lossy-preserve.
-- [ ] **A2 — `CoreObject` backing**: cuando el objeto está backed, `AddComponent<T>` → `HybridComponent<T>`,
-      `GetComponent<T>` → `GetHybrid<T>`, `SetParent/AddChild/GetChildren/GetParent` → ECS tree.
+- [x] **A2 — `CoreObject` backing de componentes**: `Transform::GetEcsWorld()/GetEcsEntity()` expuestos;
+      `CoreObject::AddComponent<T>/GetComponent<T>/RemoveComponent<T>` delegan a
+      `World::AddHybrid/GetHybrid/Remove<HybridComponent<T>>` cuando `m_Transform.IsEcsBacked()`
+      (one-per-type + lifecycle del box). La jerarquía (AddChild/SetParent/GetChildren) ya funciona
+      backed porque delega al transform facade → ECS tree (A1). Verificado en `ECSTest` (**ALL PASS**):
+      AddComponent boxea al ECS, GetComponent devuelve la instancia viva, one-per-type, RemoveComponent
+      remueve el hybrid (OnDestroy).
 - [ ] **A3 — `Scene` = implementación ECS** (funde lo de `ECSScene`); `ECSScene` se BORRA; el editor
       migra a Scene-backed (verificación visual del usuario).
 - [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +

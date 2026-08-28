@@ -73,6 +73,7 @@ public:
                       ECS::HierarchyTree* tree, ECS::Entity entity);
     bool IsEcsBacked() const { return m_Ecs.world != nullptr; }
     ECS::Entity GetEcsEntity() const { return m_Ecs.entity; }
+    ECS::World* GetEcsWorld() const { return m_Ecs.world; }
 
 private:
     void MarkDirty();

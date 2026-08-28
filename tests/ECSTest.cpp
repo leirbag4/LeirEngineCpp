@@ -463,6 +463,25 @@ int main()
     Check(std::fabs(cl.x - 0.632f) < 1e-2f && std::fabs(cl.y - 0.632f) < 1e-2f && std::fabs(cl.z - 1.0f) < 1e-2f,
           "backed SetWorldScale lossy-preserve local");
 
+    // --- CoreObject ECS-backed components (Etapa A, increment A2) ---
+    World wA2;
+    HierarchyTree tA2;
+    TransformSystem tsA2(&wA2, &tA2);
+    Object3D* bo = new Object3D("Backed");
+    Entity be = wA2.Create();
+    tA2.EnsureIndex(be.index);
+    bo->GetTransform().SetEcsBacked(&wA2, &tsA2, &tA2, be);
+    auto& bc = bo->AddComponent<TestComp>(99);
+    Check(bc.value == 99, "backed AddComponent boxes into the ECS hybrid");
+    Check(wA2.GetHybrid<TestComp>(be) == &bc, "backed component lives in the ECS world");
+    auto* bg = bo->GetComponent<TestComp>();
+    Check(bg && bg == &bc, "backed GetComponent returns the ECS boxed instance");
+    auto& bc2 = bo->AddComponent<TestComp>(1);
+    Check(&bc2 == &bc && bc2.value == 99, "backed AddComponent one-per-type");
+    bo->RemoveComponent<TestComp>();
+    Check(!bo->GetComponent<TestComp>(), "backed RemoveComponent removes the hybrid");
+    delete bo;
+
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;
 }

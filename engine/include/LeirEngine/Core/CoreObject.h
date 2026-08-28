@@ -5,6 +5,7 @@
 #include "LeirEngine/Core/UUID.h"
 #include "LeirEngine/Core/Transform.h"
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/ECS/World.h"
 
 #include <string>
 #include <vector>
@@ -54,6 +55,10 @@ public:
     template<typename T, typename... Args>
     T& AddComponent(Args&&... args) {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
+        // ECS-backed (Etapa A): the component lives as a HybridComponent<T> in
+        // the ECS world; returns the live OOP instance (one per type).
+        if (m_Transform.IsEcsBacked())
+            return m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
         // One component per type (Unity/Godot semantics): adding an existing type
         // returns the live instance instead of creating a duplicate.
         if (T* existing = GetComponent<T>())
@@ -71,6 +76,8 @@ public:
     template<typename T>
     T* GetComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
+        if (m_Transform.IsEcsBacked())
+            return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
         auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
         if (it == m_ComponentIndex.end())
             return nullptr;
@@ -80,6 +87,8 @@ public:
     template<typename T>
     const T* GetComponent() const {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
+        if (m_Transform.IsEcsBacked())
+            return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
         auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
         if (it == m_ComponentIndex.end())
             return nullptr;
@@ -94,6 +103,10 @@ public:
     template<typename T>
     void RemoveComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
+        if (m_Transform.IsEcsBacked()) {
+            m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
+            return;
+        }
         auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
         if (it == m_ComponentIndex.end())
             return;

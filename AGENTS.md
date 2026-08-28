@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa A incremento A2: `CoreObject` backing de componentes** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7): `Transform::GetEcsWorld()/GetEcsEntity()` expuestos; `CoreObject::
+  AddComponent<T>/GetComponent<T>/RemoveComponent<T>` delegan a `World::AddHybrid/GetHybrid/
+  Remove<HybridComponent<T>>` cuando `m_Transform.IsEcsBacked()` (one-per-type + lifecycle del box).
+  La jerarquía (AddChild/SetParent/GetChildren) ya funciona backed porque delega al transform facade →
+  ECS tree (A1). Verificado en `ECSTest` (**ALL PASS**): AddComponent boxea al ECS, GetComponent
+  devuelve la instancia viva, one-per-type, RemoveComponent remueve el hybrid. Build limpio, ctest 3/3,
+  smoke editor OK.
+
 - **Hybrid ECS — Etapa A incremento A1: facade de `Transform` sobre el ECS** (2026-08-28,
   `TODO_HYBRID_ECS.md` §7): `Transform::SetEcsBacked(world, transforms, tree, entity)` — cuando está
   backed, los setters locales espejan al `LocalTransform` del ECS (`SyncEcsLocal`), los worlds se leen
