@@ -49,6 +49,13 @@ public:
     // Ensures the entity's WorldTransform is up to date and returns it.
     WorldTransform* GetWorld(Entity e);
     void SetParent(Entity e, Entity parent, bool worldPositionStays = true);
+
+    // World-space setters (Etapa A: the Transform facade delegates here): recompute
+    // the local so the requested world is met, exact lossy-preserve included.
+    void SetWorldPosition(Entity e, const Vector3& position);
+    void SetWorldRotation(Entity e, const Quaternion& rotation);
+    void SetWorldScale(Entity e, const Vector3& scale);
+
     void Update();
 
 private:

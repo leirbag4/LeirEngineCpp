@@ -1,6 +1,9 @@
 #include "LeirEngine/Core/Transform.h"
 
 #include "LeirEngine/Math/Mathf.h"
+#include "LeirEngine/ECS/World.h"
+#include "LeirEngine/ECS/HierarchyTree.h"
+#include "LeirEngine/ECS/TransformSystem.h"
 #include <algorithm>
 
 namespace Leir {
@@ -18,42 +21,88 @@ Transform::~Transform()
         child->m_Parent = nullptr;
 }
 
+void Transform::SetEcsBacked(ECS::World* world, ECS::TransformSystem* transforms,
+                             ECS::HierarchyTree* tree, ECS::Entity entity)
+{
+    m_Ecs.world = world;
+    m_Ecs.transforms = transforms;
+    m_Ecs.tree = tree;
+    m_Ecs.entity = entity;
+    // Mirror the current locals into the ECS so the entity starts consistent.
+    SyncEcsLocal();
+}
+
+void Transform::SyncEcsLocal()
+{
+    if (!m_Ecs.world)
+        return;
+    m_Ecs.transforms->SetLocal(m_Ecs.entity,
+        ECS::LocalTransform{m_LocalPosition, m_LocalRotation, m_LocalScale});
+}
+
+void Transform::SyncFromEcsLocal()
+{
+    if (!m_Ecs.world)
+        return;
+    auto* lt = m_Ecs.transforms->GetLocal(m_Ecs.entity);
+    if (!lt)
+        return;
+    m_LocalPosition = lt->position;
+    m_LocalRotation = lt->rotation;
+    m_LocalScale = lt->scale;
+}
+
 // --- Local space setters ---
 
 void Transform::SetLocalPosition(const Vector3& position)
 {
     m_LocalPosition = position;
     MarkDirty();
+    SyncEcsLocal();
 }
 
 void Transform::SetLocalRotation(const Quaternion& rotation)
 {
     m_LocalRotation = rotation;
     MarkDirty();
+    SyncEcsLocal();
 }
 
 void Transform::SetLocalScale(const Vector3& scale)
 {
     m_LocalScale = scale;
     MarkDirty();
+    SyncEcsLocal();
 }
 
-// --- World space getters (computed lazily) ---
+// --- World space getters (computed lazily; from the ECS when backed) ---
 
 Vector3 Transform::GetWorldPosition() const
 {
+    if (m_Ecs.world) {
+        auto* wt = m_Ecs.transforms->GetWorld(m_Ecs.entity);
+        return wt ? wt->worldPosition : m_WorldPosition;
+    }
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldPosition;
 }
 
 Quaternion Transform::GetWorldRotation() const
 {
+    if (m_Ecs.world) {
+        auto* wt = m_Ecs.transforms->GetWorld(m_Ecs.entity);
+        return wt ? wt->worldRotation : m_WorldRotation;
+    }
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldRotation;
 }
 
 Vector3 Transform::GetWorldScale() const
 {
+    if (m_Ecs.world) {
+        auto* wt = m_Ecs.transforms->GetWorld(m_Ecs.entity);
+        return wt ? wt->worldScale : m_WorldScale;
+    }
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldScale;
 }
@@ -62,6 +111,11 @@ Vector3 Transform::GetWorldScale() const
 
 void Transform::SetWorldPosition(const Vector3& position)
 {
+    if (m_Ecs.world) {
+        m_Ecs.transforms->SetWorldPosition(m_Ecs.entity, position);
+        SyncFromEcsLocal();
+        return;
+    }
     if (!m_Parent) {
         SetLocalPosition(position);
         return;
@@ -80,6 +134,11 @@ void Transform::SetWorldPosition(const Vector3& position)
 
 void Transform::SetWorldRotation(const Quaternion& rotation)
 {
+    if (m_Ecs.world) {
+        m_Ecs.transforms->SetWorldRotation(m_Ecs.entity, rotation);
+        SyncFromEcsLocal();
+        return;
+    }
     if (!m_Parent) {
         SetLocalRotation(rotation);
         return;
@@ -91,6 +150,11 @@ void Transform::SetWorldRotation(const Quaternion& rotation)
 
 void Transform::SetWorldScale(const Vector3& scale)
 {
+    if (m_Ecs.world) {
+        m_Ecs.transforms->SetWorldScale(m_Ecs.entity, scale);
+        SyncFromEcsLocal();
+        return;
+    }
     if (!m_Parent) {
         SetLocalScale(scale);
         return;
@@ -182,6 +246,10 @@ Matrix4x4 Transform::GetLocalMatrix() const
 
 Matrix4x4 Transform::GetLocalToWorldMatrix() const
 {
+    if (m_Ecs.world) {
+        auto* wt = m_Ecs.transforms->GetWorld(m_Ecs.entity);
+        return wt ? wt->worldMatrix : m_WorldMatrix;
+    }
     if (m_Dirty) UpdateWorldMatrix();
     return m_WorldMatrix;
 }
@@ -195,6 +263,15 @@ Matrix4x4 Transform::GetWorldToLocalMatrix() const
 
 void Transform::SetParent(Transform* parent, bool worldPositionStays)
 {
+    if (m_Ecs.world) {
+        // ECS-backed: the hierarchy lives in the ECS tree; delegate to the
+        // transform system (exact lossy-preserve / worldPositionStays) and pull
+        // the resulting local back into the members.
+        ECS::Entity parentEntity = parent ? parent->GetEcsEntity() : ECS::kNullEntity;
+        m_Ecs.transforms->SetParent(m_Ecs.entity, parentEntity, worldPositionStays);
+        SyncFromEcsLocal();
+        return;
+    }
     if (m_Parent == parent)
         return;
 

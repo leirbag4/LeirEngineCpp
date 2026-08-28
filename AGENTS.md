@@ -1055,6 +1055,18 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa A incremento A1: facade de `Transform` sobre el ECS** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7): `Transform::SetEcsBacked(world, transforms, tree, entity)` — cuando está
+  backed, los setters locales espejan al `LocalTransform` del ECS (`SyncEcsLocal`), los worlds se leen
+  del `WorldTransform` (getters aseguran clean), `SetParent` delega al tree + `worldPositionStays`
+  (lossy-preserve exacto) y `SetWorld*` delegan a los NUEVOS `TransformSystem::SetWorldPosition/
+  Rotation/Scale` (misma matemática + guard de inversa singular + epsilon). `SyncFromEcsLocal` trae el
+  local de vuelta a los miembros tras operaciones del ECS (bug encontrado: el primer intento empujaba
+  los miembros stale —identity— al ECS tras `SetParent`; fix con la sync inversa). Aditivo: nada setea
+  backing aún → el editor sigue en el camino clásico. Verificado en `ECSTest` (**ALL PASS**): world de
+  root desde ECS, child reparentado worldPositionStays → lossy (1,1,1) + rotación identity,
+  `SetWorldScale` recomputa local (0.632,0.632,1). Build limpio, ctest 3/3, smoke editor OK.
+
 - **Fix `CoreObject::AddChild` — linkea el transform (semántica Unity) + ajuste `SetParent(false)` + demo ECS corregido** (2026-08-28): el `ECSDemo` mostraba 4 cubos y el hijo rojo no aparecía (derivaba y se tapaba). Causa raíz: **`AddChild` solo armaba el tree, NO sincronizaba el transform** → con el write-back del ECS (`ECSScene::OnUpdate`), el hijo hacía `local←world` cada frame y volaba. Fix: `CoreObject::AddChild` ahora llama `child->m_Transform.SetParent(&m_Transform, true)` (preserva el world, re-deriva el local) + `NotifyStructuralChange`; `CoreObject::SetParent` captura el local ANTES del `AddChild` y lo restaura para `worldPositionStays=false` (porque `AddChild` ahora sincroniza con stays=true; el `false` conserva el local original). El demo crea el hijo en su posición de mundo deseada (0.5,1,0) → queda 2 unidades a la derecha del padre. Tests de regresión en `ECSTest` (**ALL PASS**): AddChild mantiene el world, re-deriva el local, y es estable entre frames (sin drift). Verificado por el usuario: 5 cubos (padre celeste + hijo rojo + kid verde/amarillo en el centro + rotated azul 2×2×2 + stretched), hijo rojo 2 unidades a la derecha del padre, 1×1×1. Build limpio, ctest 3/3, smoke editor OK.
 
 - **Hybrid ECS — Etapa B COMPLETA: Prueba de B con `ECSDemo` (render por ECS)** (2026-08-28,

@@ -274,9 +274,25 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 
 #### Etapa A — `CoreObject` → handle del ECS (migración definitiva)
 
-- [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar
-      `Entity` + `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/
-      GetComponent/RemoveComponent` delegan al tree + pools + HybridComponent.
+**Incrementos (se ejecutan de a uno, verificando build+ctest+smoke y el editor cada vez):**
+
+- [x] **A1 — Facade de `Transform` sobre el ECS** (`Transform::SetEcsBacked(world, transforms, tree, entity)`):
+      cuando está backed, los locales se espejan al `LocalTransform` del ECS (`SyncEcsLocal` en los
+      setters), los worlds se leen del `WorldTransform` computado por `TransformSystem` (getters
+      aseguran clean), `SetParent` delega al tree + `worldPositionStays` (lossy-preserve exacto) y
+      `SetWorld*` delegan a los nuevos `TransformSystem::SetWorldPosition/Rotation/Scale` (misma
+      matemática exacta + guard de inversa singular + epsilon). `SyncFromEcsLocal` trae el local de
+      vuelta a los miembros tras operaciones del ECS. Aditivo: nada setea backing todavía → el editor
+      sigue en el camino clásico. `TransformSystem` ganó los 3 world-setters. Verificado en `ECSTest`
+      (**ALL PASS**): world de root desde ECS, child reparentado con worldPositionStays → lossy (1,1,1)
+      y rotación identity, `SetWorldScale` recomputa el local (0.632,0.632,1) con lossy-preserve.
+- [ ] **A2 — `CoreObject` backing**: cuando el objeto está backed, `AddComponent<T>` → `HybridComponent<T>`,
+      `GetComponent<T>` → `GetHybrid<T>`, `SetParent/AddChild/GetChildren/GetParent` → ECS tree.
+- [ ] **A3 — `Scene` = implementación ECS** (funde lo de `ECSScene`); `ECSScene` se BORRA; el editor
+      migra a Scene-backed (verificación visual del usuario).
+- [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +
+      `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/GetComponent/
+      RemoveComponent` delegan al tree + pools + HybridComponent.
 - [ ] `Scene` pasa a ser la implementación ECS (funde lo aprendido en `ECSScene`); `ECSScene` se
       BORRA (ya no hay dos implementaciones).
 - [ ] `GetTransform()` → facade sobre `LocalTransform`/`WorldTransform` con la semántica exacta actual

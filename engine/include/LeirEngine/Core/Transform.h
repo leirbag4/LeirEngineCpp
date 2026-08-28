@@ -4,11 +4,13 @@
 #include "LeirEngine/Math/Vector3.h"
 #include "LeirEngine/Math/Quaternion.h"
 #include "LeirEngine/Math/Matrix4x4.h"
+#include "LeirEngine/ECS/Entity.h"
 #include <vector>
 
 namespace Leir {
 
 class CoreObject;
+namespace ECS { class World; class HierarchyTree; class TransformSystem; }
 
 class LEIR_API Transform {
 public:
@@ -60,10 +62,24 @@ public:
     CoreObject* GetOwner() const { return m_Owner; }
     void SetOwner(CoreObject* owner) { m_Owner = owner; }
 
+    // --- ECS backing (Etapa A, TODO_HYBRID_ECS.md §7) ---
+    // When backed, the transform mirrors its LOCALS into the entity's ECS
+    // LocalTransform (TransformSystem::SetLocal) and reads its WORLD from the
+    // entity's ECS WorldTransform (computed by TransformSystem). Reparenting and
+    // world setters go through the ECS tree/system with the exact lossy-preserve
+    // semantics. Unbacked = classic standalone behavior. Additive: nothing sets
+    // backing yet in the engine, so existing code paths are untouched.
+    void SetEcsBacked(ECS::World* world, ECS::TransformSystem* transforms,
+                      ECS::HierarchyTree* tree, ECS::Entity entity);
+    bool IsEcsBacked() const { return m_Ecs.world != nullptr; }
+    ECS::Entity GetEcsEntity() const { return m_Ecs.entity; }
+
 private:
     void MarkDirty();
     void UpdateWorldMatrix() const;
     void UpdateWorldFromLocal() const;
+    void SyncEcsLocal();
+    void SyncFromEcsLocal();
 
     Vector3 m_LocalPosition{0.0f, 0.0f, 0.0f};
     Quaternion m_LocalRotation{0.0f, 0.0f, 0.0f, 1.0f};
@@ -78,6 +94,13 @@ private:
     Transform* m_Parent = nullptr;
     std::vector<Transform*> m_Children;
     CoreObject* m_Owner = nullptr;
+
+    struct EcsBacking {
+        ECS::World* world = nullptr;
+        ECS::TransformSystem* transforms = nullptr;
+        ECS::HierarchyTree* tree = nullptr;
+        ECS::Entity entity = ECS::kNullEntity;
+    } m_Ecs;
 };
 
 } // namespace Leir

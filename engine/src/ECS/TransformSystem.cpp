@@ -42,6 +42,82 @@ LocalTransform* TransformSystem::GetLocal(Entity e)
     return e ? m_World->Get<LocalTransform>(e) : nullptr;
 }
 
+namespace {
+// Returns the entity's local (default identity when absent) for the world setters.
+LocalTransform LocalOrDefault(World* world, Entity e)
+{
+    LocalTransform* lt = world->Get<LocalTransform>(e);
+    return lt ? *lt : LocalTransform{};
+}
+} // namespace
+
+void TransformSystem::SetWorldPosition(Entity e, const Vector3& position)
+{
+    if (!e)
+        return;
+    LocalTransform lt = LocalOrDefault(m_World, e);
+    const uint32_t parent = m_Tree->GetParent(e.index);
+    if (parent == kNullIndex) {
+        lt.position = position;
+        SetLocal(e, lt);
+        return;
+    }
+    EnsureClean(parent);
+    const WorldTransform* pwt = m_World->Get<WorldTransform>(Entity{parent, m_World->GenerationOf(parent)});
+    if (pwt) {
+        const Matrix4x4 inv = pwt->worldMatrix.Inverse();
+        lt.position = inv.IsFinite() ? inv.MultiplyPoint3x4(position) : position;
+    }
+    SetLocal(e, lt);
+}
+
+void TransformSystem::SetWorldRotation(Entity e, const Quaternion& rotation)
+{
+    if (!e)
+        return;
+    LocalTransform lt = LocalOrDefault(m_World, e);
+    const uint32_t parent = m_Tree->GetParent(e.index);
+    if (parent == kNullIndex) {
+        lt.rotation = rotation;
+        SetLocal(e, lt);
+        return;
+    }
+    EnsureClean(parent);
+    const WorldTransform* pwt = m_World->Get<WorldTransform>(Entity{parent, m_World->GenerationOf(parent)});
+    if (pwt)
+        lt.rotation = pwt->worldRotation.Inverse() * rotation;
+    SetLocal(e, lt);
+}
+
+void TransformSystem::SetWorldScale(Entity e, const Vector3& scale)
+{
+    if (!e)
+        return;
+    LocalTransform lt = LocalOrDefault(m_World, e);
+    const uint32_t parent = m_Tree->GetParent(e.index);
+    if (parent == kNullIndex) {
+        lt.scale = scale;
+        SetLocal(e, lt);
+        return;
+    }
+    EnsureClean(parent);
+    const WorldTransform* pwt = m_World->Get<WorldTransform>(Entity{parent, m_World->GenerationOf(parent)});
+    if (pwt) {
+        // Exact lossy-preserve: divide by |(parentWorld · localRot) column| so the
+        // world LOSSY scale is preserved under a rotated + non-uniformly-scaled
+        // parent. Epsilon guard for zero-scaled axes (0/0 -> 0, no NaN).
+        const Matrix4x4 localRotM = Matrix4x4::TRS(Vector3::Zero(), lt.rotation, Vector3::One());
+        const Matrix4x4 combined = pwt->worldMatrix * localRotM;
+        const Vector3 colLen = ComputeColumnLengths(combined);
+        constexpr float kEps = 1e-8f;
+        lt.scale = Vector3(
+            scale.x / (colLen.x > kEps ? colLen.x : 1.0f),
+            scale.y / (colLen.y > kEps ? colLen.y : 1.0f),
+            scale.z / (colLen.z > kEps ? colLen.z : 1.0f));
+    }
+    SetLocal(e, lt);
+}
+
 WorldTransform* TransformSystem::GetWorld(Entity e)
 {
     if (!e)

@@ -433,6 +433,36 @@ int main()
     Check(std::fabs(wca2.x - 5) < 1e-3f && std::fabs(wca2.y - 5) < 1e-3f && std::fabs(wca2.z - 5) < 1e-3f,
           "AddChild child world stable across frames (no drift)");
 
+    // --- Transform ECS-backing facade (Etapa A, increment A1) ---
+    World wA;
+    HierarchyTree tA;
+    TransformSystem tsA(&wA, &tA);
+    Entity rootA = wA.Create();
+    Transform rootT;
+    rootT.SetEcsBacked(&wA, &tsA, &tA, rootA);
+    rootT.SetLocalPosition({1, 2, 3}); // mirrors into the ECS LocalTransform
+    rootT.SetLocalRotation(Quaternion::AngleAxis(45.0f, Vector3::Forward()));
+    rootT.SetLocalScale({2, 1, 1});
+    Vector3 rp = rootT.GetWorldPosition(); // reads the ECS WorldTransform
+    Check(std::fabs(rp.x - 1) < 1e-4f && std::fabs(rp.y - 2) < 1e-4f && std::fabs(rp.z - 3) < 1e-4f,
+          "backed root world position from ECS");
+
+    Entity childA = wA.Create();
+    Transform childT;
+    childT.SetEcsBacked(&wA, &tsA, &tA, childA);
+    childT.SetParent(&rootT, true); // ECS tree + worldPositionStays (lossy-preserve)
+    Vector3 cs = childT.GetWorldScale();
+    Check(std::fabs(cs.x - 1) < 1e-3f && std::fabs(cs.y - 1) < 1e-3f && std::fabs(cs.z - 1) < 1e-3f,
+          "backed child world scale preserved (lossy, no deformation)");
+    Check(std::fabs(Quaternion::Dot(childT.GetWorldRotation(), Quaternion::Identity()) - 1.0f) < 1e-3f,
+          "backed child world rotation identity");
+
+    // SetWorldScale on the backed child recomputes the local via the ECS.
+    childT.SetWorldScale({1, 1, 1});
+    Vector3 cl = childT.GetLocalScale();
+    Check(std::fabs(cl.x - 0.632f) < 1e-2f && std::fabs(cl.y - 0.632f) < 1e-2f && std::fabs(cl.z - 1.0f) < 1e-2f,
+          "backed SetWorldScale lossy-preserve local");
+
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;
 }
