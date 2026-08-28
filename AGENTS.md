@@ -1055,6 +1055,12 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — estrategia del Bridge documentada (B → A)** (2026-08-28, `TODO_HYBRID_ECS.md` §7):
+  el bridge se hace en dos etapas: **Etapa B** `HybridComponent` + `ECSScene` de prueba (aditivo,
+  implementa `ISceneStorage` sobre el ECS, riesgo nulo para el editor) → **Etapa A** `CoreObject` →
+  handle del ECS (migración definitiva). El `.md` lista los pasos intermedios de B, los de A, y el
+  **código de B que se borra al completar A** (ECSScene + handle provisional) para código limpio.
+
 - **Fix CI macOS (ECSTest) — UB de puntero colgante en `TransformSystem::EnsureClean`** (2026-08-28):
   el test `zero-scaled axis stays finite` fallaba solo en AppleClang/arm64 (MSVC lo ocultaba). Causa raíz:
   `Add<WorldTransform>(e)` puede **reallocar el pool** e invalidar `parentWT` (puntero al MISMO pool) →

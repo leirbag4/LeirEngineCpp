@@ -227,6 +227,57 @@ cube->GetComponent<MeshRenderer>();
   `Tag2D`, `TagUI`) → el hierarchy panel filtra por tag, no por RTTI.
 - El render/picking/física/audio usan los **groups/query**, no `GetObjects()+GetComponent` scans.
 
+### Estrategia del Bridge: B primero (prueba) → A después (migración definitiva)
+
+**Decisión (2026-08-28)**: el ECS interno ya está completo (entity/pools/groups/journal/systems/
+tree/transform). El Bridge se hace en DOS etapas para no romper el editor: primero la **opción B**
+(prueba del seam con `ECSScene`, 100% aditiva, riesgo nulo para el editor actual), y **una vez que
+ande**, la **opción A** (`CoreObject` → handle del ECS, la migración definitiva). El código de B que
+quede obsoleto tras A se BORRA (código limpio, listado abajo).
+
+#### Etapa B — `HybridComponent` + `ECSScene` de prueba (aditivo, el editor actual NO cambia)
+
+- [ ] **`HybridComponent<T>`** (`ECS/HybridComponent.h`): componente ECS que boxea un objeto OOP
+      `Component` (`std::unique_ptr<T>`), con lifecycle `OnAwake/OnStart/OnUpdate/OnDestroy` dirigido
+      por un sistema o el puente. Es la base de "AddComponent<T> devuelve un Component vivo" dentro del
+      ECS (patrón Unity DOTS adaptado). MOVE-ONLY (unique_ptr) → validar que `TypedPool` lo soporta.
+- [ ] **`ECSScene`** (`Scene/ECSScene.{h,cpp}`) implementa `ISceneStorage` (el seam de Fase 0):
+      - `World` + `HierarchyTree` + `TransformSystem` + `OwnedGroup`s (Renderables/Cameras/Lights).
+      - `CreateObject3D/2D`: crea entity + `LocalTransform` + tag de familia (`Tag3D`/`Tag2D`) +
+        node del tree, y devuelve un `CoreObject`-handle (ver "handle provisional" abajo).
+      - `DestroyObject`/`MoveObject`: operan sobre el tree (root order) + journal.
+      - `GetRenderables/GetCameras/GetLights`: via grupos + `HybridComponent<MeshRenderer/Camera/Light>`.
+      - `OnUpdate`: corre el `TransformSystem` (con el pipeline) + los `HybridComponent` lifecycle.
+- [ ] **Handle provisional** para B: un `CoreObject` mínimo cuyo `GetTransform()` lee/escribe
+      `LocalTransform`/`WorldTransform` del ECS (facade) y cuyo `GetComponent<T>` busca
+      `HybridComponent<T>`. NO es el handle final (A); es solo para que el renderer/picking prueben B.
+- [ ] **Prueba de B**: un demo/test que crea la escena por `ECSScene` y la renderiza con el
+      `RenderPipeline` real (que ya consume `ISceneStorage`) → jerarquía + transform + renderables
+      por ECS, verificado visualmente y en `ECSTest`.
+- [ ] Resultado: **el seam queda probado de punta a punta** sin tocar la API ni el editor actual.
+
+#### Etapa A — `CoreObject` → handle del ECS (migración definitiva)
+
+- [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar
+      `Entity` + `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/
+      GetComponent/RemoveComponent` delegan al tree + pools + HybridComponent.
+- [ ] `Scene` pasa a ser la implementación ECS (funde lo aprendido en `ECSScene`); `ECSScene` se
+      BORRA (ya no hay dos implementaciones).
+- [ ] `GetTransform()` → facade sobre `LocalTransform`/`WorldTransform` con la semántica exacta actual
+      (lossy-preserve, worldPositionStays, guard epsilon) — ya portada al `TransformSystem`.
+- [ ] `AddComponent<T>` → `HybridComponent<T>` boxeado (devuelve `T&` vivo, one-per-type).
+- [ ] El hierarchy panel filtra por **tags** (`Tag3D/Tag2D/TagUI`) en vez de `dynamic_cast`.
+- [ ] Render/picking/física/audio sobre los **groups** del ECS.
+- [ ] `Entity` generacional: `CoreObject` valida con `IsAlive` (handle stale seguro).
+
+#### Código de B que se BORRA al completar A (código limpio)
+
+- `ECSScene` (y su `.h/.cpp`) — la implementación ECS de prueba queda absorbida por `Scene`.
+- El "handle provisional" de B (si quedó como clase separada) — reemplazado por el `CoreObject` real.
+- Cualquier helper temporal del demo/test de B que no aporte a la API final.
+- NO se borran: `World`, `TypedPool`, `OwnedGroup`, `HierarchyTree`, `TransformSystem`,
+  `SystemPipeline`, `CommandBuffer`, `HybridComponent`, `Entity` — son el motor definitivo.
+
 ---
 
 ## 8. Atoms (prefabs) — ver `TODO_ATOM.md`
@@ -336,7 +387,9 @@ cube->GetComponent<MeshRenderer>();
       parent/firstChild/lastChild/nextSibling/prevSibling + depth por índice de entidad, O(1)
       `GetParent/GetChildren`, `SetParent` con detach+append y **guard de ciclos**, `ClearEntity`
       (detach + promueve hijos a roots) para el destroy. Verificado en `ECSTest`.
-- [ ] **Bridge**: CoreObject/Scene delegando al tree + ECS; tags de familia (Tag3D/2D/UI).
+- [ ] **Bridge** en dos etapas (ver §7 "Estrategia del Bridge"): **Etapa B** `HybridComponent` +
+      `ECSScene` de prueba (aditivo, riesgo nulo) → **Etapa A** `CoreObject` → handle del ECS
+      (migración definitiva; se borra el código de prueba de B). Tags de familia `Tag3D/Tag2D/TagUI`.
 - [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas.
 - [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía).
 - [ ] Tests de regresión: el editor y los demos deben verse/andar idénticos.
