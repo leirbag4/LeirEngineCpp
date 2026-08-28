@@ -300,8 +300,16 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       inline duplicado). Así los componentes de objetos backed (RigidBody/Audio/…) corren su OnUpdate
       desde el driver de la escena. Verificado en `ECSTest` (**ALL PASS**): registro, start+update,
       start-once, unregister al remover.
-- [ ] **A3 — `Scene` = implementación ECS** (funde lo de `ECSScene`); `ECSScene` se BORRA; el editor
-      migra a Scene-backed (verificación visual del usuario).
+- [x] **A3 — `Scene` = implementación ECS (fusión de `ECSScene`)** (2026-08-28): `Scene` gana
+      `World` + `HierarchyTree` + `TransformSystem` + `EntityOf`; `CreateObject3D/2D` crea entity
+      (tag `Tag3D/Tag2D` + `LocalTransform` + node del tree) y **backea el transform del objeto**
+      (`SetEcsBacked`); `DestroyObject` limpia entity+tree; `OnUpdate` = StepPhysics → **hybrid
+      lifecycle** (`World::GetHybrids()` → `Component::Tick`) → `obj->OnUpdate` (recursión) →
+      `m_Transforms.Update()`. **`ECSScene` se BORRA** (fue absorbida). `ECSDemo` migrado a `Scene`.
+      Verificado: build limpio, ctest 3/3, `PhysicsDemo` (RigidBody/Collider hybrids corriendo su
+      lifecycle, `objs=10`), `ECSDemo`/`ECSBackedDemo` (`renderables=5`, kid lossy 1,1,1), smoke del
+      editor limpio. **PENDIENTE: verificación VISUAL del usuario** (jerarquía, gizmos, inspector,
+      picking, "+", drag&drop).
 - [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +
       `World*`/`Scene*`. `AddChild/GetChildren/SetParent/GetTransform/AddComponent/GetComponent/
       RemoveComponent` delegan al tree + pools + HybridComponent.
@@ -316,9 +324,11 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 
 #### Código de B que se BORRA al completar A (código limpio)
 
-- `ECSScene` (y su `.h/.cpp`) — la implementación ECS de prueba queda absorbida por `Scene`.
-- El "handle provisional" de B (si quedó como clase separada) — reemplazado por el `CoreObject` real.
-- Cualquier helper temporal del demo/test de B que no aporte a la API final.
+- ~~`ECSScene` (y su `.h/.cpp`)~~ — **BORRADO (2026-08-28)**: la implementación ECS de prueba quedó
+  absorbida por `Scene` (A3). `ECSDemo` ahora usa `Scene` directamente.
+- El "handle provisional" de B — fue `Object3D` OOP + sync por frame; reemplazado por el `CoreObject`
+  real con transform backed (facade).
+- Helpers temporales del demo/test de B que no aporten a la API final.
 - NO se borran: `World`, `TypedPool`, `OwnedGroup`, `HierarchyTree`, `TransformSystem`,
   `SystemPipeline`, `CommandBuffer`, `HybridComponent`, `Entity` — son el motor definitivo.
 

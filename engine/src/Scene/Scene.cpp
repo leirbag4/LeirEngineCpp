@@ -6,6 +6,7 @@
 #include "LeirEngine/Components/SpriteRenderer.h"
 #include "LeirEngine/Components/Camera.h"
 #include "LeirEngine/Components/Light.h"
+#include "LeirEngine/ECS/Tags.h"
 #include "LeirEngine/Physics/PhysicsWorld.h"
 
 #include <algorithm>
@@ -14,6 +15,7 @@ namespace Leir {
 
 Scene::Scene(const std::string& name)
     : m_Name(name)
+    , m_Transforms(&m_World, &m_Tree)
 {
 }
 
@@ -21,6 +23,23 @@ Scene::~Scene()
 {
     m_Objects.clear();
     m_ObjectIndex.clear();
+    m_EntityOf.clear();
+}
+
+ECS::Entity Scene::CreateEntity(CoreObject* object, bool is3D)
+{
+    ECS::Entity e = m_World.Create();
+    if (is3D)
+        m_World.Add<ECS::Tag3D>(e);
+    else
+        m_World.Add<ECS::Tag2D>(e);
+    m_Tree.EnsureIndex(e.index);
+    // Backing the transform creates the entity's LocalTransform (via
+    // TransformSystem::SetLocal, which also marks it dirty) so the ECS computes
+    // the WorldTransform.
+    object->GetTransform().SetEcsBacked(&m_World, &m_Transforms, &m_Tree, e);
+    m_EntityOf[object] = e;
+    return e;
 }
 
 Object3D* Scene::CreateObject3D(const std::string& name)
@@ -30,6 +49,7 @@ Object3D* Scene::CreateObject3D(const std::string& name)
     ptr->m_Scene = this;
     m_ObjectIndex[ptr->GetUUID()] = ptr;
     m_Objects.push_back(std::move(obj));
+    CreateEntity(ptr, true);
     m_CachesDirty = true;
     return ptr;
 }
@@ -41,6 +61,7 @@ Object2D* Scene::CreateObject2D(const std::string& name)
     ptr->m_Scene = this;
     m_ObjectIndex[ptr->GetUUID()] = ptr;
     m_Objects.push_back(std::move(obj));
+    CreateEntity(ptr, false);
     m_CachesDirty = true;
     return ptr;
 }
@@ -53,12 +74,18 @@ void Scene::DestroyObject(CoreObject* object)
     for (auto child : object->m_Children)
         DestroyObject(child);
 
+    auto it = m_EntityOf.find(object);
+    if (it != m_EntityOf.end()) {
+        m_World.Destroy(it->second);
+        m_Tree.ClearEntity(it->second.index);
+        m_EntityOf.erase(it);
+    }
     m_ObjectIndex.erase(object->GetUUID());
 
-    auto it = std::find_if(m_Objects.begin(), m_Objects.end(),
+    auto oit = std::find_if(m_Objects.begin(), m_Objects.end(),
         [object](const std::unique_ptr<CoreObject>& ptr) { return ptr.get() == object; });
-    if (it != m_Objects.end()) {
-        m_Objects.erase(it);
+    if (oit != m_Objects.end()) {
+        m_Objects.erase(oit);
     }
     m_CachesDirty = true;
 }
@@ -91,6 +118,12 @@ CoreObject* Scene::FindObjectByName(const std::string& name) const
             return obj.get();
     }
     return nullptr;
+}
+
+ECS::Entity Scene::EntityOf(const CoreObject* object) const
+{
+    auto it = m_EntityOf.find(object);
+    return it != m_EntityOf.end() ? it->second : ECS::kNullEntity;
 }
 
 void Scene::RebuildCaches()
@@ -146,8 +179,16 @@ void Scene::OnUpdate(float deltaTime)
 {
     PhysicsWorld::GetInstance().StepPhysics(deltaTime);
 
+    // Drive the ECS-hybrid component lifecycle (OnStart/OnUpdate for the backed
+    // objects' components: RigidBody, AudioListener, etc.).
+    for (auto* comp : m_World.GetHybrids())
+        comp->Tick(deltaTime);
+
     for (auto& obj : m_Objects)
         obj->OnUpdate(deltaTime);
+
+    // ECS is authoritative for world transforms: recompute the dirty frontier.
+    m_Transforms.Update();
 }
 
 void Scene::OnRender()

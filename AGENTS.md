@@ -1055,6 +1055,17 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa A A3: `Scene` = implementación ECS (fusión de `ECSScene`) + `ECSScene` BORRADA** (2026-08-28, `TODO_HYBRID_ECS.md` §7): `Scene` gana `World` + `HierarchyTree` +
+  `TransformSystem` + `EntityOf`; `CreateObject3D/2D` crea entity (tag `Tag3D/Tag2D` + `LocalTransform`
+  vía backing + tree node) y **backea el transform del objeto** (`SetEcsBacked`); `DestroyObject` limpia
+  entity+tree; `OnUpdate` = StepPhysics → **hybrid lifecycle** (`World::GetHybrids()` → `Component::Tick`)
+  → `obj->OnUpdate` → `m_Transforms.Update()`. `AddComponent/RemoveComponent` backed ahora llaman
+  `NotifyStructuralChange` (caches de escena). **`ECSScene.{h,cpp}` ELIMINADA** del CMake y del repo;
+  `ECSDemo` migrado a `Scene`. Verificado: build limpio, ctest 3/3, `PhysicsDemo` con RigidBody/Collider
+  hybrids corriendo su lifecycle (`objs=10`), `ECSDemo`/`ECSBackedDemo` (`renderables=5`, kid lossy
+  1,1,1), smoke del editor limpio (el editor ahora corre sobre Scene-backed). Pendiente: verificación
+  VISUAL del editor por el usuario.
+
 - **Hybrid ECS — Etapa A A3a: lifecycle de hybrids** (2026-08-28, `TODO_HYBRID_ECS.md` §7): `World` gana
   el **registro de hybrids** (`GetHybrids()` — instancias OOP boxeadas en orden de alta; `AddHybrid` las
   registra vía callback `m_Unregister` en el box que des-registra al destruirse). Nuevo

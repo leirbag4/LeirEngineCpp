@@ -11,7 +11,6 @@ add_library(LeirEngine SHARED
     src/ECS/TransformSystem.cpp
     src/ECS/System.cpp
     src/Scene/Scene.cpp
-    src/Scene/ECSScene.cpp
     src/Scene/SceneManager.cpp
     src/Objects/Object3D.cpp
     src/Objects/Object2D.cpp

@@ -2,7 +2,7 @@
 #include <LeirEngine/Core/CoreObject.h>
 #include <LeirEngine/Core/Settings.h>
 #include <LeirEngine/Objects/Object3D.h>
-#include <LeirEngine/Scene/ECSScene.h>
+#include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/RHI/RenderBackend.h>
 #include <LeirEngine/Rendering/RenderPipeline.h>
 #include <LeirEngine/Rendering/Shader.h>
@@ -21,12 +21,11 @@
 #include <cmath>
 #include <string>
 
-// Prueba de B (TODO_HYBRID_ECS.md §7, Etapa B): the scene is authored through an
-// ECSScene (ISceneStorage backed by the custom ECS) and rendered with the REAL
+// Prueba de B (TODO_HYBRID_ECS.md §7, Etapa B): the scene is authored through a
+// Scene (ISceneStorage backed by the custom ECS) and rendered with the REAL
 // RenderPipeline. The ECS computes the world transforms (TransformSystem) and
-// ECSScene::OnUpdate writes them back into the CoreObject handles, so the
-// renderer draws exactly what the ECS computed — hierarchy + lossy-preserve
-// reparent included.
+// the CoreObject handles are ECS-backed (facade), so the renderer draws exactly
+// what the ECS computed — hierarchy + lossy-preserve reparent included.
 class ECSDemo : public Leir::CoreApplication {
 public:
     ECSDemo()
@@ -43,7 +42,7 @@ public:
 protected:
     void OnInit() override
     {
-        Leir::XConsole::Println("ECS Demo initializing (Etapa B — ECSScene + RenderPipeline)");
+        Leir::XConsole::Println("ECS Demo initializing (Etapa B — Scene + RenderPipeline)");
 
         // ---- RHI backend ----
         m_Backend.reset(Leir::RHI::BackendFactory::Create(
@@ -84,7 +83,7 @@ protected:
         m_RenderPipeline = std::make_unique<Leir::RenderPipeline>(m_Backend.get());
 
         // ---- Scene over the ECS (Etapa B) ----
-        m_Scene = std::make_unique<Leir::ECSScene>();
+        m_Scene = std::make_unique<Leir::Scene>();
 
         // Camera.
         m_CameraObj = m_Scene->CreateObject3D("Camera");
@@ -197,7 +196,7 @@ protected:
         if (m_Backend && m_Scene && m_Backend->BeginFrame(false)) {
             auto cmd = m_Backend->GetCurrentCommandBuffer();
             m_SceneGraph.Clear();
-            m_RenderPipeline->Render(m_SceneGraph, m_Scene.get()); // ISceneStorage* -> ECSScene
+            m_RenderPipeline->Render(m_SceneGraph, m_Scene.get()); // ISceneStorage* -> Scene
             m_Backend->CmdExecuteGraph(cmd, m_SceneGraph);
             m_Backend->EndFrame();
         }
@@ -220,7 +219,7 @@ private:
     std::shared_ptr<Leir::Material> m_KidMat;
     std::shared_ptr<Leir::Texture2D> m_WhiteTexture;
 
-    std::unique_ptr<Leir::ECSScene> m_Scene;
+    std::unique_ptr<Leir::Scene> m_Scene;
     Leir::Object3D* m_CameraObj = nullptr;
     Leir::Object3D* m_Parent = nullptr;
     Leir::Object3D* m_Kid = nullptr;

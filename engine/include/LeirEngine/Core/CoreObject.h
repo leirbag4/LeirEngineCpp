@@ -63,6 +63,7 @@ public:
             T& ref = m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
             ref.m_Owner = this;
             ref.OnAwake();
+            NotifyStructuralChange();
             return ref;
         }
         // One component per type (Unity/Godot semantics): adding an existing type
@@ -111,6 +112,7 @@ public:
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         if (m_Transform.IsEcsBacked()) {
             m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
+            NotifyStructuralChange();
             return;
         }
         auto it = m_ComponentIndex.find(std::type_index(typeid(T)));

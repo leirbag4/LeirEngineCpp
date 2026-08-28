@@ -6,7 +6,7 @@
 #include "LeirEngine/ECS/CommandBuffer.h"
 #include "LeirEngine/ECS/HybridComponent.h"
 #include "LeirEngine/ECS/Tags.h"
-#include "LeirEngine/Scene/ECSScene.h"
+#include "LeirEngine/Scene/Scene.h"
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/Objects/Object3D.h"
 #include "LeirEngine/Components/MeshRenderer.h"
@@ -366,8 +366,8 @@ int main()
     hw.Destroy(he);
     Check(g_TestCompAlive == 0, "destroying entity destroys boxed component");
 
-    // --- ECSScene (ISceneStorage backed by the ECS; Etapa B proof) ---
-    ECSScene es;
+    // --- Scene (ECS-backed ISceneStorage; Etapa A fusion) ---
+    Scene es;
     Object3D* root = es.CreateObject3D("root");
     root->AddComponent<MeshRenderer>();
     Object3D* child = es.CreateObject3D("child");
@@ -411,14 +411,14 @@ int main()
     // ISceneStorage contract: renderables (MeshRenderer on root), objects list.
     bool hasRoot = false;
     for (auto* o : es.GetRenderables()) if (o == root) hasRoot = true;
-    Check(hasRoot, "ecsscene renderables include the MeshRenderer object");
-    Check(es.GetObjects().size() == 4, "ecsscene GetObjects lists all objects");
-    Check(es.FindObjectByUUID(root->GetUUID()) == root, "ecsscene FindObjectByUUID");
+    Check(hasRoot, "scene renderables include the MeshRenderer object");
+    Check(es.GetObjects().size() == 4, "scene GetObjects lists all objects");
+    Check(es.FindObjectByUUID(root->GetUUID()) == root, "scene FindObjectByUUID");
 
     // AddChild links the transform (Unity semantics): a child created at world
     // (5,5,5) under a parent at (1,2,3) STAYS at (5,5,5) and its local becomes
     // (4,3,2). Before the fix AddChild only wired the tree -> the child drifted.
-    ECSScene es2;
+    Scene es2;
     Object3D* pa = es2.CreateObject3D("pa");
     pa->GetTransform().SetLocalPosition(Leir::Vector3(1, 2, 3));
     Object3D* ca = es2.CreateObject3D("ca");

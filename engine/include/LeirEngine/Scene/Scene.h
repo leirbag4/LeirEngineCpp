@@ -3,6 +3,10 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Core/Types.h"
 #include "LeirEngine/Scene/ISceneStorage.h"
+#include "LeirEngine/ECS/Entity.h"
+#include "LeirEngine/ECS/World.h"
+#include "LeirEngine/ECS/HierarchyTree.h"
+#include "LeirEngine/ECS/TransformSystem.h"
 
 #include <string>
 #include <vector>
@@ -15,6 +19,12 @@ class CoreObject;
 class Object3D;
 class Object2D;
 
+// Scene is the ECS-backed implementation of ISceneStorage (Etapa A, fuses what
+// ECSScene proved): every CreateObject3D/2D creates an ECS entity (family tag +
+// LocalTransform + tree node) and backs the object's Transform (facade over the
+// ECS), so components live as HybridComponents and the hierarchy is the ECS
+// tree. OnUpdate drives the hybrid component lifecycle (Component::Tick) and the
+// TransformSystem. Render/picking consume the ISceneStorage caches.
 class LEIR_API Scene : public ISceneStorage {
 public:
     Scene(const std::string& name = "Untitled Scene");
@@ -46,16 +56,28 @@ public:
     const std::vector<CoreObject*>& GetLights() override;
     void MarkCachesDirty() override { m_CachesDirty = true; }
 
+    // ECS access (Etapa A: the single source of truth).
+    ECS::World& GetWorld() { return m_World; }
+    ECS::HierarchyTree& GetTree() { return m_Tree; }
+    ECS::TransformSystem& GetTransforms() { return m_Transforms; }
+    ECS::Entity EntityOf(const CoreObject* object) const;
+
     // Lifecycle
     void OnUpdate(float deltaTime);
     void OnRender();
 
 private:
+    ECS::Entity CreateEntity(CoreObject* object, bool is3D);
     void RebuildCaches();
 
     std::string m_Name;
     std::vector<std::unique_ptr<CoreObject>> m_Objects;
     std::unordered_map<uint64_t, CoreObject*> m_ObjectIndex;
+
+    ECS::World m_World;
+    ECS::HierarchyTree m_Tree;
+    ECS::TransformSystem m_Transforms;
+    std::unordered_map<const CoreObject*, ECS::Entity> m_EntityOf;
 
     // Query caches (rebuilt lazily via RebuildCaches when m_CachesDirty).
     bool m_CachesDirty = true;
