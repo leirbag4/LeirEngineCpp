@@ -20,11 +20,16 @@ ningún menú/popup en el codebase.
 ## Fases / Checkboxes
 
 ### Fase 1 — Widget base
-- [ ] `UIContextMenu : UIPanel` (Column, padding, fondo oscuro, overlay).
-- [ ] `AddItem(label, callback)` / `AddSeparator()` / `AddItemDisabled(label)`.
-- [ ] `OpenAt(canvasPos)` — se posiciona en el cursor y se activa; `Close()`.
-- [ ] Click fuera del menú o ESC → `Close()`.
-- [ ] Item hover highlight (más claro) y al click ejecuta la acción.
+- [x] `UIContextMenu : UIPanel` (Column, padding, fondo oscuro, overlay).
+- [x] `AddItem(label, callback)` / `AddSeparator()` / `AddItemDisabled(label)`.
+- [x] `OpenAt(canvasPos)` — se posiciona en el cursor y se activa; `Close()`.
+- [x] Click fuera del menú o ESC → `Close()` (hooks de `EventQueue` con flag "alive").
+- [x] Item hover highlight (más claro) y al click ejecuta la acción.
+
+### Fase 1b — Integración botón "+" del Hierarchy (2026-08-27)
+- [x] El botón "+" del header abre el `UIContextMenu` (agregado al canvas lazy, debajo del botón).
+- [x] Items: **Object3D** (crea un Cube con mesh/material a 0,0,0 — wired por el editor),
+      **Object2D** (no-op por ahora), **UIElement** (disabled — pendiente `UINode`).
 
 ### Fase 2 — Integración Hierarchy
 - [ ] `OnPointerDown` con botón **secundario** (derecho) sobre un item del hierarchy →

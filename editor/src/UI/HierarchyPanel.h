@@ -14,6 +14,7 @@ class Texture2D;
 class Font;
 class UIButton;
 class UITextInput;
+class UIContextMenu;
 namespace RHI { class RenderBackend; }
 }
 
@@ -68,6 +69,10 @@ public:
     std::vector<Leir::CoreObject*> GetSelectedObjects() const;
     void SetSelectedObjects(const std::vector<Leir::CoreObject*>& objs);
 
+    // "+" context menu actions (wired by the editor): creating scene objects.
+    void SetOnAddObject3D(std::function<void()> cb) { m_OnAddObject3D = std::move(cb); }
+    void SetOnAddObject2D(std::function<void()> cb) { m_OnAddObject2D = std::move(cb); }
+
     Leir::Vector2 GetMinSize() const override;
 
 private:
@@ -86,6 +91,7 @@ private:
     Leir::UITextInput* m_FilterInput = nullptr;
     Leir::UITreeView* m_TreeView = nullptr;
     Leir::RHI::RenderBackend* m_Backend = nullptr;
+    Leir::Font* m_Font = nullptr;
     float m_ContentScale = 1.0f;
     bool m_IconsLoaded = false;
     std::string m_FilterText; // raw filter text (re-applied to the tree after rebuilds)
@@ -93,6 +99,9 @@ private:
     std::vector<Leir::UITreeViewItem*> m_OwnedItems;
     std::unordered_map<Leir::CoreObject*, Leir::UITreeViewItem*> m_ItemMap;
     std::function<void(const std::vector<Leir::CoreObject*>&)> m_OnSelectionChanged;
+    Leir::UIContextMenu* m_AddMenu = nullptr;
+    std::function<void()> m_OnAddObject3D;
+    std::function<void()> m_OnAddObject2D;
     std::shared_ptr<Leir::Texture2D> m_Icon3D;
     std::shared_ptr<Leir::Texture2D> m_Icon2D;
     std::shared_ptr<Leir::Texture2D> m_IconUI;

@@ -487,6 +487,18 @@ protected:
             m_SyncingHierarchySelection = false;
         });
 
+        // "+" context menu (UIContextMenu): create an Object3D cube like the
+        // scene's one, at the origin. Object2D/UIElement items are placeholders.
+        hierarchy->SetOnAddObject3D([this]() {
+            auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+            if (!scene || !m_Mesh || !m_Material) return;
+            auto* cube = scene->CreateObject3D("Cube");
+            cube->GetTransform().SetLocalPosition({0.0f, 0.0f, 0.0f});
+            auto& renderer = cube->AddComponent<Leir::MeshRenderer>();
+            renderer.SetMesh(m_Mesh);
+            renderer.SetMaterial(m_Material);
+        });
+
         // Inspector panel (right dock pane)
         auto* inspector = new Leir::UIPanel();
         m_InspectorPanel = inspector;

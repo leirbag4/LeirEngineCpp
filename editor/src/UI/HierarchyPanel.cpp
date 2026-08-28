@@ -5,6 +5,7 @@
 #include <LeirEngine/UI/UITextInput.h>
 #include <LeirEngine/UI/UITextureCache.h>
 #include <LeirEngine/UI/UICanvas.h>
+#include <LeirEngine/UI/UIContextMenu.h>
 #include <LeirEngine/UI/Font.h>
 #include <LeirEngine/Objects/Object3D.h>
 #include <LeirEngine/Objects/Object2D.h>
@@ -48,13 +49,32 @@ HierarchyPanel::HierarchyPanel()
     m_AddButton->SetText("+");
     m_AddButton->SetTextAlign(Leir::ButtonTextAlign::Center);
     m_AddButton->SetMinSize({22.0f, 22.0f});
-    // Placeholder (Paso 2.5): the intended behavior is to open a UIContextMenu
-    // with Object2D / Object3D / UIElement that creates the object in the scene.
-    // Programmed together with the ContextMenu (P1, TODO_UI_CONTEXT_MENU.md).
+    // "+" opens a UIContextMenu (P1, TODO_UI_CONTEXT_MENU.md) to create scene
+    // objects. The menu is added to the canvas lazily (the panel isn't in the
+    // canvas yet at construction); OpenAt positions it below the button.
     m_AddButton->SetOnClick([this]() {
-        Leir::XConsole::Debug("Hierarchy: '+' pressed — UIContextMenu pendiente (Object2D/Object3D/UIElement)");
+        if (!m_AddMenu) return;
+        if (!m_AddMenu->GetParent()) {
+            for (Leir::UIElement* e = this; e; e = e->GetParent()) {
+                if (auto* c = dynamic_cast<Leir::UICanvas*>(e)) { c->AddChild(m_AddMenu); break; }
+            }
+        }
+        const auto& cr = m_AddButton->GetComputedRect();
+        m_AddMenu->OpenAt({cr.x, cr.y + cr.w});
     });
     m_Header->AddChild(m_AddButton);
+
+    m_AddMenu = new Leir::UIContextMenu();
+    m_AddMenu->SetFont(m_Font);
+    m_AddMenu->AddItem("Object3D", [this]() {
+        if (m_OnAddObject3D) m_OnAddObject3D();
+    });
+    m_AddMenu->AddItem("Object2D", [this]() {
+        // Item present but no-op for now (pending scene support / testing).
+        Leir::XConsole::Debug("Hierarchy: Object2D creation pendiente");
+    });
+    m_AddMenu->AddItemDisabled("UIElement (UINode pendiente)");
+    m_AddMenu->SetActive(false);
 
     m_FilterInput = new Leir::UITextInput();
     m_FilterInput->SetName("HierarchyFilter");
@@ -181,13 +201,26 @@ HierarchyPanel::HierarchyPanel()
     AddChild(m_TreeView);
 }
 
-HierarchyPanel::~HierarchyPanel() = default; // teardown via editor DeleteUiSubtree
+HierarchyPanel::~HierarchyPanel()
+{
+    // The add menu lives on the CANVAS (top overlay), not in this panel's subtree,
+    // so DeleteUiSubtree won't free it. Remove + delete it here (its rows are
+    // freed by the menu's own destructor).
+    if (m_AddMenu) {
+        if (m_AddMenu->GetParent())
+            m_AddMenu->GetParent()->RemoveChild(m_AddMenu);
+        delete m_AddMenu;
+        m_AddMenu = nullptr;
+    }
+}
 
 void HierarchyPanel::SetFont(Leir::Font* font)
 {
+    m_Font = font;
     if (m_TreeView) m_TreeView->SetFont(font);
     if (m_AddButton) m_AddButton->SetFont(font);
     if (m_FilterInput) m_FilterInput->SetFont(font);
+    if (m_AddMenu) m_AddMenu->SetFont(font);
 }
 
 void HierarchyPanel::SetBackend(Leir::RHI::RenderBackend* backend)
