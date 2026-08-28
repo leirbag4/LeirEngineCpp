@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: scheduler de sistemas paralelo (dependencias de acceso)** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §6/§10): `ISystem::GetAccess()` (lista `SystemAccess{typeId, write}`);
+  `SystemPipeline::Run(fixedDt, dt, JobSystem*)` hace **scheduling topológico por niveles** — dos
+  sistemas entran en conflicto si comparten un tipo y alguno lo ESCRIBE; el de mayor índice de registro
+  corre después; los sistemas de un mismo nivel (independientes) corren **en paralelo** vía
+  `JobSystem::ParallelFor`. Sin jobs / 1 thread → secuencial. Verificado en `ECSTest` (**ALL PASS**):
+  un sistema que lee Position corre después del que la escribe, en secuencial y en paralelo (resultados
+  idénticos 3 y 6+11). Build limpio, ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Fase 2: `JobSystem` (thread pool)** (2026-08-28, `TODO_HYBRID_ECS.md` §6):
   `Core/JobSystem.{h,cpp}` — `ParallelFor` (rango dividido por contador atómico compartido; el caller
   participa + los workers ayudan, `m_RangeActive`/`m_ActiveWorkers` + cv para el sync) y

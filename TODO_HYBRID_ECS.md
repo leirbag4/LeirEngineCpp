@@ -487,8 +487,14 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       con mutex+cv, `m_Pending`). **Web = inline** (`__EMSCRIPTEN__` — decisión single-thread, sin
       pthreads/SharedArrayBuffer; misma API, cero threads). Verificado en `ECSTest` (**ALL PASS**):
       ParallelFor suma correctamente (10k iters, atómico) y Dispatch/WaitAll ejecuta todas las tareas.
-- [ ] Scheduler de sistemas por dependencias de acceso (paraleliza los sistemas del pipeline según
-      read/write de tipos).
+- [x] **Scheduler de sistemas por dependencias de acceso** (Fase 2): `ISystem::GetAccess()` devuelve los
+      tipos que lee/escribe (`SystemAccess{typeId, write}`). `SystemPipeline::Run(fixedDt, dt, jobs*)`
+      hace scheduling **topológico por niveles**: dos sistemas entran en conflicto si comparten un tipo y
+      alguno lo ESCRIBE → el de mayor registro corre después (orden de registro desempata); los sistemas
+      del mismo nivel son independientes y corren en **paralelo** vía `JobSystem::ParallelFor`. Sin
+      `jobs` (o 1 thread) → secuencial. Verificado en `ECSTest` (**ALL PASS**): un sistema que lee
+      Position corre DESPUÉS del que la escribe, tanto en secuencial como en paralelo (resultados
+      idénticos).
 - [ ] Command buffer aplicado en sync points (paralelo seguro).
 - [ ] Benchmarks: fps / frame time / cache misses por plataforma (targets en §11).
 - [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).

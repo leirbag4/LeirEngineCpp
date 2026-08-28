@@ -308,7 +308,11 @@ int main()
     // --- Systems pipeline + command buffer (deferred structural changes) ---
     class MoveSystem : public ISystem {
     public:
-        MoveSystem(OwnedGroup<Position, Velocity>* g) : ISystem("Move"), m_G(g) {}
+        MoveSystem(World* world, OwnedGroup<Position, Velocity>* g)
+            : ISystem("Move"), m_G(g),
+              m_PosType(world->ComponentType<Position>()),
+              m_VelType(world->ComponentType<Velocity>()) {}
+        std::vector<SystemAccess> GetAccess() const override { return {{m_PosType, true}, {m_VelType, false}}; }
         void Update(float dt) override
         {
             m_G->ForEach([dt](Position& p, Velocity& v, Entity) {
@@ -317,11 +321,14 @@ int main()
         }
     private:
         OwnedGroup<Position, Velocity>* m_G;
+        uint32_t m_PosType, m_VelType;
     };
 
     class ExpireSystem : public ISystem {
     public:
-        ExpireSystem(OwnedGroup<Health>* g, CommandBuffer* cb) : ISystem("Expire"), m_G(g), m_CB(cb) {}
+        ExpireSystem(World* world, OwnedGroup<Health>* g, CommandBuffer* cb)
+            : ISystem("Expire"), m_G(g), m_CB(cb), m_HealthType(world->ComponentType<Health>()) {}
+        std::vector<SystemAccess> GetAccess() const override { return {{m_HealthType, false}}; }
         void Update(float) override
         {
             m_G->ForEach([this](Health& h, Entity e) {
@@ -331,14 +338,30 @@ int main()
     private:
         OwnedGroup<Health>* m_G;
         CommandBuffer* m_CB;
+        uint32_t m_HealthType;
+    };
+
+    class ReadPosSystem : public ISystem {
+    public:
+        ReadPosSystem(World* world, OwnedGroup<Position>* g)
+            : ISystem("ReadPos"), m_G(g), m_PosType(world->ComponentType<Position>()) {}
+        std::vector<SystemAccess> GetAccess() const override { return {{m_PosType, false}}; }
+        void Update(float) override
+        {
+            m_G->ForEach([this](Position& p, Entity) { m_Sum += p.x; });
+        }
+        float m_Sum = 0.0f;
+    private:
+        OwnedGroup<Position>* m_G;
+        uint32_t m_PosType;
     };
 
     World w7;
     OwnedGroup<Position, Velocity> moveGroup(&w7);
     OwnedGroup<Health> healthGroup(&w7);
     CommandBuffer cb7;
-    MoveSystem moveSys(&moveGroup);
-    ExpireSystem expireSys(&healthGroup, &cb7);
+    MoveSystem moveSys(&w7, &moveGroup);
+    ExpireSystem expireSys(&w7, &healthGroup, &cb7);
     SystemPipeline pipeline;
     pipeline.Add(&moveSys, SystemPhase::Update);
     pipeline.Add(&expireSys, SystemPhase::Update);
@@ -372,6 +395,41 @@ int main()
     cb8.Remove<Position>(n);
     cb8.Replay(w8);
     Check(!w8.Has<Position>(n), "deferred remove applied");
+
+    // --- Fase 2: parallel systems scheduler (dependency-ordered) ---
+    {
+        World wp;
+        OwnedGroup<Position, Velocity> pg(&wp);
+        OwnedGroup<Position> posOnly(&wp);
+        MoveSystem moveA(&wp, &pg);
+        ReadPosSystem readA(&wp, &posOnly);
+        SystemPipeline pp;
+        pp.Add(&moveA, SystemPhase::Update); // writes Position
+        pp.Add(&readA, SystemPhase::Update); // reads Position -> conflicts -> after Move
+
+        // Sequential reference run.
+        Entity pa = wp.Create();
+        wp.Add<Position>(pa).x = 0.0f;
+        wp.Add<Velocity>(pa).x = 3.0f;
+        pg.Sync(wp);
+        posOnly.Sync(wp);
+        wp.ClearJournal();
+        pp.Run(0.0f, 1.0f);
+        Check(readA.m_Sum == 3.0f, "sequential: ReadPos saw the moved position (dependency order)");
+
+        // Parallel run must produce the SAME result (scheduler enforces order).
+        Entity pb = wp.Create();
+        wp.Add<Position>(pb).x = 10.0f;
+        wp.Add<Velocity>(pb).x = 1.0f;
+        pg.Sync(wp);
+        posOnly.Sync(wp);
+        wp.ClearJournal();
+        JobSystem jobs;
+        readA.m_Sum = 0.0f;
+        pp.Run(0.0f, 1.0f, &jobs);
+        // Both entities moved again (pa 3->6, pb 10->11); ReadPos ran after Move.
+        Check(readA.m_Sum == 17.0f, "parallel: scheduler kept dependency order (6+11)");
+    }
 
     // --- HybridComponent (OOP component boxed in the ECS) ---
     World hw;
