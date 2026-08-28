@@ -102,8 +102,10 @@ public:
         m_Components.erase(m_Components.begin() + (ptrdiff_t)idx);
         m_ComponentIndex.erase(it);
         // Components after the removed slot shifted down: refresh their index.
-        for (size_t i = idx; i < m_Components.size(); ++i)
-            m_ComponentIndex[std::type_index(typeid(*m_Components[i]))] = i;
+        for (size_t i = idx; i < m_Components.size(); ++i) {
+            Component& comp = *m_Components[i];
+            m_ComponentIndex[std::type_index(typeid(comp))] = i;
+        }
         NotifyStructuralChange();
     }
 

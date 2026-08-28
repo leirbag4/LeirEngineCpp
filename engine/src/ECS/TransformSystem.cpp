@@ -143,12 +143,20 @@ void TransformSystem::EnsureClean(uint32_t ei)
     const uint32_t parent = m_Tree->GetParent(ei);
     if (parent != kNullIndex)
         EnsureClean(parent);
+
+    // Copy the parent's world BY VALUE before Add<WorldTransform>: adding the
+    // child's component can reallocate the WorldTransform pool, which would
+    // invalidate a pointer taken into it (reading freed memory is UB and
+    // manifested as NaN on some compilers/allocators — AppleClang vs MSVC).
+    WorldTransform parentData;
     const WorldTransform* parentWT = parent != kNullIndex
         ? m_World->Get<WorldTransform>(Entity{parent, m_World->GenerationOf(parent)})
         : nullptr;
+    if (parentWT)
+        parentData = *parentWT;
 
     WorldTransform& wt = m_World->Add<WorldTransform>(e);
-    ComputeWorld(*lt, parentWT, wt);
+    ComputeWorld(*lt, parentWT ? &parentData : nullptr, wt);
     SetDirty(ei, false);
 }
 

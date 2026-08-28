@@ -233,6 +233,26 @@ int main()
     Check(zw && std::isfinite(zw->worldScale.x) && std::isfinite(zw->worldScale.y)
            && std::isfinite(zw->worldPosition.x), "zero-scaled axis stays finite");
 
+    // Regression: many siblings force the WorldTransform pool to grow; the
+    // parent's world must be read BEFORE the child's Add reallocates the pool
+    // (dangling-pointer UB surfaced as NaN on AppleClang).
+    World w9;
+    HierarchyTree t9;
+    TransformSystem ts9(&w9, &t9);
+    Entity root9 = w9.Create();
+    ts9.SetLocal(root9, LocalTransform{{0,0,0}, Quaternion::Identity(), Vector3::One()});
+    bool allGood = true;
+    for (int i = 0; i < 200; ++i) {
+        Entity c = w9.Create();
+        ts9.SetLocal(c, LocalTransform{{(float)i, 0, 0}, Quaternion::Identity(), Vector3::One()});
+        ts9.SetParent(c, root9, true);
+        ts9.Update();
+        auto* wc = ts9.GetWorld(c);
+        if (!wc || !std::isfinite(wc->worldPosition.x) || std::fabs(wc->worldPosition.x - (float)i) > 1e-3f)
+            allGood = false;
+    }
+    Check(allGood, "many-children pool growth stays finite/correct");
+
     // --- Systems pipeline + command buffer (deferred structural changes) ---
     class MoveSystem : public ISystem {
     public:

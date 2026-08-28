@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Fix CI macOS (ECSTest) — UB de puntero colgante en `TransformSystem::EnsureClean`** (2026-08-28):
+  el test `zero-scaled axis stays finite` fallaba solo en AppleClang/arm64 (MSVC lo ocultaba). Causa raíz:
+  `Add<WorldTransform>(e)` puede **reallocar el pool** e invalidar `parentWT` (puntero al MISMO pool) →
+  `ComputeWorld` leía memoria liberada (UB, NaN según allocator/compilador). Fix: **copiar el WorldTransform
+  del padre por valor ANTES del Add** (`parentData`) y pasar `&parentData`. Además se silenció el warning
+  `-Wpotentially-evaluated-expression` de `typeid(*m_Components[i])` en `CoreObject.h` (binding a una
+  referencia). Test de regresión nuevo: 200 hijos bajo un root fuerzan el crecimiento del pool
+  (finitud + pos correcta) → ALL PASS. Build limpio, ctest 3/3, smoke test OK.
+
 - **Hybrid ECS — Fase 1 Systems pipeline + CommandBuffer (ver `TODO_HYBRID_ECS.md` §10 + §4.6)**: nuevo
   `ECS/System.h` (`ISystem` con nombre + `Update(dt)`; `SystemPipeline` con fases **FixedUpdate →
   Update → Render** en orden de registro — el orden declarado es la dependencia para v1; el scheduler
