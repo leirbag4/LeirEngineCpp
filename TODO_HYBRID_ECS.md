@@ -254,17 +254,27 @@ cube->GetComponent<MeshRenderer>();
 ## 10. Fases y checkboxes
 
 ### Fase 0 — Refactor data-oriented del código actual (pre-requisito; ejecutar YA)
-- [ ] **Fix render que solo itera roots** (`RenderPipeline.cpp:244`): un MeshRenderer en un hijo no se
-      dibuja. → el renderable cache recorre todo el árbol.
-- [ ] **Registro de componentes por `type_index`** (`CoreObject.h`): matar `dynamic_cast` en
-      `GetComponent/RemoveComponent` → O(1). Mantener `m_Components` (vector) para el orden de OnUpdate
-      con un mapa lateral tipo→índice.
-- [ ] **Caches de escena**: `m_Renderables`, `m_Cameras`, `m_Lights` reconstruidas lazy cuando cambia
-      un componente/objeto (`MarkCachesDirty` desde `Add/RemoveComponent`, `Create/DestroyObject`).
-      RenderPipeline + picking usan las caches → mata el O(N×dynamic_cast) por frame.
-- [ ] **Aislar el almacenamiento de Scene** detrás de una interfaz (para que el ECS se inserte después
-      sin tocar la API pública).
-- [ ] Tests: build limpio + ctest 2/2 + smoke test (workflow AGENTS.md) + test standalone.
+- [x] **Fix render que solo itera roots** (`RenderPipeline.cpp:244`): un MeshRenderer en un hijo no se
+      dibuja. → el renderable cache recorre todo el árbol. (Hallazgo del modelo real: `m_Objects` contiene
+      TODOS los objetos —hijos incluidos—, así que el render viejo sí dibujaba hijos pero en orden de
+      creación; la cache DFS desde roots sin padre da el orden de jerarquía correcto.)
+- [x] **Registro de componentes por `type_index`** (`CoreObject.h`): matar `dynamic_cast` en
+      `GetComponent/RemoveComponent` → O(1). Se mantiene `m_Components` (vector) para el orden de
+      OnUpdate con un mapa lateral `type_index → índice`. Semántica **one-component-per-type**
+      (Unity/Godot): `AddComponent<T>` con el tipo ya presente devuelve la instancia viva.
+- [x] **Caches de escena**: `m_Renderables`, `m_Cameras`, `m_Lights` reconstruidas lazy cuando cambia
+      un componente/objeto. Hook: `CoreObject::NotifyStructuralChange()` (definido en el `.cpp`, donde
+      `Scene.h` sí está completo) llamada desde `Add/RemoveComponent` + `SetParent`/`InsertChildAt`;
+      `CreateObject3D/2D`, `DestroyObject`, `MoveObject` también marcan dirty. Rebuild = DFS desde
+      **roots sin padre** (regla del HierarchyPanel: `m_Objects` guarda todos, no solo roots). Render +
+      picking usan las caches → mata el O(N×dynamic_cast) por frame.
+- [x] **Aislar el almacenamiento de Scene** detrás de una interfaz: nuevo `ISceneStorage` (Scene/…)
+      con las operaciones estructurales, queries y caches. `Scene` la implementa; `RenderPipeline`
+      recibe `ISceneStorage*` (el editor/ejemplos pasan `Scene*` por upcast). El ECS de Fase 1
+      implementará el mismo contrato sin tocar la API pública.
+- [x] Tests: build limpio + ctest 2/2 + smoke test (workflow AGENTS.md) + test standalone
+      (`leir_fase0_test.cpp`: cache incluye hijos/hojas profundas, invalidación por add/remove/reparent,
+      one-per-type sin duplicados → ALL PASS).
 
 ### Fase 1 — Núcleo ECS custom (después de estabilizar P1 del editor)
 - [ ] `Entity` generacional + allocator + sparse set de entidades vivas.

@@ -236,34 +236,25 @@ void RenderPipeline::DestroySpriteResources()
     m_Sprite.fallbackTexture = nullptr;
 }
 
-void RenderPipeline::Render(RHI::GCommandGraph& graph, Scene* scene)
+void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
 {
     if (!scene)
         return;
 
-    auto& objects = scene->GetObjects();
+    // Camera/light/renderable discovery via the scene's data-oriented query
+    // caches (full hierarchy, O(1) per item). No per-frame GetObjects() scan.
     Camera* primaryCamera = nullptr;
-    Light* primaryLight = nullptr;
-
-    for (auto& obj : objects) {
+    for (CoreObject* obj : scene->GetCameras()) {
         if (!obj->IsActive())
             continue;
-        if (!primaryCamera) {
-            Camera* cam = obj->GetComponent<Camera>();
-            if (cam && cam->IsPrimary())
-                primaryCamera = cam;
-        }
-        if (!primaryLight) {
-            Light* light = obj->GetComponent<Light>();
-            if (light)
-                primaryLight = light;
-        }
-        if (primaryCamera && primaryLight)
+        Camera* cam = obj->GetComponent<Camera>();
+        if (cam && cam->IsPrimary()) {
+            primaryCamera = cam;
             break;
+        }
     }
-
     if (!primaryCamera) {
-        for (auto& obj : objects) {
+        for (CoreObject* obj : scene->GetCameras()) {
             if (!obj->IsActive())
                 continue;
             Camera* cam = obj->GetComponent<Camera>();
@@ -273,9 +264,19 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, Scene* scene)
             }
         }
     }
-
     if (!primaryCamera)
         return;
+
+    Light* primaryLight = nullptr;
+    for (CoreObject* obj : scene->GetLights()) {
+        if (!obj->IsActive())
+            continue;
+        Light* light = obj->GetComponent<Light>();
+        if (light) {
+            primaryLight = light;
+            break;
+        }
+    }
 
     primaryCamera->RecalculateViewMatrix();
     Matrix4x4 viewProj = primaryCamera->GetViewProjectionMatrix();
@@ -286,7 +287,7 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, Scene* scene)
         push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
     }
 
-    for (auto& obj : objects) {
+    for (CoreObject* obj : scene->GetRenderables()) {
         if (!obj->IsActive())
             continue;
 
@@ -305,12 +306,10 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, Scene* scene)
     }
 }
 
-void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, Scene* scene)
+void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* scene)
 {
     if (!scene)
         return;
-
-    auto& objects = scene->GetObjects();
 
     // Build sorted list of visible sprites
     struct SpriteDraw {
@@ -321,7 +320,7 @@ void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, Scene* scene)
     };
     std::vector<SpriteDraw> draws;
 
-    for (auto& obj : objects) {
+    for (CoreObject* obj : scene->GetRenderables()) {
         if (!obj->IsActive())
             continue;
         auto* spr = obj->GetComponent<SpriteRenderer>();

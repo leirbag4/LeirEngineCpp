@@ -1,8 +1,15 @@
 #include "LeirEngine/Core/CoreObject.h"
+#include "LeirEngine/Scene/Scene.h"
 
 #include <algorithm>
 
 namespace Leir {
+
+void CoreObject::NotifyStructuralChange()
+{
+    if (m_Scene)
+        m_Scene->MarkCachesDirty();
+}
 
 CoreObject::CoreObject(const std::string& name)
     : m_Name(name)
@@ -39,6 +46,9 @@ void CoreObject::SetParent(CoreObject* parent, bool worldPositionStays)
         m_Parent->AddChild(this);
 
     m_Transform.SetParent(parent ? &parent->m_Transform : nullptr, worldPositionStays);
+
+    // Reparenting changes the DFS render order -> invalidate scene query caches.
+    NotifyStructuralChange();
 }
 
 CoreObject* CoreObject::GetParent() const
@@ -88,6 +98,7 @@ void CoreObject::InsertChildAt(CoreObject* child, size_t index)
     // preserve the child's WORLD transform (Unity worldPositionStays): after
     // reparenting, recompute the child's local from its world so it never jumps.
     child->m_Transform.SetParent(&m_Transform, true);
+    NotifyStructuralChange();
 }
 
 void CoreObject::RemoveChild(CoreObject* child)

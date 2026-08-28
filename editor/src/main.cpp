@@ -1202,8 +1202,8 @@ private:
 
         float bestT = 1e30f;
         Leir::Object3D* best = nullptr;
-        for (const auto& objPtr : scene->GetObjects()) {
-            Leir::Object3D* obj = dynamic_cast<Leir::Object3D*>(objPtr.get());
+        for (Leir::CoreObject* objPtr : scene->GetRenderables()) {
+            Leir::Object3D* obj = dynamic_cast<Leir::Object3D*>(objPtr);
             if (!obj)
                 continue;
             if (!obj->GetComponent<Leir::MeshRenderer>())

@@ -15,11 +15,11 @@ superficie + ECS data-oriented invisible por detrás** (SIMD + multithreading). 
 análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma, fases y checkboxes en
 → **`TODO_HYBRID_ECS.md`**.
 
-- [ ] **Fase 0 — Refactor data-oriented del código actual** → `TODO_HYBRID_ECS.md` §10
-  - [ ] Fix render solo-roots (hijos con MeshRenderer invisibles).
-  - [ ] Registro de componentes por `type_index` (matar `dynamic_cast`).
-  - [ ] Caches de escena (renderables/cámaras/luces) — mata el O(N×dynamic_cast) por frame.
-  - [ ] Aislar el almacenamiento de Scene detrás de una interfaz.
+- [x] **Fase 0 — Refactor data-oriented del código actual** → `TODO_HYBRID_ECS.md` §10
+  - [x] Fix render solo-roots (hijos con MeshRenderer invisibles).
+  - [x] Registro de componentes por `type_index` (matar `dynamic_cast`).
+  - [x] Caches de escena (renderables/cámaras/luces) — mata el O(N×dynamic_cast) por frame.
+  - [x] Aislar el almacenamiento de Scene detrás de `ISceneStorage`.
 - [ ] **Fase 1 — Núcleo ECS custom** (entity, pools sparse-set, journal, groups SoA, query cache,
       systems, transform system con lossy-preserve, hierarchy tree unificado, bridge CoreObject/Scene).
 - [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).

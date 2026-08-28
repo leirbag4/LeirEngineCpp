@@ -15,6 +15,7 @@
 namespace Leir {
 
 namespace RHI { class RenderBackend; }
+class ISceneStorage;
 class Scene;
 class MeshRenderer;
 class Camera;
@@ -69,8 +70,8 @@ public:
     RenderPipeline(RHI::RenderBackend* device);
     ~RenderPipeline();
 
-    void Render(RHI::GCommandGraph& graph, Scene* scene);
-    void RenderOverlay(RHI::GCommandGraph& graph, Scene* scene);
+    void Render(RHI::GCommandGraph& graph, ISceneStorage* scene);
+    void RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* scene);
 
     // Hot-reload: re-read Sprite.vert/Sprite.frag and recreate the sprite
     // pipeline (buffers, descriptor sets and layout stay valid).

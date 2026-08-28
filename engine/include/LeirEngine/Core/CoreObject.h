@@ -54,32 +54,36 @@ public:
     template<typename T, typename... Args>
     T& AddComponent(Args&&... args) {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
+        // One component per type (Unity/Godot semantics): adding an existing type
+        // returns the live instance instead of creating a duplicate.
+        if (T* existing = GetComponent<T>())
+            return *existing;
         auto comp = std::make_unique<T>(std::forward<Args>(args)...);
         comp->m_Owner = this;
         T* ptr = comp.get();
+        m_ComponentIndex[std::type_index(typeid(T))] = m_Components.size();
         m_Components.push_back(std::move(comp));
         ptr->OnAwake();
+        NotifyStructuralChange();
         return *ptr;
     }
 
     template<typename T>
     T* GetComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        for (auto& comp : m_Components) {
-            T* result = dynamic_cast<T*>(comp.get());
-            if (result) return result;
-        }
-        return nullptr;
+        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
+        if (it == m_ComponentIndex.end())
+            return nullptr;
+        return static_cast<T*>(m_Components[it->second].get());
     }
 
     template<typename T>
     const T* GetComponent() const {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        for (const auto& comp : m_Components) {
-            const T* result = dynamic_cast<const T*>(comp.get());
-            if (result) return result;
-        }
-        return nullptr;
+        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
+        if (it == m_ComponentIndex.end())
+            return nullptr;
+        return static_cast<const T*>(m_Components[it->second].get());
     }
 
     template<typename T>
@@ -90,13 +94,17 @@ public:
     template<typename T>
     void RemoveComponent() {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-        for (auto it = m_Components.begin(); it != m_Components.end(); ++it) {
-            if (dynamic_cast<T*>(it->get())) {
-                (*it)->OnDestroy();
-                m_Components.erase(it);
-                return;
-            }
-        }
+        auto it = m_ComponentIndex.find(std::type_index(typeid(T)));
+        if (it == m_ComponentIndex.end())
+            return;
+        size_t idx = it->second;
+        m_Components[idx]->OnDestroy();
+        m_Components.erase(m_Components.begin() + (ptrdiff_t)idx);
+        m_ComponentIndex.erase(it);
+        // Components after the removed slot shifted down: refresh their index.
+        for (size_t i = idx; i < m_Components.size(); ++i)
+            m_ComponentIndex[std::type_index(typeid(*m_Components[i]))] = i;
+        NotifyStructuralChange();
     }
 
     // Lifecycle (called by Scene)
@@ -104,6 +112,10 @@ public:
 
 protected:
     friend class Scene;
+
+    // Invalidates the owning Scene's query caches (component added/removed or
+    // reparent). Defined in CoreObject.cpp (needs the full Scene type).
+    void NotifyStructuralChange();
 
     std::string m_Name;
     UUID m_UUID;
@@ -115,6 +127,9 @@ protected:
     std::vector<CoreObject*> m_Children;
 
     std::vector<std::unique_ptr<Component>> m_Components;
+    // Component type → index into m_Components (O(1) GetComponent<T>; kills the
+    // old linear dynamic_cast scans). Refreshed on add/remove (slot shift).
+    std::unordered_map<std::type_index, size_t> m_ComponentIndex;
 
     Scene* m_Scene = nullptr;
 };

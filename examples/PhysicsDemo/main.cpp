@@ -211,7 +211,7 @@ protected:
         static int frameCount = 0;
         if (++frameCount % 60 == 0) {
             int renderable = 0;
-            for (auto& obj : scene->GetObjects()) {
+            for (auto obj : scene->GetRenderables()) {
                 if (obj->IsActive() && obj->GetComponent<Leir::MeshRenderer>())
                     ++renderable;
             }
