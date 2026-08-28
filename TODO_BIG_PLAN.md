@@ -7,6 +7,26 @@ Estado: **en planificación** (2026-08-26). Vamos fase por fase, probando cada u
 
 ---
 
+## Arquitectura transversal — Hybrid ECS (Fase 0 en curso)
+
+El motor entero (editor + runtime + web + mobile futuro) se rediseña a **escena amigable en la
+superficie + ECS data-oriented invisible por detrás** (SIMD + multithreading). La API pública
+(`CoreObject`, `AddChild/GetChildren/SetParent`, `AddComponent<T>`) **no cambia**. Detalle completo,
+análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma, fases y checkboxes en
+→ **`TODO_HYBRID_ECS.md`**.
+
+- [ ] **Fase 0 — Refactor data-oriented del código actual** → `TODO_HYBRID_ECS.md` §10
+  - [ ] Fix render solo-roots (hijos con MeshRenderer invisibles).
+  - [ ] Registro de componentes por `type_index` (matar `dynamic_cast`).
+  - [ ] Caches de escena (renderables/cámaras/luces) — mata el O(N×dynamic_cast) por frame.
+  - [ ] Aislar el almacenamiento de Scene detrás de una interfaz.
+- [ ] **Fase 1 — Núcleo ECS custom** (entity, pools sparse-set, journal, groups SoA, query cache,
+      systems, transform system con lossy-preserve, hierarchy tree unificado, bridge CoreObject/Scene).
+- [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
+- [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
+
+---
+
 ## Fundaciones del Hierarchy (P0)
 
 - [ ] **Fase 0.1 — Iconos del TreeView** → `TODO_UI_TREEVIEW.md`
@@ -72,12 +92,14 @@ Estado: **en planificación** (2026-08-26). Vamos fase por fase, probando cada u
 
 1. Fase 0.1 — Iconos del TreeView (autocontenido, desbloquea todo).
 2. Fase 0.2 — HierarchyPanel real (selección multi, familias, rename, drag).
-3. Familias/guard en CoreObject + UINode.
-4. ContextMenu + UIMenuBar.
-5. Tabs de escenas + vistas 2D/3D/UI.
-6. Atoms + File Explorer de guardado.
-7. Inspector avanzado.
-8. Serialización + metadata + Contents.
-9. UIDocuments + LXML (futuro).
+3. **Hybrid ECS — Fase 0** (refactor data-oriented del código actual, ver `TODO_HYBRID_ECS.md`).
+4. Familias/guard en CoreObject + UINode.
+5. ContextMenu + UIMenuBar.
+6. Tabs de escenas + vistas 2D/3D/UI.
+7. Atoms + File Explorer de guardado.
+8. Inspector avanzado.
+9. Serialización + metadata + Contents.
+10. **Hybrid ECS — Fase 1** (núcleo ECS custom, ver `TODO_HYBRID_ECS.md`).
+11. UIDocuments + LXML (futuro).
 
 ---
