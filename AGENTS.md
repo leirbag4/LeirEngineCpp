@@ -1055,6 +1055,19 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa B paso 2: `ECSScene` (seam probado) + `Tags` de familia** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §7): `Scene/ECSScene.{h,cpp}` implementa `ISceneStorage` sobre el ECS (World +
+  HierarchyTree + TransformSystem + `Tag3D`/`Tag2D`). `CreateObject3D/2D` crea entity + LocalTransform
+  (vía `TransformSystem::SetLocal` para marcar dirty) + tag + tree node + un handle `Object3D/2D` OOP.
+  `OnUpdate` = `SyncStructure()` (reconcilia tree + LocalTransform con la jerarquía OOP, DFS desde roots
+  sin padre) → `TransformSystem::Update()` → **escribe los WorldTransform del ECS de vuelta a los
+  handles** (GetLocalToWorldMatrix devuelve el resultado ECS). Renderables/cámaras/luces por componentes
+  OOP de los handles (cache rebuilda por acceso; Etapa A los pasa a grupos + HybridComponent). Bugs
+  encontrados: (1) `CreateEntity` agregaba LocalTransform directo sin marcar dirty → WorldTransform nunca
+  computado; fix con `SetLocal`. Verificado en `ECSTest` (**ALL PASS**): tags, tree espejo, world ECS ==
+  world OOP, lossy-preserve reparent por ECS, renderables/GetObjects/FindByUUID. Nota: los handles OOP
+  con sync por frame es el patrón "dos mundos" de industria; el `ECSScene` de B se BORRA al hacer Etapa A.
+
 - **Hybrid ECS — Etapa B paso 1: `HybridComponent`** (2026-08-28, `TODO_HYBRID_ECS.md` §7): componente
   ECS que boxea un `Component` OOP (`std::unique_ptr<T>`), **move-only** (moves explícitos — el dtor
   declarado suprime los implícitos; `TypedPool` usa emplace/move/pop así que lo soporta), el dtor del

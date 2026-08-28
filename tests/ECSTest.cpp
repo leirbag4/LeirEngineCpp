@@ -5,7 +5,11 @@
 #include "LeirEngine/ECS/System.h"
 #include "LeirEngine/ECS/CommandBuffer.h"
 #include "LeirEngine/ECS/HybridComponent.h"
+#include "LeirEngine/ECS/Tags.h"
+#include "LeirEngine/Scene/ECSScene.h"
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Objects/Object3D.h"
+#include "LeirEngine/Components/MeshRenderer.h"
 
 #include <cmath>
 #include <cstdio>
@@ -36,6 +40,7 @@ public:
 
 int main()
 {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     World world;
 
     // --- Entities: creation + liveness ---
@@ -356,6 +361,55 @@ int main()
 
     hw.Destroy(he);
     Check(g_TestCompAlive == 0, "destroying entity destroys boxed component");
+
+    // --- ECSScene (ISceneStorage backed by the ECS; Etapa B proof) ---
+    ECSScene es;
+    Object3D* root = es.CreateObject3D("root");
+    root->AddComponent<MeshRenderer>();
+    Object3D* child = es.CreateObject3D("child");
+    root->AddChild(child);
+    Object3D* leaf = es.CreateObject3D("leaf");
+    child->AddChild(leaf);
+
+    es.OnUpdate(0.0f);
+
+    // Family tags on the entities.
+    Entity rootE = es.EntityOf(root);
+    Entity leafE = es.EntityOf(leaf);
+    Check(es.GetWorld().Has<Tag3D>(rootE), "root entity tagged 3D");
+    Check(es.GetTree().GetParent(leafE.index) == es.EntityOf(child).index, "ecs tree mirrors hierarchy");
+
+    // ECS world transform == the OOP reference world.
+    auto* rootWT = es.GetTransforms().GetWorld(rootE);
+    auto* leafWT = es.GetTransforms().GetWorld(leafE);
+    Check(rootWT && leafWT, "ecs computed world transforms");
+    bool worldMatches = false;
+    if (rootWT && leafWT) {
+        worldMatches = true;
+        Matrix4x4 ref = leaf->GetTransform().GetLocalToWorldMatrix();
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c)
+                if (std::fabs((*leafWT).worldMatrix(r, c) - ref(r, c)) > 1e-3f) worldMatches = false;
+    }
+    Check(worldMatches, "ecs world matches the OOP reference");
+
+    // Lossy-preserve reparent through the friendly API, mirrored to the ECS.
+    Object3D* rotated = es.CreateObject3D("rotated");
+    rotated->GetTransform().SetLocalRotation(Quaternion::AngleAxis(45.0f, Vector3::Forward()));
+    rotated->GetTransform().SetLocalScale({2, 1, 1});
+    leaf->SetParent(rotated, true); // worldPositionStays
+    es.OnUpdate(0.0f);
+    auto* leafWT2 = es.GetTransforms().GetWorld(leafE);
+    Check(leafWT2 && std::fabs(leafWT2->worldScale.x - 1.0f) < 1e-3f
+           && std::fabs(leafWT2->worldScale.y - 1.0f) < 1e-3f
+           && std::fabs(leafWT2->worldScale.z - 1.0f) < 1e-3f, "ecs lossy-preserve reparent (no deformation)");
+
+    // ISceneStorage contract: renderables (MeshRenderer on root), objects list.
+    bool hasRoot = false;
+    for (auto* o : es.GetRenderables()) if (o == root) hasRoot = true;
+    Check(hasRoot, "ecsscene renderables include the MeshRenderer object");
+    Check(es.GetObjects().size() == 4, "ecsscene GetObjects lists all objects");
+    Check(es.FindObjectByUUID(root->GetUUID()) == root, "ecsscene FindObjectByUUID");
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

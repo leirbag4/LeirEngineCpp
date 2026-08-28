@@ -243,13 +243,21 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       (se dispara al remover el componente o destruir la entidad). Helpers `World::AddHybrid<T>(e, args...)`
       (one-per-type, devuelve `T&` vivo) y `World::GetHybrid<T>(e)`. Verificado en `ECSTest`
       (boxeo + instancia viva + one-per-type + iteración vía `OwnedGroup` + destroy destruye el box).
-- [ ] **`ECSScene`** (`Scene/ECSScene.{h,cpp}`) implementa `ISceneStorage` (el seam de Fase 0):
-      - `World` + `HierarchyTree` + `TransformSystem` + `OwnedGroup`s (Renderables/Cameras/Lights).
-      - `CreateObject3D/2D`: crea entity + `LocalTransform` + tag de familia (`Tag3D`/`Tag2D`) +
-        node del tree, y devuelve un `CoreObject`-handle (ver "handle provisional" abajo).
-      - `DestroyObject`/`MoveObject`: operan sobre el tree (root order) + journal.
-      - `GetRenderables/GetCameras/GetLights`: via grupos + `HybridComponent<MeshRenderer/Camera/Light>`.
-      - `OnUpdate`: corre el `TransformSystem` (con el pipeline) + los `HybridComponent` lifecycle.
+- [x] **`ECSScene`** (`Scene/ECSScene.{h,cpp}`) implementa `ISceneStorage` (el seam de Fase 0):
+      - `World` + `HierarchyTree` + `TransformSystem` + tags de familia (`Tag3D`/`Tag2D`, `ECS/Tags.h`).
+      - `CreateObject3D/2D`: crea entity + `LocalTransform` (vía `TransformSystem::SetLocal`, marca dirty)
+        + tag de familia + node del tree, y devuelve un `CoreObject`-handle OOP (ver nota abajo).
+      - `DestroyObject`/`MoveObject`: operan sobre `m_Objects` (root order) + destruyen la entity/tree.
+      - `SyncStructure()` (en `OnUpdate`): reconcilia el ECS tree + `LocalTransform` con la jerarquía
+        OOP (DFS desde roots sin padre), corriendo el `TransformSystem` y **escribiendo los WorldTransform
+        del ECS de vuelta a los handles** → `GetLocalToWorldMatrix()` devuelve el resultado del ECS.
+      - `GetRenderables/GetCameras/GetLights`: por componentes OOP de los handles por ahora (la cache
+        rebuilda por acceso — Etapa A los pasa a grupos ECS + HybridComponent).
+      - Verificado en `ECSTest` (**ALL PASS**): tags de familia, tree espejo, world ECS == world OOP de
+        referencia, **lossy-preserve reparent sin deformación por ECS**, renderables/GetObjects/FindByUUID.
+      Nota honesta: en Etapa B los handles son `Object3D` OOP reales (componentes + sync de transform por
+      frame, patrón "dos mundos con capa de sync" de la industria); el `ECSScene` de B se BORRA al hacer
+      Etapa A (ver lista de limpieza abajo).
 - [ ] **Handle provisional** para B: un `CoreObject` mínimo cuyo `GetTransform()` lee/escribe
       `LocalTransform`/`WorldTransform` del ECS (facade) y cuyo `GetComponent<T>` busca
       `HybridComponent<T>`. NO es el handle final (A); es solo para que el renderer/picking prueben B.
