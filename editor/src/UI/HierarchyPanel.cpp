@@ -11,6 +11,7 @@
 #include <LeirEngine/Objects/Object2D.h>
 #include <LeirEngine/Scene/Scene.h>
 #include <LeirEngine/Scene/SceneManager.h>
+#include <LeirEngine/ECS/Tags.h>
 #include <LeirEngine/Core/Log.h>
 #include <algorithm>
 #include <cmath>
@@ -321,8 +322,17 @@ void HierarchyPanel::Refresh()
 
 HierarchyPanel::Family HierarchyPanel::FamilyOf(Leir::CoreObject* obj)
 {
-    if (dynamic_cast<Leir::Object3D*>(obj)) return Family::Object3D;
-    if (dynamic_cast<Leir::Object2D*>(obj)) return Family::Object2D;
+    // The family is stored as an ECS tag (Tag3D/Tag2D) set at creation — no RTTI.
+    auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+    if (!scene || !obj)
+        return Family::UI;
+    Leir::ECS::Entity e = scene->EntityOf(obj);
+    if (!e)
+        return Family::UI;
+    if (scene->GetWorld().Has<Leir::ECS::Tag3D>(e))
+        return Family::Object3D;
+    if (scene->GetWorld().Has<Leir::ECS::Tag2D>(e))
+        return Family::Object2D;
     return Family::UI; // UINode (future) / anything else
 }
 
