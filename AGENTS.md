@@ -2,6 +2,79 @@
 
 A cross-platform C++ game engine built from scratch with Vulkan.
 
+## REGLA DE MATEMÁTICA — usar SIEMPRE `Mathf.h` (nuestra biblioteca)
+
+Toda operación matemática (trigonometría, raíces, `isfinite`, clamps, lerp, etc.) debe ir **wrappeada** a
+`engine/include/LeirEngine/Math/Mathf.h` (`Leir::Mathf::`). **NO** se usan `std::` sueltos (`std::sqrt`,
+`std::isfinite`, `std::sin`, …) ni `glm` suelto directamente fuera de los headers internos del módulo Math.
+Todo el código matemático propio vive en `engine/include/LeirEngine/Math` (Mathf.h, Vector2/3/4.h,
+Quaternion.h, Matrix4x4.h, etc.) — es la única fuente de verdad, porque a futuro vamos a optimizar/reemplazar
+esas funciones (SIMD, implementaciones propias, etc.) y todo debe pasar por un solo punto de entrada.
+Si falta una función en Mathf.h, **agregarla ahí** (inline) y usarla desde ahí; nunca llamar a `std::`/`glm`
+directo desde el código del engine/editor.
+
+## COMPILACIÓN EN WINDOWS — workflow verificado de la IA (no reinventar, no probar mil maneras)
+
+Máquina del dev: Windows 10 + VS2022 + Vulkan SDK. El build es **CMake/MSBuild de VS** (NUNCA `cl` directo para
+el engine). Prefijo estándar para localizar las herramientas con vswhere (idéntico en todos los comandos de abajo):
+
+```powershell
+$vsp = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+$cmake = "$vsp\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+$ctest = "$vsp\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
+$vcvars = "$vsp\VC\Auxiliary\Build\vcvars64.bat"
+```
+
+### 1) Build del engine + editor (la forma normal)
+```powershell
+& $cmake --build build/windows-debug --target LeirEngineEditor --config Debug 2>&1 | Select-String -Pattern "error|warning C"
+& $cmake --build build/windows-debug --target LeirEngineEditor --config Debug 2>&1 | Select-Object -Last 2
+```
+- Outputs esperados: `build/windows-debug/engine/Debug/LeirEngine.dll` y
+  `build/windows-debug/editor/Debug/LeirEngineEditor.exe` (verificar en el `Select-Object -Last 2`).
+- El grep de errores vacío = build limpio. Ejecutar el build **2 veces** (grep + tail) para confirmar ambos.
+- **Timeout del shell**: el primer build puede tardar > 120 s → usar `timeout: 300000` (o más).
+- **Si falla `LNK1168: cannot open ...LeirEngineEditor.exe for writing`** → el editor quedó abierto de una
+  corrida anterior: `Get-Process LeirEngineEditor -ErrorAction SilentlyContinue | Stop-Process -Force` (esperar
+  ~1 s) y rebuildear.
+
+### 2) Tests de CTest
+```powershell
+& $ctest --test-dir build/windows-debug -C Debug --output-on-failure
+```
+Esperar `100% tests passed, 0 tests failed out of 2` (PhysicsTest + SlangExportTest).
+
+### 3) Smoke test del editor (arrancar y cerrar sin crash)
+```powershell
+$err = "$env:TEMP\leir_err.log"; Remove-Item $err -ErrorAction SilentlyContinue
+$crash = "C:\Users\gabri\AppData\Local\Temp\opencode\crash_diagnostics.log"
+$cb = if (Test-Path $crash) { (Get-Item $crash).Length } else { 0 }
+$p = Start-Process -FilePath "C:\projects\leir_engine\build\windows-debug\editor\Debug\LeirEngineEditor.exe" -WorkingDirectory "C:\projects\leir_engine\build\windows-debug\editor\Debug" -RedirectStandardError $err -PassThru
+Start-Sleep -Seconds 4
+if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null; $p.WaitForExit(8000) | Out-Null }
+$ca = if (Test-Path $crash) { (Get-Item $crash).Length } else { 0 }
+$e = Get-Content $err -ErrorAction SilentlyContinue
+Write-Host "crashLog delta=$($ca-$cb) stderr=$($(if ($e) { 'no vacio' } else { 'vacio' }))"
+```
+Esperar `crashLog delta=0` y `stderr=vacio`. El path del crash log está hardcodeado en
+`editor/src/CrashDiagnostics.cpp` (línea 34).
+
+### 4) Test standalone contra la DLL (verificación numérica de Transform/matemática)
+Compilar con `cl` de VS vía vcvars64 — **sin vcvars, `cl` no encuentra `cmath`**:
+```powershell
+$cmd = "call `"$vcvars`" >nul 2>&1 && cl /nologo /std:c++20 /EHsc /MDd /O2 /I C:\projects\leir_engine\engine\include /I C:\projects\leir_engine\build\windows-debug\_deps\glm-src `"$env:TEMP\leir_test.cpp`" /link /LIBPATH:C:\projects\leir_engine\build\windows-debug\engine\Debug LeirEngine.lib /OUT:`"$env:TEMP\leir_test.exe`""
+cmd /c $cmd
+```
+- **`/MDd` OBLIGATORIO**: el DLL Debug usa el CRT Debug; compilando el test con `/MD` (Release CRT) el exe
+  falla con `0xC0000409` fail-fast **sin ningún mensaje** — parece un crash del test pero es mismatch de CRT.
+- Include dirs necesarios: `engine/include` + `build/windows-debug/_deps/glm-src` (glm de FetchContent; si falta
+  el path, `Get-ChildItem build -Recurse -Filter glm.hpp`).
+- **Correr el exe copiado junto al editor** (`build/windows-debug/editor/Debug/`): LeirEngine.dll depende de
+  otros DLLs (D3D12/Vulkan/glfw/Jolt) que solo existen ahí; correrlo desde temp da fail-fast. Copiar con
+  `Copy-Item "$env:TEMP\leir_test.exe" "build/windows-debug\editor\Debug\" -Force`, ejecutar, y borrarlo.
+- Referencia: test de la escala lossy (`leir_scale_preserve_test.cpp`, casos rot+scale/rot-only/scale-only/
+  move-only/hijo no trivial/padre anidado/round-trip a root/guard cero-escala → `ALL PASS`).
+
 ## Tech Stack
 
 | Area | Choice |
@@ -961,6 +1034,8 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
   `~/.local/share/icons` is optional, install-time work.
 
 ## Previous Changes Summary
+
+- **Fix reparent — preserve del transform global por escala lossy + guard epsilon (mejor que Unity) + shear documentado** (2026-08-28, ver `TODO_HIERARCHY_SYSTEM.md`): anidar/desanclar/reordenar en el hierarchy **preserva posición, rotación y escala LOSSY de mundo** (largos de columnas), incluso con padre **rotado + escalado no-uniforme**. **`Transform::SetWorldScale`** divide por **el largo de las columnas de `padreWorldMatrix × rotaciónLocalDelHijo`** (antes dividía por el lossy del padre a secas) — la rotación local del hijo (que compensa la del padre) proyecta la escala del padre en cada eje, y el round-trip de lossy es exacto. **Esto es estrictamente mejor que Unity**, cuyo `SetParent(worldPositionStays)` divide por el lossy del padre y **aplasta** al hijo en el caso rotado+escalado. **Límite honesto (modelo TRS)**: si el padre está rotado + escalado no-uniforme, la matriz de mundo del hijo puede conservar **SHEAR** (columnas de largo 1 pero no perpendiculares) — el local TRS (pos/rot/scale) no puede expresar shear y se filtra al mundo; es una limitación compartida con Unity (que encima deforma la escala), no un error de aproximación del divisor. **Guard epsilon (`constexpr kEps = 1e-8f`, fallback `1.0f`)**: si un eje del padre está escalado a 0 exacto y la rotación local del hijo se alinea con él, `colLen = 0` y el lossy capturado también es 0 → `0/0 = NaN` envenenaría la cadena; el guard lo convierte en `0` (el mundo es degenerado ahí). No afecta el inspector: en uso normal (`colLen > 1e-8`) es no-op y `SetParent` dispara una vez por reparent (sin acumulación por frame). `GetWorldScale` = lossy (ya editado 2026-08-27); `SetWorldScale` usa `m_LocalRotation` (que `SetWorldRotation` ya fijó en `SetParent`). `CoreObject::InsertChildAt` sincroniza el transform (`SetParent(&m_Transform, true)`); el drag del `HierarchyPanel` usa `SetParent(..., true)` en Onto y en el unlink a lvl0. Verificado con test standalone contra la DLL (`leir_scale_preserve_test.cpp`, **ALL PASS**: rot+scale, rot-only, scale-only, move-only, hijo con transform no trivial, padre anidado, round-trip a root) + build limpio + editor arranca/cierra sin crash + ctest 2/2. Nota: el test standalone debe compilarse con **`/MDd`** (el DLL Debug usa el CRT Debug; con `/MD` falla con `0xC0000409` fail-fast).
 
 - **Fase 0.2 — refactor a modelo Unity-puro (sin grupos de familia) + fix crash de cierre** (2026-08-27): se **eliminaron los pseudo-roots** `[Object3D]`/`[Object2D]`/`[UI]` del hierarchy — ahora **todos los roots de la escena son items top-level** (orden = `m_Objects`), cualquier mezcla de familias coexiste en lvl0 (Unity-style), y la familia se muestra solo por el **icono**. Se eliminaron `m_FamilyRootItems` y `RootInsertIndex` (el código quedó más simple y rápido). **Guard de familia al anidar**: `FamilyOf(dragged) == FamilyOf(parent del target)` (lvl0 = permitido); cross-family → warning + rechazo. **Sin flicker** en cualquier drag aceptado (`m_LastSignature = BuildSignature()` → se salta el rebuild). **Fix de un crash de cierre latente**: `DeleteUiSubtree` ahora **desprende el elemento de su padre** antes de borrarlo — el `m_Toolbar` (hijo del canvas) quedaba dangle en `m_Children` del canvas y `~UICanvas` escribía en memoria liberada (AV intermitente, frame `~UIElement`/`~UICanvas`). Verificado: 3 ciclos de abrir/cerrar con delta de crash log = 0, ctest 2/2, verificado por el usuario.
 

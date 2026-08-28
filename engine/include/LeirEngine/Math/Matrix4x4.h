@@ -2,6 +2,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 #include "Quaternion.h"
+#include "Mathf.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <array>
@@ -41,6 +42,14 @@ struct Matrix4x4 {
 
     Matrix4x4 Inverse() const;
     Matrix4x4 Transpose() const;
+
+    // True when every element is finite (no inf/NaN). A singular matrix (e.g.
+    // a zero-scaled axis) produces a non-finite inverse via glm::inverse.
+    bool IsFinite() const {
+        for (float v : m)
+            if (!Mathf::IsFinite(v)) return false;
+        return true;
+    }
 
     float* Data() { return m.data(); }
     const float* Data() const { return m.data(); }

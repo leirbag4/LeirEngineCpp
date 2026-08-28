@@ -23,6 +23,8 @@ inline float Atan2(float y, float x) { return std::atan2(y, x); }
 inline float Sqrt(float v) { return std::sqrt(v); }
 inline float Abs(float v) { return std::fabs(v); }
 inline int Abs(int v) { return std::abs(v); }
+inline bool IsFinite(float v) { return std::isfinite(v); }
+inline bool IsFinite(double v) { return std::isfinite(v); }
 inline float Sign(float v) { return v < 0.0f ? -1.0f : (v > 0.0f ? 1.0f : 0.0f); }
 inline int Sign(int v) { return v < 0 ? -1 : (v > 0 ? 1 : 0); }
 inline float Floor(float v) { return std::floor(v); }

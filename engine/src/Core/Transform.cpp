@@ -1,7 +1,7 @@
 #include "LeirEngine/Core/Transform.h"
 
+#include "LeirEngine/Math/Mathf.h"
 #include <algorithm>
-#include <cmath>
 
 namespace Leir {
 
@@ -68,6 +68,12 @@ void Transform::SetWorldPosition(const Vector3& position)
     }
     Matrix4x4 parentWorld = m_Parent->GetLocalToWorldMatrix();
     Matrix4x4 parentInverse = parentWorld.Inverse();
+    // A singular parent matrix (e.g. a zero-scaled axis) yields a non-finite
+    // inverse via glm::inverse; the world is degenerate there and any local
+    // value is arbitrary. Keep the current local position rather than poisoning
+    // the chain with NaN.
+    if (!parentInverse.IsFinite())
+        return;
     Vector3 localPos = parentInverse.MultiplyPoint3x4(position);
     SetLocalPosition(localPos);
 }
@@ -89,10 +95,46 @@ void Transform::SetWorldScale(const Vector3& scale)
         SetLocalScale(scale);
         return;
     }
-    Vector3 parentScale = m_Parent->GetWorldScale();
-    SetLocalScale(Vector3(scale.x / parentScale.x,
-                          scale.y / parentScale.y,
-                          scale.z / parentScale.z));
+    // World-scale preserve: the child's world LOSSY scale (column lengths) along
+    // axis i is localScale[i] * |(parent world rotation-scale · child LOCAL
+    // rotation) column i|. Dividing by those column lengths -- instead of a naive
+    // parent-lossy division -- factors the parent's ROTATION, so nesting into a
+    // rotated + non-uniformly-scaled parent keeps the world LOSSY scale exactly
+    // (Unity's SetParent(worldPositionStays) divides by the parent's lossyScale
+    // and deforms the child in that case). SetWorldRotation already ran in
+    // SetParent, so m_LocalRotation compensates the parent rotation.
+    //
+    // NOTE: what is preserved is POSITION, ROTATION and the world LOSSY scale.
+    // A rotated + non-uniformly-scaled parent can still leave SHEAR in the
+    // child's world matrix (unit-length but non-perpendicular columns): the
+    // local model is TRS (pos/rot/scale), which cannot express shear, so it
+    // leaks into the world. This is an inherent TRS limitation shared with Unity
+    // (which additionally squashes the scale); it is not an approximation of the
+    // divisor.
+    Matrix4x4 parentWorld = m_Parent->GetLocalToWorldMatrix();
+    Matrix4x4 localRot = Matrix4x4::TRS(Vector3(0.0f, 0.0f, 0.0f), m_LocalRotation, Vector3(1.0f, 1.0f, 1.0f));
+    Matrix4x4 combined = parentWorld * localRot;
+    Vector3 colLen(
+        Mathf::Sqrt(combined(0,0) * combined(0,0) +
+                  combined(1,0) * combined(1,0) +
+                  combined(2,0) * combined(2,0)),
+        Mathf::Sqrt(combined(0,1) * combined(0,1) +
+                  combined(1,1) * combined(1,1) +
+                  combined(2,1) * combined(2,1)),
+        Mathf::Sqrt(combined(0,2) * combined(0,2) +
+                  combined(1,2) * combined(1,2) +
+                  combined(2,2) * combined(2,2))
+    );
+    // Epsilon guard: if a parent axis is scaled to exactly 0 and the child's
+    // local rotation aligns with it, the combined column collapses (colLen = 0)
+    // and the captured world scale is also 0 there -> 0/0 = NaN would poison the
+    // whole transform chain. Clamp the divisor to 1.0 so the result stays 0 (the
+    // world is degenerate in that axis anyway). Below the threshold only matters
+    // for sub-1e-8 parent scales (invisible); the division is exact above it.
+    constexpr float kEps = 1e-8f;
+    SetLocalScale(Vector3(scale.x / (colLen.x > kEps ? colLen.x : 1.0f),
+                          scale.y / (colLen.y > kEps ? colLen.y : 1.0f),
+                          scale.z / (colLen.z > kEps ? colLen.z : 1.0f)));
 }
 
 // --- Convenience ---
@@ -233,13 +275,13 @@ void Transform::UpdateWorldMatrix() const
         // non-uniform scale under a rotated parent is preserved correctly (used by
         // SetWorldScale / SetParent(worldPositionStays) for exact round-trips).
         m_WorldScale = Vector3(
-            std::sqrt(m_WorldMatrix(0,0) * m_WorldMatrix(0,0) +
+            Mathf::Sqrt(m_WorldMatrix(0,0) * m_WorldMatrix(0,0) +
                       m_WorldMatrix(1,0) * m_WorldMatrix(1,0) +
                       m_WorldMatrix(2,0) * m_WorldMatrix(2,0)),
-            std::sqrt(m_WorldMatrix(0,1) * m_WorldMatrix(0,1) +
+            Mathf::Sqrt(m_WorldMatrix(0,1) * m_WorldMatrix(0,1) +
                       m_WorldMatrix(1,1) * m_WorldMatrix(1,1) +
                       m_WorldMatrix(2,1) * m_WorldMatrix(2,1)),
-            std::sqrt(m_WorldMatrix(0,2) * m_WorldMatrix(0,2) +
+            Mathf::Sqrt(m_WorldMatrix(0,2) * m_WorldMatrix(0,2) +
                       m_WorldMatrix(1,2) * m_WorldMatrix(1,2) +
                       m_WorldMatrix(2,2) * m_WorldMatrix(2,2))
         );
