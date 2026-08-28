@@ -4,6 +4,8 @@
 #include "LeirEngine/ECS/TransformSystem.h"
 #include "LeirEngine/ECS/System.h"
 #include "LeirEngine/ECS/CommandBuffer.h"
+#include "LeirEngine/ECS/HybridComponent.h"
+#include "LeirEngine/Core/Component.h"
 
 #include <cmath>
 #include <cstdio>
@@ -21,6 +23,16 @@ static void Check(bool cond, const char* name)
 struct Position { float x = 0, y = 0, z = 0; };
 struct Velocity { float x = 0, y = 0, z = 0; };
 struct Health { float hp = 100; };
+
+static int g_TestCompAlive = 0;
+class TestComp : public Component {
+public:
+    explicit TestComp(int v = 0) : value(v) { ++g_TestCompAlive; }
+    ~TestComp() { --g_TestCompAlive; }
+    void OnDestroy() override { destroyed = true; }
+    int value = 0;
+    bool destroyed = false;
+};
 
 int main()
 {
@@ -320,6 +332,30 @@ int main()
     cb8.Remove<Position>(n);
     cb8.Replay(w8);
     Check(!w8.Has<Position>(n), "deferred remove applied");
+
+    // --- HybridComponent (OOP component boxed in the ECS) ---
+    World hw;
+    Entity he = hw.Create();
+    auto& comp = hw.AddHybrid<TestComp>(he, 42);
+    Check(comp.value == 42, "AddHybrid creates and wires the OOP instance");
+    Check(g_TestCompAlive == 1, "boxed component alive");
+    auto* got = hw.GetHybrid<TestComp>(he);
+    Check(got && got == &comp, "GetHybrid returns the live instance");
+    auto& comp2 = hw.AddHybrid<TestComp>(he, 7);
+    Check(&comp2 == &comp && comp2.value == 42, "AddHybrid one-per-type returns existing");
+
+    OwnedGroup<HybridComponent<TestComp>> hg(&hw);
+    hg.Sync(hw);
+    hw.ClearJournal();
+    int iter = 0;
+    hg.ForEach([&](HybridComponent<TestComp>& hc, Entity) {
+        ++iter;
+        Check(hc.instance && hc.instance->value == 42, "group iterates boxed components");
+    });
+    Check(iter == 1, "group over HybridComponent works");
+
+    hw.Destroy(he);
+    Check(g_TestCompAlive == 0, "destroying entity destroys boxed component");
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

@@ -3,6 +3,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/ECS/Entity.h"
 #include "LeirEngine/ECS/ComponentPool.h"
+#include "LeirEngine/ECS/HybridComponent.h"
 
 #include <cstdint>
 #include <memory>
@@ -122,6 +123,22 @@ public:
         pool->RemoveFromEntity(e.index);
         m_Journal.push_back({ChangeRecord::ComponentRemoved, e.index, ComponentType<T>()});
         ++m_ChangeVersion;
+    }
+
+    // --- Hybrid components (OOP Component boxed in the ECS) ---
+    // One per type per entity (same semantics as AddComponent<T>).
+    template<typename T, typename... Args>
+    T& AddHybrid(Entity e, Args&&... args) {
+        auto& hc = Add<HybridComponent<T>>(e);
+        if (!hc.instance)
+            hc.instance = std::make_unique<T>(std::forward<Args>(args)...);
+        return *hc.instance;
+    }
+
+    template<typename T>
+    T* GetHybrid(Entity e) {
+        auto* hc = Get<HybridComponent<T>>(e);
+        return hc ? hc->instance.get() : nullptr;
     }
 
     // --- Iteration ---

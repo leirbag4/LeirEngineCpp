@@ -1055,6 +1055,14 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa B paso 1: `HybridComponent`** (2026-08-28, `TODO_HYBRID_ECS.md` §7): componente
+  ECS que boxea un `Component` OOP (`std::unique_ptr<T>`), **move-only** (moves explícitos — el dtor
+  declarado suprime los implícitos; `TypedPool` usa emplace/move/pop así que lo soporta), el dtor del
+  box llama `OnDestroy()` (al remover el componente o destruir la entidad). `World::AddHybrid<T>(e,
+  args...)` (one-per-type, devuelve `T&` vivo) + `World::GetHybrid<T>(e)`. Verificado en `ECSTest`
+  (boxeo, instancia viva, one-per-type, iteración vía `OwnedGroup`, destroy destruye el box). Es la
+  base para que `AddComponent<T>` sobreviva sobre el ECS (patrón Unity DOTS híbrido adaptado).
+
 - **Hybrid ECS — estrategia del Bridge documentada (B → A)** (2026-08-28, `TODO_HYBRID_ECS.md` §7):
   el bridge se hace en dos etapas: **Etapa B** `HybridComponent` + `ECSScene` de prueba (aditivo,
   implementa `ISceneStorage` sobre el ECS, riesgo nulo para el editor) → **Etapa A** `CoreObject` →

@@ -237,10 +237,12 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 
 #### Etapa B — `HybridComponent` + `ECSScene` de prueba (aditivo, el editor actual NO cambia)
 
-- [ ] **`HybridComponent<T>`** (`ECS/HybridComponent.h`): componente ECS que boxea un objeto OOP
-      `Component` (`std::unique_ptr<T>`), con lifecycle `OnAwake/OnStart/OnUpdate/OnDestroy` dirigido
-      por un sistema o el puente. Es la base de "AddComponent<T> devuelve un Component vivo" dentro del
-      ECS (patrón Unity DOTS adaptado). MOVE-ONLY (unique_ptr) → validar que `TypedPool` lo soporta.
+- [x] **`HybridComponent<T>`** (`ECS/HybridComponent.h`): componente ECS que boxea un objeto OOP
+      `Component` (`std::unique_ptr<T>`), **move-only** (moves explícitos porque el dtor declarado
+      suprime los implícitos — `TypedPool` soporta emplace/move/pop), dtor del box llama `OnDestroy()`
+      (se dispara al remover el componente o destruir la entidad). Helpers `World::AddHybrid<T>(e, args...)`
+      (one-per-type, devuelve `T&` vivo) y `World::GetHybrid<T>(e)`. Verificado en `ECSTest`
+      (boxeo + instancia viva + one-per-type + iteración vía `OwnedGroup` + destroy destruye el box).
 - [ ] **`ECSScene`** (`Scene/ECSScene.{h,cpp}`) implementa `ISceneStorage` (el seam de Fase 0):
       - `World` + `HierarchyTree` + `TransformSystem` + `OwnedGroup`s (Renderables/Cameras/Lights).
       - `CreateObject3D/2D`: crea entity + `LocalTransform` + tag de familia (`Tag3D`/`Tag2D`) +
