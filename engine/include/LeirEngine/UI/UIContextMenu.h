@@ -35,6 +35,13 @@ public:
     void AddSeparator();
     void AddItemDisabled(const std::string& label);
 
+    // Configurable width limits (the menu sizes to the widest item, clamped to
+    // [min, max]). Labels wider than the available space are truncated with "…".
+    void SetMinWidth(float v) { m_MinWidth = std::max(40.0f, v); if (m_MaxWidth < m_MinWidth) m_MaxWidth = m_MinWidth; }
+    void SetMaxWidth(float v) { m_MaxWidth = std::max(m_MinWidth, v); }
+    float GetMinWidth() const { return m_MinWidth; }
+    float GetMaxWidth() const { return m_MaxWidth; }
+
     void OpenAt(const Vector2& canvasPos);
     void Close();
 
@@ -53,6 +60,8 @@ private:
     std::vector<Item> m_Items;
     std::vector<UIElement*> m_Rows; // MenuItem* and separator UIPanel*
     Font* m_Font = nullptr;
+    float m_MinWidth = 160.0f;
+    float m_MaxWidth = 320.0f;
     bool m_Open = false;
     std::shared_ptr<bool> m_Alive = std::make_shared<bool>(true);
 };
@@ -68,6 +77,7 @@ public:
     void OnPointerExit() override;
     bool OwnsChild(const UIElement* child) const override;
     Vector2 GetMinSize() const override;
+    void ApplyWidthLimit(float itemWidth); // truncates the label with "…" if it overflows
 
 private:
     void UpdateColors();
