@@ -293,6 +293,13 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       backed porque delega al transform facade → ECS tree (A1). Verificado en `ECSTest` (**ALL PASS**):
       AddComponent boxea al ECS, GetComponent devuelve la instancia viva, one-per-type, RemoveComponent
       remueve el hybrid (OnDestroy).
+- [x] **A3a — Lifecycle de hybrids** (prerrequisito del fusionado): `World` gana un **registro de hybrids**
+      (`GetHybrids()` — las instancias OOP boxeadas, en orden de alta; `AddHybrid` las registra vía un
+      callback `m_Unregister` en el box que las des-registra al destruirse). Nuevo `Component::Tick(dt)`
+      (OnStart lazy una vez + OnUpdate si activo) — usado también por `CoreObject::OnUpdate` (antes
+      inline duplicado). Así los componentes de objetos backed (RigidBody/Audio/…) corren su OnUpdate
+      desde el driver de la escena. Verificado en `ECSTest` (**ALL PASS**): registro, start+update,
+      start-once, unregister al remover.
 - [ ] **A3 — `Scene` = implementación ECS** (funde lo de `ECSScene`); `ECSScene` se BORRA; el editor
       migra a Scene-backed (verificación visual del usuario).
 - [ ] Reescribir `CoreObject`: eliminar `m_Transform`, `m_Children`, `m_Components`; guardar `Entity` +

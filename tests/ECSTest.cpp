@@ -29,11 +29,15 @@ struct Velocity { float x = 0, y = 0, z = 0; };
 struct Health { float hp = 100; };
 
 static int g_TestCompAlive = 0;
+static int g_TestCompStarts = 0;
+static int g_TestCompUpdates = 0;
 class TestComp : public Component {
 public:
     explicit TestComp(int v = 0) : value(v) { ++g_TestCompAlive; }
     ~TestComp() { --g_TestCompAlive; }
     void OnDestroy() override { destroyed = true; }
+    void OnStart() override { ++g_TestCompStarts; }
+    void OnUpdate(float) override { ++g_TestCompUpdates; }
     int value = 0;
     bool destroyed = false;
 };
@@ -481,6 +485,28 @@ int main()
     bo->RemoveComponent<TestComp>();
     Check(!bo->GetComponent<TestComp>(), "backed RemoveComponent removes the hybrid");
     delete bo;
+
+    // --- Hybrid lifecycle registry (A3 groundwork) ---
+    World wL;
+    HierarchyTree tL;
+    TransformSystem tsL(&wL, &tL);
+    Object3D* lo = new Object3D("L");
+    Entity le = wL.Create();
+    tL.EnsureIndex(le.index);
+    lo->GetTransform().SetEcsBacked(&wL, &tsL, &tL, le);
+    g_TestCompStarts = 0;
+    g_TestCompUpdates = 0;
+    lo->AddComponent<TestComp>(7);
+    Check(wL.GetHybrids().size() == 1, "hybrid registered in the lifecycle registry");
+    for (auto* c : wL.GetHybrids())
+        c->Tick(0.016f);
+    Check(g_TestCompStarts == 1 && g_TestCompUpdates == 1, "hybrid lifecycle start+update");
+    for (auto* c : wL.GetHybrids())
+        c->Tick(0.016f);
+    Check(g_TestCompStarts == 1 && g_TestCompUpdates == 2, "hybrid start once, update each tick");
+    lo->RemoveComponent<TestComp>();
+    Check(wL.GetHybrids().empty(), "removing hybrid unregisters it from the registry");
+    delete lo;
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

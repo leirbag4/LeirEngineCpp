@@ -133,15 +133,8 @@ void CoreObject::OnUpdate(float deltaTime)
     if (!m_Active)
         return;
 
-    for (auto& comp : m_Components) {
-        if (comp->IsActive()) {
-            if (!comp->m_Started) {
-                comp->m_Started = true;
-                comp->OnStart();
-            }
-            comp->OnUpdate(deltaTime);
-        }
-    }
+    for (auto& comp : m_Components)
+        comp->Tick(deltaTime);
 
     for (auto child : m_Children)
         child->OnUpdate(deltaTime);

@@ -126,12 +126,17 @@ public:
     }
 
     // --- Hybrid components (OOP Component boxed in the ECS) ---
-    // One per type per entity (same semantics as AddComponent<T>).
+    // One per type per entity (same semantics as AddComponent<T>). The instance
+    // is also registered in the lifecycle registry (GetHybrids) so a driver
+    // (Scene::OnUpdate / a system) can call OnStart/OnUpdate.
     template<typename T, typename... Args>
     T& AddHybrid(Entity e, Args&&... args) {
         auto& hc = Add<HybridComponent<T>>(e);
-        if (!hc.instance)
+        if (!hc.instance) {
             hc.instance = std::make_unique<T>(std::forward<Args>(args)...);
+            hc.m_Unregister = [this](Component* c) { EraseHybrid(c); };
+            m_Hybrids.push_back(hc.instance.get());
+        }
         return *hc.instance;
     }
 
@@ -139,6 +144,19 @@ public:
     T* GetHybrid(Entity e) {
         auto* hc = Get<HybridComponent<T>>(e);
         return hc ? hc->instance.get() : nullptr;
+    }
+
+    // Lifecycle registry: the boxed OOP instances, in add order. The owning
+    // scene drives OnStart/OnUpdate via Component::Tick each frame.
+    const std::vector<Component*>& GetHybrids() const { return m_Hybrids; }
+    void EraseHybrid(Component* c) {
+        for (size_t i = 0; i < m_Hybrids.size(); ++i) {
+            if (m_Hybrids[i] == c) {
+                m_Hybrids[i] = m_Hybrids.back();
+                m_Hybrids.pop_back();
+                return;
+            }
+        }
     }
 
     // --- Iteration ---
@@ -184,6 +202,7 @@ private:
 
     std::vector<ChangeRecord> m_Journal;
     uint64_t m_ChangeVersion = 0;
+    std::vector<Component*> m_Hybrids; // lifecycle registry (boxed OOP instances)
 };
 
 } // namespace ECS

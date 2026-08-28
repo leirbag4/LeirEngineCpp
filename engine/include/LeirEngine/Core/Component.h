@@ -22,6 +22,19 @@ public:
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
 
+    // Drives the lifecycle: lazily calls OnStart() once, then OnUpdate() while
+    // active. Used by Scene/CoreObject for both the OOP and ECS-hybrid paths.
+    void Tick(float deltaTime)
+    {
+        if (!m_Active)
+            return;
+        if (!m_Started) {
+            m_Started = true;
+            OnStart();
+        }
+        OnUpdate(deltaTime);
+    }
+
 private:
     friend class CoreObject;
     CoreObject* m_Owner = nullptr;

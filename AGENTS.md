@@ -1055,6 +1055,23 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Etapa A A3a: lifecycle de hybrids** (2026-08-28, `TODO_HYBRID_ECS.md` §7): `World` gana
+  el **registro de hybrids** (`GetHybrids()` — instancias OOP boxeadas en orden de alta; `AddHybrid` las
+  registra vía callback `m_Unregister` en el box que des-registra al destruirse). Nuevo
+  `Component::Tick(dt)` (OnStart lazy + OnUpdate si activo), usado también por `CoreObject::OnUpdate`.
+  Es el prerrequisito para que los componentes de objetos backed corran su OnUpdate. Verificado en
+  `ECSTest` (**ALL PASS**): registro, start+update, start-once, unregister al remover. Build limpio,
+  ctest 3/3, smoke editor OK.
+
+- **Hybrid ECS — Etapa A proof: `ECSBackedDemo`** (2026-08-28, `TODO_HYBRID_ECS.md` §7): nuevo ejemplo
+  `examples/ECSBackedDemo` — CoreObjects **fully-backed**: transform facade (`SetEcsBacked`), componentes
+  `HybridComponent` (AddComponent/GetComponent/RemoveComponent delegan cuando backed) y jerarquía = ECS
+  tree. El `RenderPipeline` real los dibuja leyendo los `WorldTransform` del ECS (fuente única, sin
+  write-back por frame). `BackedScene` = `ISceneStorage` minimal con World+tree+transforms. Fix en A2:
+  el AddComponent backed ahora setea `m_Owner` + llama `OnAwake` (como el path OOP) — sin eso
+  `Camera::GetOwner()->GetTransform()` era null. Verificado por el usuario: 5 cubos idénticos al
+  ECSDemo (Parent+Child, Kid lossy 1,1,1, Rotated 2×2×2, Stretched), sin crash.
+
 - **Hybrid ECS — Etapa A incremento A2: `CoreObject` backing de componentes** (2026-08-28,
   `TODO_HYBRID_ECS.md` §7): `Transform::GetEcsWorld()/GetEcsEntity()` expuestos; `CoreObject::
   AddComponent<T>/GetComponent<T>/RemoveComponent<T>` delegan a `World::AddHybrid/GetHybrid/
