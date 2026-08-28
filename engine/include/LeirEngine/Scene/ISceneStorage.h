@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Scene/SceneGroups.h"
 
 #include <cstdint>
 #include <memory>
@@ -14,11 +15,8 @@ class Object3D;
 class Object2D;
 
 // Storage seam for a Scene's world data (Fase 0, TODO_HYBRID_ECS.md). The
-// concrete Scene implements this today with the classic OOP graph
-// (vector<unique_ptr<CoreObject>> roots + child pointers). The future
-// hybrid-ECS Scene (Fase 1) will implement the SAME contract behind the ECS
-// world, so renderers, picking and every other consumer keep working with the
-// friendly CoreObject API untouched.
+// concrete Scene implements this today over the custom ECS. Renderers, picking
+// and every other consumer keep working with the friendly CoreObject API.
 class LEIR_API ISceneStorage {
 public:
     virtual ~ISceneStorage() = default;
@@ -34,14 +32,21 @@ public:
     virtual CoreObject* FindObjectByName(const std::string& name) const = 0;
     virtual const std::vector<std::unique_ptr<CoreObject>>& GetObjects() const = 0;
 
-    // Data-oriented query caches, rebuilt lazily on structural change (create /
-    // destroy / reparent / add-or-remove component). They cover the WHOLE
-    // hierarchy (roots + children) and include inactive objects too (callers
-    // filter via IsActive). Renderers iterate these instead of scanning
-    // GetObjects() + GetComponent<T>() every frame.
+    // Data-oriented query caches, rebuilt lazily on structural change. They cover
+    // the WHOLE hierarchy and include inactive objects too (callers filter via
+    // IsActive). Renderers iterate these instead of scanning GetObjects() +
+    // GetComponent<T>() every frame.
     virtual const std::vector<CoreObject*>& GetRenderables() = 0;
     virtual const std::vector<CoreObject*>& GetCameras() = 0;
     virtual const std::vector<CoreObject*>& GetLights() = 0;
+
+    // Journal-synced ECS query groups (resto c): the renderer's primary path.
+    // ForEach gives (component&, Active&, WorldTransform&, Entity) — contiguous
+    // member iteration with no per-frame object/component lookups.
+    virtual SceneGroups::Renderables& GetRenderGroup() = 0;
+    virtual SceneGroups::Sprites& GetSpriteGroup() = 0;
+    virtual SceneGroups::Cameras& GetCameraGroup() = 0;
+    virtual SceneGroups::Lights& GetLightGroup() = 0;
 
     // Called by CoreObject when a component is added/removed or the object is
     // reparented: invalidates the query caches.

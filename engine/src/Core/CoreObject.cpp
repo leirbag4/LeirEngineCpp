@@ -1,5 +1,6 @@
 #include "LeirEngine/Core/CoreObject.h"
 #include "LeirEngine/Scene/Scene.h"
+#include "LeirEngine/ECS/Tags.h"
 
 #include <algorithm>
 
@@ -29,6 +30,9 @@ CoreObject::~CoreObject()
 void CoreObject::SetActive(bool active)
 {
     m_Active = active;
+    // Mirror into the ECS so systems/groups (render) can skip inactive objects.
+    if (m_Transform.IsEcsBacked())
+        m_Transform.GetEcsWorld()->Add<ECS::Active>(m_Transform.GetEcsEntity()).value = active;
 }
 
 void CoreObject::SetParent(CoreObject* parent, bool worldPositionStays)

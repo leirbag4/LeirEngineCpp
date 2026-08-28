@@ -241,42 +241,36 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
     if (!scene)
         return;
 
-    // Camera/light/renderable discovery via the scene's data-oriented query
-    // caches (full hierarchy, O(1) per item). No per-frame GetObjects() scan.
+    // Camera/light/renderables via the journal-synced ECS query groups: the
+    // data-oriented render path (no per-frame GetObjects/GetComponent scans).
     Camera* primaryCamera = nullptr;
-    for (CoreObject* obj : scene->GetCameras()) {
-        if (!obj->IsActive())
-            continue;
-        Camera* cam = obj->GetComponent<Camera>();
-        if (cam && cam->IsPrimary()) {
+    scene->GetCameraGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+        if (!active.value || primaryCamera)
+            return;
+        Camera* cam = hc.instance.get();
+        if (cam && cam->IsPrimary())
             primaryCamera = cam;
-            break;
-        }
-    }
+    });
     if (!primaryCamera) {
-        for (CoreObject* obj : scene->GetCameras()) {
-            if (!obj->IsActive())
-                continue;
-            Camera* cam = obj->GetComponent<Camera>();
-            if (cam) {
+        scene->GetCameraGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+            if (!active.value || primaryCamera)
+                return;
+            Camera* cam = hc.instance.get();
+            if (cam)
                 primaryCamera = cam;
-                break;
-            }
-        }
+        });
     }
     if (!primaryCamera)
         return;
 
     Light* primaryLight = nullptr;
-    for (CoreObject* obj : scene->GetLights()) {
-        if (!obj->IsActive())
-            continue;
-        Light* light = obj->GetComponent<Light>();
-        if (light) {
+    scene->GetLightGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+        if (!active.value || primaryLight)
+            return;
+        Light* light = hc.instance.get();
+        if (light)
             primaryLight = light;
-            break;
-        }
-    }
+    });
 
     primaryCamera->RecalculateViewMatrix();
     Matrix4x4 viewProj = primaryCamera->GetViewProjectionMatrix();
@@ -287,23 +281,19 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
         push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
     }
 
-    for (CoreObject* obj : scene->GetRenderables()) {
-        if (!obj->IsActive())
-            continue;
-
-        MeshRenderer* renderer = obj->GetComponent<MeshRenderer>();
+    scene->GetRenderGroup().ForEach([&](auto& hc, auto& active, auto& wt, ECS::Entity) {
+        if (!active.value)
+            return;
+        MeshRenderer* renderer = hc.instance.get();
         if (!renderer)
-            continue;
-
+            return;
         auto mesh = renderer->GetMesh();
         auto material = renderer->GetMaterial();
         if (!mesh || !material)
-            continue;
-
+            return;
         push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-        RenderMeshRenderer(graph, renderer, viewProj,
-            obj->GetTransform().GetLocalToWorldMatrix(), push);
-    }
+        RenderMeshRenderer(graph, renderer, viewProj, wt.worldMatrix, push);
+    });
 }
 
 void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* scene)
@@ -311,7 +301,7 @@ void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* sce
     if (!scene)
         return;
 
-    // Build sorted list of visible sprites
+    // Build sorted list of visible sprites (from the ECS sprite group).
     struct SpriteDraw {
         SpriteRenderer* renderer;
         Matrix4x4 world;
@@ -319,15 +309,14 @@ void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* sce
         int orderInLayer;
     };
     std::vector<SpriteDraw> draws;
-
-    for (CoreObject* obj : scene->GetRenderables()) {
-        if (!obj->IsActive())
-            continue;
-        auto* spr = obj->GetComponent<SpriteRenderer>();
+    scene->GetSpriteGroup().ForEach([&](auto& hc, auto& active, auto& wt, ECS::Entity) {
+        if (!active.value)
+            return;
+        SpriteRenderer* spr = hc.instance.get();
         if (!spr)
-            continue;
-        draws.push_back({ spr, obj->GetTransform().GetLocalToWorldMatrix(), 0, 0 });
-    }
+            return;
+        draws.push_back({ spr, wt.worldMatrix, 0, 0 });
+    });
 
     if (draws.empty()) {
         XConsole::PrintWarning("RenderOverlay: no sprites to draw");

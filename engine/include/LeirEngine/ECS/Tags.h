@@ -12,5 +12,11 @@ struct LEIR_API Tag3D {};
 struct LEIR_API Tag2D {};
 struct LEIR_API TagUI {};
 
+// Per-entity active state (mirrors CoreObject::SetActive) so ECS systems/groups
+// can skip inactive objects without touching the CoreObject handle.
+struct LEIR_API Active {
+    bool value = true;
+};
+
 } // namespace ECS
 } // namespace Leir

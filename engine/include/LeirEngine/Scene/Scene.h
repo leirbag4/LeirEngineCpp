@@ -56,6 +56,12 @@ public:
     const std::vector<CoreObject*>& GetLights() override;
     void MarkCachesDirty() override { m_CachesDirty = true; }
 
+    // Journal-synced ECS query groups (ISceneStorage; resto c).
+    SceneGroups::Renderables& GetRenderGroup() override { return m_RenderGroup; }
+    SceneGroups::Sprites& GetSpriteGroup() override { return m_SpriteGroup; }
+    SceneGroups::Cameras& GetCameraGroup() override { return m_CameraGroup; }
+    SceneGroups::Lights& GetLightGroup() override { return m_LightGroup; }
+
     // ECS access (Etapa A: the single source of truth).
     ECS::World& GetWorld() { return m_World; }
     ECS::HierarchyTree& GetTree() { return m_Tree; }
@@ -78,6 +84,12 @@ private:
     ECS::HierarchyTree m_Tree;
     ECS::TransformSystem m_Transforms;
     std::unordered_map<const CoreObject*, ECS::Entity> m_EntityOf;
+
+    // Journal-synced ECS query groups (the renderer's primary path).
+    SceneGroups::Renderables m_RenderGroup{&m_World};
+    SceneGroups::Sprites m_SpriteGroup{&m_World};
+    SceneGroups::Cameras m_CameraGroup{&m_World};
+    SceneGroups::Lights m_LightGroup{&m_World};
 
     // Query caches (rebuilt lazily via RebuildCaches when m_CachesDirty).
     bool m_CachesDirty = true;

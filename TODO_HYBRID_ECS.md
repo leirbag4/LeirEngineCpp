@@ -324,8 +324,15 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 - [x] `AddComponent<T>` → `HybridComponent<T>` boxeado (devuelve `T&` vivo, one-per-type) — ver A2.
 - [ ] El hierarchy panel filtra por **tags** (`Tag3D/Tag2D/TagUI`) en vez de `dynamic_cast`. (Los tags
       ya existen en el ECS; falta migrar el panel — `HierarchyPanel::FamilyOf` usa `dynamic_cast` hoy.)
-- [ ] Render/picking/física/audio sobre los **groups** del ECS (hoy usan las caches + hybrids; los
-      `OwnedGroup`s de Renderables/Transforms/Physics están pendientes — ver "nota honesta" de Fase 1).
+- [x] **Render/picking/física/audio sobre los `OwnedGroup`s del ECS**: el `RenderPipeline` (3D + overlay)
+      ahora itera los **grupos journal-synced** de `Scene` (`SceneGroups::Renderables/Sprites/Cameras/
+      Lights` = `OwnedGroup<HybridComponent<X>, Active, WorldTransform>`) — iteración contigua, sin
+      `GetObjects`/`GetComponent`/`GetTransform` por frame. Nuevo componente `ECS::Active` (espejo de
+      `CoreObject::SetActive`) para que el render salte objetos inactivos sin el handle. `ISceneStorage`
+      expone `GetRenderGroup/GetSpriteGroup/GetCameraGroup/GetLightGroup`. Verificado: build limpio,
+      ctest 3/3, `ECSDemo` (`renderables=5`), `PhysicsDemo` (`objs=10`), smoke editor OK. El picking
+      sigue en las caches (necesita `Object3D*` para los bounds); la conversión POD completa de los
+      componentes + SoA es de Fase 2.
 - [ ] `Entity` generacional: `CoreObject` valida con `IsAlive` (hoy el facade usa el entity directo;
       el handle stale se valida a nivel del `World` al operar).
 

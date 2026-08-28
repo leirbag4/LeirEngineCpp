@@ -33,6 +33,7 @@ ECS::Entity Scene::CreateEntity(CoreObject* object, bool is3D)
         m_World.Add<ECS::Tag3D>(e);
     else
         m_World.Add<ECS::Tag2D>(e);
+    m_World.Add<ECS::Active>(e); // default active (mirrors CoreObject::SetActive)
     m_Tree.EnsureIndex(e.index);
     // Backing the transform creates the entity's LocalTransform (via
     // TransformSystem::SetLocal, which also marks it dirty) so the ECS computes
@@ -189,6 +190,14 @@ void Scene::OnUpdate(float deltaTime)
 
     // ECS is authoritative for world transforms: recompute the dirty frontier.
     m_Transforms.Update();
+
+    // Sync the query groups from the structural-change journal, then consume it
+    // (the groups are the only journal consumer for now).
+    m_RenderGroup.Sync(m_World);
+    m_SpriteGroup.Sync(m_World);
+    m_CameraGroup.Sync(m_World);
+    m_LightGroup.Sync(m_World);
+    m_World.ClearJournal();
 }
 
 void Scene::OnRender()
