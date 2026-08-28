@@ -24,7 +24,8 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
       systems, transform system con lossy-preserve, hierarchy tree unificado, bridge CoreObject/Scene).
   - [x] Núcleo base: Entity generacional + pools sparse-set + registro por type_index + journal + `Each`
         variadic → `tests/ECSTest.cpp` (ctest 3/3).
-  - [ ] Groups SoA + query cache + systems pipeline + transform system + hierarchy tree + bridge.
+  - [x] Owned groups / query cache (`OwnedGroup<Ts...>`), journal-synced, iteración O(miembros).
+  - [ ] Systems pipeline + transform system + hierarchy tree + bridge + migración de componentes.
 - [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
 - [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
 

@@ -51,6 +51,9 @@ public:
     Entity Create();
     void Destroy(Entity e);
     bool IsAlive(Entity e) const;
+    uint32_t GenerationOf(uint32_t entityIndex) const {
+        return entityIndex < m_Generations.size() ? m_Generations[entityIndex] : 0;
+    }
 
     // --- Component storage (sparse-set pools) ---
     template<typename T>

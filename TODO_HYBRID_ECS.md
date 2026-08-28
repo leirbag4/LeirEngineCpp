@@ -294,9 +294,28 @@ cube->GetComponent<MeshRenderer>();
 - [x] **Journal de cambios estructurales + sync points** (`ChangeRecord`, `GetJournal/ClearJournal`,
       `GetChangeVersion`): version monótona + registros de create/destroy/component add/remove; los
       owned groups y query caches (siguiente paso) lo consumen para sync incremental.
-- [ ] **Owned groups SoA** (Renderables, Transforms, PhysicsBodies, Audio3D, Sprites) alimentados por el
-      journal.
-- [ ] **Query cache** (With/Without) invalidado por el journal.
+- [x] **Owned groups SoA / query cache** (`ECS/OwnedGroup.h`, header-only): grupo cacheado por el journal —
+      el conjunto ordenado de entidades que poseen TODOS los `Ts`, mantenido incrementalmente vía
+      `Sync(world)` (antes de `ClearJournal`). `ForEach` = O(miembros) **sin checks de membership por
+      entidad** (la membresía está cacheada) y **lee datos vivos de los pools** (siempre consistente con
+      `World::Get/Add/Remove`). Cubre la "query cache With" para firmas fijas; los grupos específicos
+      (Renderables/Transforms/Physics…) y la alineación SoA para SIMD llegan con la migración de
+      componentes y la Fase 2. Verificado en `ECSTest` (crecer/encoger al cambiar membresía, drop por
+      destroy, datos vivos).
+  - **NOTA HONESTA — pendientes OBLIGATORIOS (profesional, no opcionales)**:
+    - [ ] **Orden de filas ESTABLE** ante remociones: hoy `Reconcile` usa swap-and-pop, que cambia el
+          orden de `m_Members`. Para render (z-order), serialización determinista y determinismo de
+          simulación el orden debe ser estable → remoción con "tombstone" o reemplazo por el último con
+          `m_Members` como linked-list/binary-heap con índice libre, y `m_RowOf` para O(1) lookup del
+          slot. No dejar swap-and-pop como comportamiento permanente.
+    - [ ] **Alineación SoA por campo (SIMD)**: hoy el grupo itera filas que leen los pools (datos vivos,
+          correcto pero acceso indirecto por fila). La Fase 2 debe convertir los hot groups en columnas
+          contiguas por campo (p.ej. `posX[]/posY[]/posZ[]`) con filas alineadas 16/64 bytes para
+          SSE/NEON/SIMD128. Es requisito de perf, no un extra.
+    - [ ] **Ownership de almacenamiento**: decidir entre (a) grupo como caché read-only (hoy, con
+          re-sync al add de fila) y (b) grupo dueño del pool (una sola fuente, sin copia) — el patrón
+          enTT de sección "owned" al frente del dense con reordenación. La opción (b) elimina la
+          duplicación y es la que rinde a escala; evaluarla al migrar los componentes.
 - [ ] **Systems pipeline** básico (FixedUpdate/Update/Render, command buffer).
 - [ ] **Transform system**: LocalTransform/WorldTransform + dirty-frontier + **lossy-preserve exacto**.
 - [ ] **Hierarchy tree unificado** (parent/firstChild/nextSibling) + reparent con worldPositionStays.

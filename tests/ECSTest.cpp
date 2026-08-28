@@ -1,4 +1,5 @@
 #include "LeirEngine/ECS/World.h"
+#include "LeirEngine/ECS/OwnedGroup.h"
 
 #include <cstdio>
 
@@ -103,6 +104,49 @@ int main()
     world.Remove<Position>(kNullEntity); // no-crash
     world.Destroy(kNullEntity);          // no-crash
     Check(world.Create().index != kNullIndex, "entity 0 reserved (null)");
+
+    // --- OwnedGroup (journal-driven cached query) ---
+    World world2;
+    OwnedGroup<Position, Velocity> group(&world2);
+
+    Entity e1 = world2.Create();
+    world2.Add<Position>(e1); world2.Add<Velocity>(e1); // member
+    Entity e2 = world2.Create();
+    world2.Add<Position>(e2);                            // NOT member (no Velocity)
+    Entity e3 = world2.Create();
+    world2.Add<Position>(e3); world2.Add<Velocity>(e3); // member
+    Entity e4 = world2.Create();                        // empty
+
+    group.Sync(world2);
+    world2.ClearJournal();
+    Check(group.Count() == 2, "group has the 2 members (not the partial/empty)");
+
+    // Reads live data: write through the pool AFTER the group was synced.
+    world2.Get<Position>(e1)->x = 9.0f;
+    int seen = 0;
+    group.ForEach([&](Position& p, Velocity& v, Entity e) {
+        ++seen;
+        if (e == e1) Check(p.x == 9.0f, "group ForEach reads live pool data");
+    });
+    Check(seen == 2, "group ForEach iterates members");
+
+    // Make e2 a member by adding Velocity -> group grows after Sync.
+    world2.Add<Velocity>(e2);
+    group.Sync(world2);
+    world2.ClearJournal();
+    Check(group.Count() == 3, "group grows when a partial entity becomes a member");
+
+    // Remove a component from a member -> it leaves the group.
+    world2.Remove<Velocity>(e3);
+    group.Sync(world2);
+    world2.ClearJournal();
+    Check(group.Count() == 2, "group shrinks when a member loses a type");
+
+    // Destroy a member -> it leaves the group (pools cleared before the record).
+    world2.Destroy(e1);
+    group.Sync(world2);
+    world2.ClearJournal();
+    Check(group.Count() == 1, "group drops destroyed member");
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;
