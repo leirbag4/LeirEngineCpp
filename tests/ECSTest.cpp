@@ -176,6 +176,34 @@ int main()
     world2.ClearJournal();
     Check(group.Count() == 1, "group drops destroyed member");
 
+    // Stable order: removing a member keeps the remaining order unchanged.
+    World wS;
+    OwnedGroup<Position, Velocity> sg(&wS);
+    Entity sa = wS.Create();
+    wS.Add<Position>(sa); wS.Add<Velocity>(sa);
+    Entity sb = wS.Create();
+    wS.Add<Position>(sb); wS.Add<Velocity>(sb);
+    Entity sc = wS.Create();
+    wS.Add<Position>(sc); wS.Add<Velocity>(sc);
+    sg.Sync(wS);
+    wS.ClearJournal();
+    Check(sg.Count() == 3, "stable-order group has 3 members");
+    wS.Remove<Velocity>(sb); // remove the middle member
+    sg.Sync(wS);
+    wS.ClearJournal();
+    Check(sg.Count() == 2, "stable-order group shrinks");
+    std::vector<uint32_t> order;
+    sg.ForEach([&](Position&, Velocity&, Entity e) { order.push_back(e.index); });
+    Check(order.size() == 2 && order[0] == sa.index && order[1] == sc.index,
+          "stable order preserved after removal (A,C, not C,A)");
+    wS.Add<Velocity>(sb); // re-add: reuses its tombstoned row -> back in original slot
+    sg.Sync(wS);
+    wS.ClearJournal();
+    order.clear();
+    sg.ForEach([&](Position&, Velocity&, Entity e) { order.push_back(e.index); });
+    Check(order.size() == 3 && order[0] == sa.index && order[1] == sb.index && order[2] == sc.index,
+          "stable order after re-add reuses the original slot (A,B,C)");
+
     // --- HierarchyTree (structure-only scene graph) ---
     World w3;
     HierarchyTree tree;
