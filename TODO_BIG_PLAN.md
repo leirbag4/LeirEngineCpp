@@ -7,7 +7,7 @@ Estado: **en planificación** (2026-08-26). Vamos fase por fase, probando cada u
 
 ---
 
-## Arquitectura transversal — Hybrid ECS (Fase 0 en curso)
+## Arquitectura transversal — Hybrid ECS (Fase 1 COMPLETA)
 
 El motor entero (editor + runtime + web + mobile futuro) se rediseña a **escena amigable en la
 superficie + ECS data-oriented invisible por detrás** (SIMD + multithreading). La API pública
@@ -20,8 +20,8 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
   - [x] Registro de componentes por `type_index` (matar `dynamic_cast`).
   - [x] Caches de escena (renderables/cámaras/luces) — mata el O(N×dynamic_cast) por frame.
   - [x] Aislar el almacenamiento de Scene detrás de `ISceneStorage`.
-- [ ] **Fase 1 — Núcleo ECS custom** (entity, pools sparse-set, journal, groups SoA, query cache,
-      systems, transform system con lossy-preserve, hierarchy tree unificado, bridge CoreObject/Scene).
+- [x] **Fase 1 — Núcleo ECS custom COMPLETO y activo** (entity, pools sparse-set, journal, groups,
+      systems, transform system con lossy-preserve, hierarchy tree unificado, **bridge Etapa A**).
   - [x] Núcleo base: Entity generacional + pools sparse-set + registro por type_index + journal + `Each`
         variadic → `tests/ECSTest.cpp` (ctest 3/3).
   - [x] Owned groups / query cache (`OwnedGroup<Ts...>`), journal-synced, iteración O(miembros).
@@ -29,7 +29,9 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
         con dirty-frontier y lossy-preserve exacto) → `ECSTest`.
   - [x] Systems pipeline (`ISystem`/`SystemPipeline` Fixed/Update/Render) + `CommandBuffer` (cambios
         estructurales diferidos) → `ECSTest`.
-  - [ ] Bridge CoreObject/Scene → tree+ECS + migración de componentes.
+  - [x] **Bridge Etapa A**: `Scene` = implementación ECS (backing de transforms + `HybridComponent`s +
+        lifecycle) — el editor/demos/web corren sobre el ECS; `ECSScene` y el storage OOP de
+        componentes eliminados. Verificado por el usuario en d3d12/vulkan/webgpu.
 - [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
 - [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
 

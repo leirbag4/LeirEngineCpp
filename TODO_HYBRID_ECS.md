@@ -318,14 +318,16 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       `m_Transform` (facade) + `m_Parent`/`m_Children` (espejo del tree ECS, usado por la API de
       jerarquía) — el camino activo, no código viejo. Verificado: build limpio, ctest 3/3, PhysicsDemo
       (`objs=10`), ECSDemo (`renderables=5`), smoke editor OK.
-- [ ] `Scene` pasa a ser la implementación ECS (funde lo aprendido en `ECSScene`); `ECSScene` se
-      BORRA (ya no hay dos implementaciones).
-- [ ] `GetTransform()` → facade sobre `LocalTransform`/`WorldTransform` con la semántica exacta actual
-      (lossy-preserve, worldPositionStays, guard epsilon) — ya portada al `TransformSystem`.
-- [ ] `AddComponent<T>` → `HybridComponent<T>` boxeado (devuelve `T&` vivo, one-per-type).
-- [ ] El hierarchy panel filtra por **tags** (`Tag3D/Tag2D/TagUI`) en vez de `dynamic_cast`.
-- [ ] Render/picking/física/audio sobre los **groups** del ECS.
-- [ ] `Entity` generacional: `CoreObject` valida con `IsAlive` (handle stale seguro).
+- [x] `Scene` = implementación ECS (absorbió `ECSScene`; `ECSScene` BORRADA) — ver A3 arriba.
+- [x] `GetTransform()` → facade sobre `LocalTransform`/`WorldTransform` (lossy-preserve exacto,
+      worldPositionStays, guard epsilon) — ver A1.
+- [x] `AddComponent<T>` → `HybridComponent<T>` boxeado (devuelve `T&` vivo, one-per-type) — ver A2.
+- [ ] El hierarchy panel filtra por **tags** (`Tag3D/Tag2D/TagUI`) en vez de `dynamic_cast`. (Los tags
+      ya existen en el ECS; falta migrar el panel — `HierarchyPanel::FamilyOf` usa `dynamic_cast` hoy.)
+- [ ] Render/picking/física/audio sobre los **groups** del ECS (hoy usan las caches + hybrids; los
+      `OwnedGroup`s de Renderables/Transforms/Physics están pendientes — ver "nota honesta" de Fase 1).
+- [ ] `Entity` generacional: `CoreObject` valida con `IsAlive` (hoy el facade usa el entity directo;
+      el handle stale se valida a nivel del `World` al operar).
 
 #### Código de B que se BORRA al completar A (código limpio)
 
@@ -388,8 +390,9 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 
 ### Fase 1 — Núcleo ECS custom (después de estabilizar P1 del editor)
 
-**Estado**: núcleo base implementado y testeado (ctest 3/3). El módulo vive en
-`engine/include/LeirEngine/ECS/` + `engine/src/ECS/` y es 100% independiente del OOP actual (invisible).
+**Estado**: núcleo COMPLETO y es EL motor activo (etapas A1/A2/A3 de §7). El módulo vive en
+`engine/include/LeirEngine/ECS/` + `engine/src/ECS/`. El editor, los demos y la web corren sobre la
+`Scene` ECS-backed (una sola fuente de verdad). Fase 2 (SIMD + multithreading) es el próximo hito.
 
 - [x] **`Entity` generacional + allocator** (`ECS/Entity.h`, `World` en `World.cpp`): handle
       `{index, generation}`, índice 0 reservado como null entity (estilo EnTT), free-list de reciclaje con
@@ -446,12 +449,17 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       parent/firstChild/lastChild/nextSibling/prevSibling + depth por índice de entidad, O(1)
       `GetParent/GetChildren`, `SetParent` con detach+append y **guard de ciclos**, `ClearEntity`
       (detach + promueve hijos a roots) para el destroy. Verificado en `ECSTest`.
-- [ ] **Bridge** en dos etapas (ver §7 "Estrategia del Bridge"): **Etapa B** `HybridComponent` +
+- [x] **Bridge** en dos etapas (ver §7 "Estrategia del Bridge"): **Etapa B** `HybridComponent` +
       `ECSScene` de prueba (aditivo, riesgo nulo) → **Etapa A** `CoreObject` → handle del ECS
-      (migración definitiva; se borra el código de prueba de B). Tags de familia `Tag3D/Tag2D/TagUI`.
-- [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas.
-- [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía).
-- [ ] Tests de regresión: el editor y los demos deben verse/andar idénticos.
+      (migración definitiva; el código de prueba de B se borró). Tags de familia `Tag3D/Tag2D/TagUI`
+      (los tags existen; el panel aún filtra por `dynamic_cast`).
+- [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a **data + sistemas** (hoy son
+      `HybridComponent`s OOP boxeados — correctos y funcionando, pero el paso "data-oriented puro"
+      los convierte en PODs procesados por sistemas + SoA).
+- [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía) — hoy consume
+      las caches de `ISceneStorage` + `GetComponent` (O(1)); el paso a `OwnedGroup` es de Fase 2.
+- [x] Tests de regresión: el editor (d3d12/vulkan/webgpu) y los demos (PhysicsDemo/ECSDemo) se ven y
+      andan idénticos — verificado por el usuario.
 
 ### Fase 2 — SIMD + Multithreading
 - [ ] Wrappers SIMD en el módulo Math (SSE/AVX + dispatcher x86, NEON ARM, SIMD128 wasm).
