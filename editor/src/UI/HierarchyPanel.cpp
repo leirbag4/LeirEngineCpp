@@ -14,6 +14,7 @@
 #include <LeirEngine/Core/Log.h>
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 // Hierarchy background = the same gray as the TreeViewDebugPanel reference the
 // user wants to match. NOTE: UI colors are LINEAR (UI.frag returns them as-is
@@ -234,7 +235,8 @@ void HierarchyPanel::SetContentScale(float scale)
     if (std::fabs(scale - m_ContentScale) < 1e-4f) return;
     m_ContentScale = scale;
     m_IconsLoaded = false;   // reload icons at the new DPI
-    m_LastSignature = 0;     // force a rebuild so items pick up the new icons
+    m_LastSignature = 0;     // force a reconcile so items pick up the new icons
+    ApplyIcons();            // re-apply the freshly loaded icons to existing items
 }
 
 Leir::Vector2 HierarchyPanel::GetMinSize() const
@@ -303,7 +305,7 @@ void HierarchyPanel::Refresh()
     if (!m_TreeView) return;
     const size_t sig = BuildSignature();
     if (sig != m_LastSignature) {
-        RebuildAll();
+        Reconcile();
         m_LastSignature = sig;
     } else {
         // Name sync (cheap O(N) pass): renames don't change the structural
@@ -361,52 +363,88 @@ void HierarchyPanel::EnsureIcons()
     m_IconsLoaded = true;
 }
 
-void HierarchyPanel::RebuildAll()
+void HierarchyPanel::ApplyIcons()
+{
+    for (const auto& kv : m_ItemMap) {
+        const Family f = FamilyOf(kv.first);
+        kv.second->SetIcon(f == Family::Object3D ? m_Icon3D : (f == Family::Object2D ? m_Icon2D : m_IconUI));
+    }
+}
+
+// Incremental reconciliation (the professional way to avoid flicker): instead of
+// destroying and recreating EVERY item on a structural change (which left the new
+// items un-laid-out for a frame — the flicker — and lost selection/expansion),
+// this walks the scene in DFS order (roots in m_Objects order, children in
+// m_Children order) and:
+//   * creates items for objects that don't have one yet (a single new cube adds
+//     ONE item),
+//   * re-appends items whose parent or sibling order changed (reparent/reorder),
+//   * removes items whose scene object is gone.
+// The walk order IS the tree order, so siblings stay in the scene's order. Only
+// the CHANGED items are touched — O(changes), no full rebuild, no flicker, and
+// selection/expansion survive.
+void HierarchyPanel::Reconcile()
 {
     EnsureIcons();
     if (!m_TreeView) return;
+    auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
+    if (!scene) return;
 
-    // Clear the canvas hover BEFORE deleting the old items: the editor's OnUpdate
-    // walks the hovered element's ancestors (UIElement::GetParent) and a stale
-    // pointer to a just-freed item crashed (drag onto the hierarchy, 2026-08-27).
+    // Stale-item deletion can free a hovered item -> clear the canvas hover first
+    // (same crash guard as before).
     for (Leir::UIElement* e = this; e; e = e->GetParent()) {
         if (auto* c = dynamic_cast<Leir::UICanvas*>(e)) { c->ClearHoverAndFocus(); break; }
     }
 
-    // Tear down the previous tree. Items are caller-owned: ClearItems detaches
-    // EVERY item (visible or not) from the internal viewport, then we free them
-    // here. (Final teardown is the editor's DeleteUiSubtree, which recurses into
-    // the tree's viewport; this path only runs for rebuilds during the panel's life.)
-    m_TreeView->ClearItems();
-    for (auto* it : m_OwnedItems) delete it;
-    m_OwnedItems.clear();
-    m_ItemMap.clear();
+    // Live scene objects (for removal detection).
+    std::unordered_set<Leir::CoreObject*> live;
+    live.reserve(scene->GetObjects().size());
+    for (const auto& o : scene->GetObjects()) live.insert(o.get());
 
-    auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
-    if (!scene) return;
+    // Remove items whose object is gone (depth-first so children die first).
+    std::function<void(Leir::UITreeViewItem*)> destroyTree = [&](Leir::UITreeViewItem* item) {
+        auto children = item->GetTreeChildren(); // copy (RemoveItem mutates)
+        for (auto* c : children) destroyTree(c);
+        m_TreeView->RemoveItem(item);
+        delete item;
+    };
+    for (auto it = m_ItemMap.begin(); it != m_ItemMap.end();) {
+        if (!live.count(it->first)) {
+            destroyTree(it->second);
+            it = m_ItemMap.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
-    // Unity-style: every scene ROOT is a top-level item (in m_Objects order) and
-    // children recurse in m_Children order. There are NO family group headers —
-    // the family is shown only via the per-item icon. Any mix of families coexists
-    // at level 0; the family rule (a parent only accepts its own family's children)
-    // is enforced by the drag callback and, in Fase 1, by CoreObject::SetParent.
-    std::function<void(Leir::CoreObject*, Leir::UITreeViewItem*)> build =
+    // Walk the scene in DFS order, placing each object's item under its expected
+    // parent (creating it if missing, re-appending if out of place).
+    std::function<void(Leir::CoreObject*, Leir::UITreeViewItem*)> place =
         [&](Leir::CoreObject* obj, Leir::UITreeViewItem* parentItem) {
-        auto* item = new Leir::UITreeViewItem();
+        auto it = m_ItemMap.find(obj);
+        Leir::UITreeViewItem* item = nullptr;
+        if (it != m_ItemMap.end()) {
+            item = it->second;
+        } else {
+            item = new Leir::UITreeViewItem();
+            m_ItemMap[obj] = item;
+        }
         item->SetText(obj->GetName());
         item->SetShowIcon(true);
         const Family f = FamilyOf(obj);
         item->SetIcon(f == Family::Object3D ? m_Icon3D : (f == Family::Object2D ? m_Icon2D : m_IconUI));
-        m_OwnedItems.push_back(item);
-        m_ItemMap[obj] = item;
-        m_TreeView->AddItem(item, parentItem);
-        for (auto* c : obj->GetChildren()) build(c, item);
+        const bool wrongParent = item->GetTreeParent() != parentItem;
+        const bool wrongOrder = parentItem
+            ? (parentItem->GetTreeChildren().empty() || parentItem->GetTreeChildren().back() != item)
+            : (m_TreeView->GetRoots().empty() || m_TreeView->GetRoots().back() != item);
+        if (wrongParent || wrongOrder)
+            m_TreeView->AddItem(item, parentItem); // detaches from the old parent, appends in walk order
+        for (auto* c : obj->GetChildren()) place(c, item);
     };
-    for (const auto& obj : scene->GetObjects())
-        if (!obj->GetParent()) build(obj.get(), nullptr);
+    for (const auto& o : scene->GetObjects())
+        if (!o->GetParent()) place(o.get(), nullptr);
 
-    // Re-apply the active filter to the freshly built items (new items default
-    // to unfiltered; SetFilter is O(N) and idempotent for the empty string).
+    // Re-apply the active filter so newly added items respect it.
     if (!m_FilterText.empty())
         m_TreeView->SetFilter(m_FilterText);
 }

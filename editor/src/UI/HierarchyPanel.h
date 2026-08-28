@@ -83,7 +83,8 @@ private:
     static Family FamilyOf(Leir::CoreObject* obj);
     static const char* FamilyName(Family f);
     void EnsureIcons();
-    void RebuildAll();
+    void ApplyIcons();
+    void Reconcile();
     size_t BuildSignature() const;
 
     Leir::UIPanel* m_Header = nullptr;
@@ -96,7 +97,6 @@ private:
     bool m_IconsLoaded = false;
     std::string m_FilterText; // raw filter text (re-applied to the tree after rebuilds)
     size_t m_LastSignature = 0;
-    std::vector<Leir::UITreeViewItem*> m_OwnedItems;
     std::unordered_map<Leir::CoreObject*, Leir::UITreeViewItem*> m_ItemMap;
     std::function<void(const std::vector<Leir::CoreObject*>&)> m_OnSelectionChanged;
     Leir::UIContextMenu* m_AddMenu = nullptr;
