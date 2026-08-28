@@ -1,9 +1,13 @@
 #include "LeirEngine/ECS/World.h"
 #include "LeirEngine/ECS/OwnedGroup.h"
+#include "LeirEngine/ECS/HierarchyTree.h"
+#include "LeirEngine/ECS/TransformSystem.h"
 
+#include <cmath>
 #include <cstdio>
 
 using namespace Leir::ECS;
+using namespace Leir;
 
 static int g_Fails = 0;
 static void Check(bool cond, const char* name)
@@ -147,6 +151,85 @@ int main()
     group.Sync(world2);
     world2.ClearJournal();
     Check(group.Count() == 1, "group drops destroyed member");
+
+    // --- HierarchyTree (structure-only scene graph) ---
+    World w3;
+    HierarchyTree tree;
+    Entity r = w3.Create();
+    Entity c1 = w3.Create();
+    Entity c2 = w3.Create();
+    Entity gc = w3.Create();
+    tree.EnsureIndex(gc.index);
+    tree.SetParent(c1.index, r.index);
+    tree.SetParent(c2.index, r.index);
+    tree.SetParent(gc.index, c1.index);
+    Check(tree.GetParent(c1.index) == r.index, "tree parent set");
+    Check(tree.GetFirstChild(r.index) == c1.index, "tree first child");
+    Check(tree.GetNextSibling(c1.index) == c2.index, "tree sibling order");
+    Check(tree.GetLastChild(r.index) == c2.index, "tree last child");
+    Check(tree.GetDepth(gc.index) == 2, "tree depth");
+    Check(tree.IsDescendantOf(gc.index, r.index), "tree descendant");
+    tree.SetParent(c1.index, c2.index); // move c1 under c2 (detach+reattach)
+    Check(tree.GetParent(c1.index) == c2.index && tree.GetDepth(c1.index) == 2, "tree reparent updates links+depth");
+    Check(tree.GetFirstChild(r.index) == c2.index, "tree detach keeps sibling links");
+    tree.SetParent(r.index, c1.index); // cycle guard
+    Check(tree.GetParent(r.index) == kNullIndex, "tree rejects cycle");
+
+    // --- TransformSystem (world transform + lossy-preserve) ---
+    World w4;
+    HierarchyTree t4;
+    TransformSystem ts(&w4, &t4);
+
+    Entity p = w4.Create();
+    Entity k = w4.Create();
+    ts.SetLocal(p, LocalTransform{{1.0f, 2.0f, 3.0f}, Quaternion::Identity(), Vector3::One()});
+    ts.SetLocal(k, LocalTransform{{0.0f, 0.0f, 0.0f}, Quaternion::Identity(), Vector3::One()});
+    ts.SetParent(k, p, false); // keep local (worldPositionStays=false) -> inherits parent pos
+    ts.Update();
+    auto* kw = ts.GetWorld(k);
+    Check(kw && std::fabs(kw->worldPosition.x - 1.0f) < 1e-4f
+           && std::fabs(kw->worldPosition.y - 2.0f) < 1e-4f
+           && std::fabs(kw->worldPosition.z - 3.0f) < 1e-4f, "child inherits parent world position");
+
+    // The exact lossy-preserve case: parent rotated 45° + scale (2,1,1), child
+    // at world identity -> after SetParent(worldPositionStays) the child's world
+    // must stay identity (pos 0, rot identity, lossy 1,1,1) — no deformation.
+    World w5;
+    HierarchyTree t5;
+    TransformSystem ts5(&w5, &t5);
+    Entity pr = w5.Create();
+    Entity kid = w5.Create();
+    ts5.SetLocal(pr, LocalTransform{{0,0,0}, Quaternion::AngleAxis(45.0f, Vector3::Forward()), {2,1,1}});
+    ts5.SetLocal(kid, LocalTransform{{0,0,0}, Quaternion::Identity(), Vector3::One()});
+    ts5.SetParent(kid, pr, true);
+    ts5.Update();
+    auto* kk = ts5.GetWorld(kid);
+    Check(kk, "child has world transform");
+    Check(std::fabs(kk->worldPosition.x) < 1e-4f && std::fabs(kk->worldPosition.y) < 1e-4f
+           && std::fabs(kk->worldPosition.z) < 1e-4f, "lossy-preserve keeps world position");
+    Check(std::fabs(Quaternion::Dot(kk->worldRotation, Quaternion::Identity()) - 1.0f) < 1e-4f,
+          "lossy-preserve keeps world rotation (no deformation)");
+    Check(std::fabs(kk->worldScale.x - 1.0f) < 1e-3f
+           && std::fabs(kk->worldScale.y - 1.0f) < 1e-3f
+           && std::fabs(kk->worldScale.z - 1.0f) < 1e-3f, "lossy-preserve keeps world lossy scale");
+
+    // Moving the parent moves the child; dirty frontier recomputes on demand.
+    ts5.SetLocal(pr, LocalTransform{{5.0f, 0.0f, 0.0f}, Quaternion::Identity(), Vector3::One()});
+    auto* moved = ts5.GetWorld(kid); // ensures clean
+    Check(moved && std::fabs(moved->worldPosition.x - 5.0f) < 1e-4f, "parent move propagates to child");
+
+    // Zero-scaled parent axis (epsilon guard): must stay finite, no NaN.
+    World w6;
+    HierarchyTree t6;
+    TransformSystem ts6(&w6, &t6);
+    Entity zp = w6.Create();
+    ts6.SetLocal(zp, LocalTransform{{0,0,0}, Quaternion::Identity(), {0,1,1}});
+    Entity z = w6.Create();
+    ts6.SetParent(z, zp, true);
+    ts6.Update();
+    auto* zw = ts6.GetWorld(z);
+    Check(zw && std::isfinite(zw->worldScale.x) && std::isfinite(zw->worldScale.y)
+           && std::isfinite(zw->worldPosition.x), "zero-scaled axis stays finite");
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
     return g_Fails == 0 ? 0 : 1;

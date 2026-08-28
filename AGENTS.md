@@ -1055,6 +1055,18 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 1 HierarchyTree + TransformSystem (ver `TODO_HYBRID_ECS.md` §10 + §4.7/§4.8)**:
+  **(1) `HierarchyTree`** (`ECS/HierarchyTree.{h,cpp}`): scene-graph compacto por índice de entidad
+  (parent/firstChild/lastChild/nextSibling/prevSibling/depth), O(1) getters, `SetParent` con
+  detach+append y **guard de ciclos**, `ClearEntity` (detach + promueve hijos a roots). **(2)
+  `TransformSystem`** (`ECS/TransformSystem.{h,cpp}` + PODs `LocalTransform`/`WorldTransform`):
+  computa WorldTransform top-down con **dirty-frontier** (recursión `EnsureClean`: el padre se limpia
+  antes que el hijo; solo subtrees mutados). `SetParent(e, parent, worldPositionStays)` porta el
+  **lossy-preserve exacto** de `Transform.cpp` (divide por largos de columnas de `parentWorld·localRot`
+  + guard epsilon 1e-8) + guard `IsFinite` de la inversa del padre singular (NaN). Verificado en
+  `ECSTest` ampliado (**ALL PASS**): herencia de pos (stays=false), **rot+scale → world identity**
+  (stays=true), mover padre propaga al hijo, eje a escala 0 finito, tree links/depth/ciclos.
+
 - **Hybrid ECS — Fase 1 OwnedGroup / query cache (ver `TODO_HYBRID_ECS.md` §10 + §4.4)**: nuevo
   `engine/include/LeirEngine/ECS/OwnedGroup.h` (header-only, sin `LEIR_API` — plantilla). Grupo cacheado
   por el **journal**: el conjunto ordenado de entidades que poseen TODOS los `Ts`, mantenido

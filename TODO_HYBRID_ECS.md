@@ -317,8 +317,18 @@ cube->GetComponent<MeshRenderer>();
           enTT de sección "owned" al frente del dense con reordenación. La opción (b) elimina la
           duplicación y es la que rinde a escala; evaluarla al migrar los componentes.
 - [ ] **Systems pipeline** básico (FixedUpdate/Update/Render, command buffer).
-- [ ] **Transform system**: LocalTransform/WorldTransform + dirty-frontier + **lossy-preserve exacto**.
-- [ ] **Hierarchy tree unificado** (parent/firstChild/nextSibling) + reparent con worldPositionStays.
+- [x] **Transform system** (`ECS/TransformSystem.{h,cpp}` + PODs `LocalTransform`/`WorldTransform`):
+      computa `WorldTransform` desde `LocalTransform` + el tree, top-down, **dirty-frontier**
+      (solo subtrees mutados; el padre se asegura limpio antes que el hijo — recursión `EnsureClean`).
+      `SetParent(entity, parent, worldPositionStays)` con el **lossy-preserve exacto** (divide por los
+      largos de columnas de `parentWorld · localRot` + guard epsilon para ejes a escala 0) y guard
+      `IsFinite` de la inversa del padre singular (evita NaN). Verificado en `ECSTest` (hereda pos del
+      padre con stays=false; rot+scale → world identity con stays=true; mover padre propaga al hijo;
+      eje a escala 0 finito).
+- [x] **Hierarchy tree unificado** (`ECS/HierarchyTree.{h,cpp}`): adjacency arrays
+      parent/firstChild/lastChild/nextSibling/prevSibling + depth por índice de entidad, O(1)
+      `GetParent/GetChildren`, `SetParent` con detach+append y **guard de ciclos**, `ClearEntity`
+      (detach + promueve hijos a roots) para el destroy. Verificado en `ECSTest`.
 - [ ] **Bridge**: CoreObject/Scene delegando al tree + ECS; tags de familia (Tag3D/2D/UI).
 - [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas.
 - [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía).
