@@ -57,8 +57,14 @@ public:
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         // ECS-backed (Etapa A): the component lives as a HybridComponent<T> in
         // the ECS world; returns the live OOP instance (one per type).
-        if (m_Transform.IsEcsBacked())
-            return m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
+        if (m_Transform.IsEcsBacked()) {
+            if (T* existing = GetComponent<T>())
+                return *existing;
+            T& ref = m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
+            ref.m_Owner = this;
+            ref.OnAwake();
+            return ref;
+        }
         // One component per type (Unity/Godot semantics): adding an existing type
         // returns the live instance instead of creating a duplicate.
         if (T* existing = GetComponent<T>())
