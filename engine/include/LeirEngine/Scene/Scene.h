@@ -7,6 +7,7 @@
 #include "LeirEngine/ECS/World.h"
 #include "LeirEngine/ECS/HierarchyTree.h"
 #include "LeirEngine/ECS/TransformSystem.h"
+#include "LeirEngine/Physics/PhysicsSyncSystem.h"
 
 #include <string>
 #include <vector>
@@ -83,6 +84,7 @@ private:
     ECS::World m_World;
     ECS::HierarchyTree m_Tree;
     ECS::TransformSystem m_Transforms;
+    PhysicsSyncSystem m_PhysicsSync;
     std::unordered_map<const CoreObject*, ECS::Entity> m_EntityOf;
 
     // Journal-synced ECS query groups (the renderer's primary path).

@@ -472,9 +472,14 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
         `HybridComponent` queda para los componentes con lifecycle (física/audio, Incrementos 2-3) y
         futuros `ScriptComponent`. API sin cambios. Verificado: build limpio, ctest 3/3, ECSDemo
         (`renderables=5`), smoke editor OK (el render lee los PODs contiguos).
-  - [ ] **Incremento 2 — Física a data + sistema**: `RigidBody`/`Collider` → `RigidBodyData`/
-        `ColliderData` + `PhysicsSyncSystem` (cuerpos lazy + sync Jolt↔WorldTransform; porta el
-        OnStart/OnUpdate). El de mayor riesgo.
+  - [x] **Incremento 2 — Física a data + sistema**: `RigidBody`/`Collider` → `IsDataComponent` (POD en
+        pools); el lifecycle viejo (OnStart/OnUpdate) se movió al nuevo **`PhysicsSyncSystem`**
+        (`Physics/PhysicsSyncSystem.{h,cpp}`): crea el body Jolt lazy desde el `Collider` + `WorldTransform`
+        y sincroniza por tipo (Dynamic: Jolt→world vía `TransformSystem::SetWorld*`; Kinematic:
+        world→Jolt; Static: nada). El dtor del `RigidBody` destruye el body al remover/eliminar;
+        `SetType` destruye y el sistema recrea al siguiente update. `Scene::OnUpdate` lo corre después de
+        `StepPhysics`. Verificado: build limpio, ctest 3/3 (**PhysicsTest**: gravity fall + kinematic
+        + demás), PhysicsDemo (`objs=10`, sin crash), smoke editor OK.
   - [ ] **Incremento 3 — Audio a data + sistema**: `AudioSource`/`AudioListener` → POD +
         `AudioSyncSystem`.
   - [ ] **Incremento 4 — SoA por campo + SIMD** en los pools calientes (columnas `posX[]/…`,

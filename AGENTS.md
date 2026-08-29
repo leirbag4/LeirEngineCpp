@@ -1055,6 +1055,16 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Componentes a data (Incremento 2): física a data + `PhysicsSyncSystem`** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §10): `RigidBody`/`Collider` → `IsDataComponent` (POD en pools). El lifecycle
+  viejo (OnStart/OnUpdate) se movió a `Physics/PhysicsSyncSystem.{h,cpp}`: crea el body Jolt lazy desde
+  el `Collider` + `WorldTransform` y sincroniza por tipo (Dynamic: Jolt→world vía
+  `TransformSystem::SetWorld*`; Kinematic: world→Jolt; Static: nada). El dtor del `RigidBody` destruye
+  el body; `SetType` destruye y el sistema recrea. `Scene::OnUpdate` lo corre después de `StepPhysics`.
+  Los helpers son static members de la clase (para que el `friend` de `RigidBody::m_BodyID` funcione).
+  Verificado: build limpio, ctest 3/3 (PhysicsTest: gravity/kinematic), PhysicsDemo (`objs=10`), smoke
+  editor OK.
+
 - **Hybrid ECS — Componentes a data (Incremento 1): render components como POD en pools** (2026-08-28,
   `TODO_HYBRID_ECS.md` §10): nuevo trait `Core/ComponentTraits.h` (`IsDataComponent<T>`); los 4
   componentes de render (MeshRenderer/Camera/Light/SpriteRenderer) pasan de `HybridComponent<T>`

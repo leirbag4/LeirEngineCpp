@@ -180,8 +180,10 @@ void Scene::OnUpdate(float deltaTime)
 {
     PhysicsWorld::GetInstance().StepPhysics(deltaTime);
 
-    // Drive the ECS-hybrid component lifecycle (OnStart/OnUpdate for the backed
-    // objects' components: RigidBody, AudioListener, etc.).
+    // Physics data components: lazily create bodies and sync Jolt <-> world.
+    m_PhysicsSync.Update(m_World, m_Transforms);
+
+    // Drive the remaining hybrid component lifecycle (audio, future scripts).
     for (auto* comp : m_World.GetHybrids())
         comp->Tick(deltaTime);
 

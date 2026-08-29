@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 
@@ -33,3 +34,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::Collider> : std::true_type {
+};

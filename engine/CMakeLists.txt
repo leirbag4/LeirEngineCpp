@@ -68,6 +68,7 @@ add_library(LeirEngine SHARED
     src/Physics/PhysicsWorld.cpp
     src/Physics/Collider.cpp
     src/Physics/RigidBody.cpp
+    src/Physics/PhysicsSyncSystem.cpp
     src/Audio/AudioEngine.cpp
     src/Audio/AudioClip.cpp
     src/Audio/SoLoudBackend.cpp

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector3.h"
 
@@ -12,19 +13,19 @@ enum class RigidBodyType {
     Kinematic
 };
 
+// Data component (Incremento 2, TODO_HYBRID_ECS.md §10): the Jolt body is
+// created and synced by PhysicsSyncSystem (the old OnStart/OnUpdate lifecycle
+// moved there). The dtor destroys the body when the component/entity is
+// removed. Methods keep the friendly API and talk to PhysicsWorld directly.
 class LEIR_API RigidBody : public Component {
 public:
     RigidBody() = default;
     ~RigidBody();
 
-    void OnStart() override;
-    void OnUpdate(float deltaTime) override;
-    void OnDestroy() override;
-
     void SetType(RigidBodyType type);
     RigidBodyType GetType() const { return m_Type; }
 
-    void SetMass(float mass);
+    void SetMass(float mass) { m_Mass = mass; }
     float GetMass() const { return m_Mass; }
 
     void SetGravityScale(float scale) { m_GravityScale = scale; }
@@ -49,10 +50,8 @@ public:
     bool HasBody() const { return m_BodyID != 0; }
 
 private:
-    void CreateBody();
+    friend class PhysicsSyncSystem;
     void DestroyBody();
-    void SyncTransformToBody();
-    void SyncBodyToTransform();
 
     uint32_t m_BodyID = 0;
     RigidBodyType m_Type = RigidBodyType::Dynamic;
@@ -63,3 +62,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::RigidBody> : std::true_type {
+};
