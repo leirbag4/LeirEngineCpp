@@ -2,6 +2,13 @@
 
 A cross-platform C++ game engine built from scratch with Vulkan.
 
+## HERRAMIENTAS DEL SISTEMA DE DOCS (ver `TODO_DOCS.md`)
+
+- **Python del dev** (para Sphinx/Breathe/Exhale/MyST/Furo): `C:\programs_dev\python_3_13_7_opt_b\python.exe`.
+  Override con la env var `LEIR_PYTHON`; fallback `python`/`py`. Se usa en `docs/setup_tools.bat`,
+  `docs/generate_docs.bat` y el target CMake `docs`.
+- **Doxygen 1.18.0 portátil**: `docs/tools/doxygen/` (gitignored, descargado por `setup_tools.bat`).
+
 ## REGLA DE MATEMÁTICA — usar SIEMPRE `Mathf.h` (nuestra biblioteca)
 
 Toda operación matemática (trigonometría, raíces, `isfinite`, clamps, lerp, etc.) debe ir **wrappeada** a

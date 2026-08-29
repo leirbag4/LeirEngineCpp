@@ -1,0 +1,10 @@
+# LeirEngine docs — Sphinx + Breathe + Exhale + MyST + Furo (TODO_DOCS.md)
+# Python 3.13 (path del dev en AGENTS.md; override con LEIR_PYTHON).
+# Versiones pineadas tras el setup inicial (2026-08-28) — reproducibles.
+sphinx==9.1.0
+breathe==4.36.0
+exhale==0.3.7
+myst-parser==5.1.0
+furo==2025.12.19
+sphinx-design==0.7.0
+sphinx-copybutton==0.5.2
