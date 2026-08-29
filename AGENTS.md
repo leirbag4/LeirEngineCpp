@@ -1055,6 +1055,13 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Componentes a data (Incremento 4): primitivas SoA + SIMD por columna** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §10): nuevo `Math/SoA.h` — `SimdAddFloats`/`SimdMulFloats`/`SimdFmaFloats`
+  (columna de floats procesada 4-a-la-vez con `Simd4f`, SSE2/NEON/SIMD128/escalar). Es el primitivo
+  para que los sistemas calientes adopten columnas contiguas por campo (partículas, crowds, transform
+  batch). Verificado en `ECSTest` (**ALL PASS**): benchmark **SoA add 4M floats x3.70 vs escalar** con
+  resultados exactos. Build limpio, ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Componentes a data (Incremento 3): audio a data + `AudioSyncSystem`** (2026-08-28,
   `TODO_HYBRID_ECS.md` §10): `AudioSource`/`AudioListener` → `IsDataComponent`. `AudioSource` es
   **move-only** (el `SoundId` se transfiere al mover, se libera en el dtor — el pool swap-and-pop

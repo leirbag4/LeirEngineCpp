@@ -9,6 +9,7 @@
 #include "LeirEngine/Scene/Scene.h"
 #include "LeirEngine/Physics/PhysicsWorld.h"
 #include "LeirEngine/Core/JobSystem.h"
+#include "LeirEngine/Math/SoA.h"
 #include "LeirEngine/Core/Component.h"
 #include "LeirEngine/Objects/Object3D.h"
 #include "LeirEngine/Components/MeshRenderer.h"
@@ -714,6 +715,30 @@ int main()
             double seqMs = ms(t0, t1), parMs = ms(t2, t3);
             printf("bench: ParallelFor(mat4x4) seq=%.2f ms par=%.2f ms (%u threads, x%.2f)\n",
                    seqMs, parMs, jobs.ThreadCount(), seqMs / parMs);
+        }
+
+        // SoA column SIMD vs scalar (Incremento 4): add 2 float columns, 4-wide.
+        {
+            const size_t n = 4000000;
+            std::vector<float> a(n), b(n), simdOut(n), scalarOut(n);
+            uint32_t seed = 12u;
+            auto rnd = [&seed]() {
+                seed = seed * 1664525u + 1013904223u;
+                return (float)(seed >> 8) / 16777216.0f * 2.0f - 1.0f;
+            };
+            for (size_t i = 0; i < n; ++i) { a[i] = rnd(); b[i] = rnd(); }
+            auto t0 = Clock::now();
+            for (size_t i = 0; i < n; ++i) scalarOut[i] = a[i] + b[i];
+            auto t1 = Clock::now();
+            Mathf::SimdAddFloats(simdOut.data(), a.data(), b.data(), n);
+            auto t2 = Clock::now();
+            double scalarMs = ms(t0, t1), simdMs = ms(t1, t2);
+            bool ok = true;
+            for (size_t i = 0; i < n; ++i)
+                if (simdOut[i] != scalarOut[i]) { ok = false; break; }
+            Check(ok, "SoA SimdAddFloats matches scalar exactly");
+            printf("bench: SoA add(scalar) %.2f ms simd=%.2f ms (x%.2f)\n",
+                   scalarMs, simdMs, scalarMs / simdMs);
         }
     }
 

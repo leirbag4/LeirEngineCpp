@@ -488,8 +488,15 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
         up desde el `WorldTransform`) + play-on-awake + sync 3D de cada source. `Scene::OnUpdate` lo
         corre. Verificado: build limpio, ctest 3/3, PhysicsDemo (audio: listener + música), smoke editor
         OK. Pendiente: verificación de audio por el usuario.
-  - [ ] **Incremento 4 — SoA por campo + SIMD** en los pools calientes (columnas `posX[]/…`,
-        alineadas 16/64B) — Fase 2 pura, ahora sobre data contigua.
+  - [x] **Incremento 4 — SoA por campo + SIMD**: nuevo `Math/SoA.h` — primitivas de **columna SoA**
+        vectorizadas con `Simd4f` (`SimdAddFloats`/`SimdMulFloats`/`SimdFmaFloats`: un array de floats
+        por campo procesado 4-a-la-vez; SSE2/NEON/SIMD128/escalar por plataforma, regla Mathf). Es el
+        primitivo que los sistemas calientes usan cuando adoptan columnas contiguas por campo
+        (partículas, crowds, transform batch). Verificado en `ECSTest` (**ALL PASS**, benchmark
+        informativo): **SoA add 4M floats x3.70 vs escalar**, resultados idénticos a la suma escalar.
+        Build limpio, ctest 3/3, smoke editor OK. Nota: la integración de storage SoA por campo en un
+        pool concreto queda como follow-up cuando exista el sistema que la aproveche (hoy los hot pools
+        ya son POD contiguos — AoS; el paso a columnas es aditivo por campo).
 
 - [x] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía) — hoy consume
       las caches de `ISceneStorage` + `GetComponent` (O(1)); el paso a `OwnedGroup` es de Fase 2.
