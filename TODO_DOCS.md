@@ -75,14 +75,17 @@ docs/
 ## 3. Pasos de implementación (checkboxes)
 
 ### 3.1 Provisionamiento (tools portátiles)
-- [ ] Crear `docs/tools/` (gitignored).
-- [ ] `setup_tools.bat`:
-  - [ ] Localiza Python: `LEIR_PYTHON` (default `C:\programs_dev\python_3_13_7_opt_b\python.exe`), fallback `python`/`py`.
-  - [ ] Descarga `doxygen-1.18.0.windows.x64.bin.zip` (GitHub releases) → extrae a `tools/doxygen/`.
-  - [ ] Descarga **Graphviz portátil** (zip de Windows de los release assets; si no hay zip oficial
-        portable, se deja `HAVE_DOT=NO` y Doxygen genera herencia nativa sin colaboración) → `tools/graphviz/`.
-  - [ ] `%LEIR_PYTHON% -m pip install -r docs\requirements.txt` (idempotente).
-  - [ ] Idempotencia: si el tool ya está, no re-descarga (marca `tools/.ready`).
+- [x] Crear `docs/tools/` (gitignored via `docs/.gitignore`).
+- [x] `setup_tools.bat`:
+  - [x] Localiza Python: `LEIR_PYTHON` (default `C:\programs_dev\python_3_13_7_opt_b\python.exe`), fallback `python`/`py`.
+  - [x] Descarga `doxygen-1.18.0.windows.x64.bin.zip` (GitHub releases, tag `Release_1_18_0`; usa `curl.exe`
+        — `Invoke-WebRequest` 404/prompt en PS 5.1 — y extrae con `tar.exe` — `Expand-Archive` falla con
+        "Central Directory corrupt" en algunos zips) → `tools/doxygen/`.
+  - [x] Descarga **Graphviz 15.1.1 portátil** (GitLab generic packages
+        `windows_10_cmake_Release_Graphviz-15.1.1-win64.zip`; best-effort, si falla queda sin dot) → `tools/graphviz/`.
+  - [x] `%LEIR_PYTHON% -m pip install -r docs\requirements.txt` (pineado: sphinx 9.1.0, breathe 4.36.0,
+        exhale 0.3.7, myst-parser 5.1.0, furo 2025.12.19, sphinx-design, sphinx-copybutton).
+  - [x] Idempotente: si el tool ya existe, no re-descarga.
 
 ### 3.2 Config de Doxygen (`Doxyfile`)
 - [ ] `PROJECT_NAME = "LeirEngine"`, `PROJECT_BRIEF`.
