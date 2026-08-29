@@ -4,10 +4,12 @@ Plan maestro modular. Cada item apunta a su `.md` con el detalle completo y sus 
 checkboxes. Este archivo solo agrega/agenda prioridades y el estado global.
 
 Estado: **en planificación** (2026-08-26). Vamos fase por fase, probando cada una.
+Actualizado 2026-08-28: Hybrid ECS Fases 0-3 COMPLETAS, P0 (hierarchy) completo, ContextMenu hecho,
+P1 en curso.
 
 ---
 
-## Arquitectura transversal — Hybrid ECS (Fase 1 COMPLETA)
+## Arquitectura transversal — Hybrid ECS (Fases 0-3 COMPLETAS)
 
 El motor entero (editor + runtime + web + mobile futuro) se rediseña a **escena amigable en la
 superficie + ECS data-oriented invisible por detrás** (SIMD + multithreading). La API pública
@@ -32,27 +34,35 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
   - [x] **Bridge Etapa A**: `Scene` = implementación ECS (backing de transforms + `HybridComponent`s +
         lifecycle) — el editor/demos/web corren sobre el ECS; `ECSScene` y el storage OOP de
         componentes eliminados. Verificado por el usuario en d3d12/vulkan/webgpu.
-- [ ] **Fase 2 — SIMD + multithreading** (wrappers SIMD en Math, scheduler paralelo, command buffer).
-- [ ] **Fase 3 — Tier advanced ECS** (opcional, para power users).
+- [x] **Fase 2 — SIMD + multithreading COMPLETA** (wrappers SIMD en Math, `MultiplySimd`, `JobSystem`,
+      scheduler paralelo por dependencias de acceso, `CommandBuffer` en sync points, **render list
+      vectorizado** con frustum cull SIMD, **incrementos 1-5** de componentes a data, benchmarks de
+      escala §11) → `TODO_HYBRID_ECS.md` §5/§10/§11.
+- [x] **Fase 3 — Tier advanced ECS COMPLETA** (API pública del `World` con **nombres propios**, demo
+      renderless `ECSPublicDemo`, docs `docs/ecs-public-api.html` + `docs/hybrid-ecs.html`; el camino
+      OOP sigue siendo el default documentado).
 
 ---
 
 ## Fundaciones del Hierarchy (P0)
 
-- [ ] **Fase 0.1 — Iconos del TreeView** → `TODO_UI_TREEVIEW.md`
-  - Slot de icono a la izquierda del texto, toggle `SetIconsEnabled`, registry hash-cache,
-    PNGs 12×12 en `assets/icons/` (object3d/object2d/uielement por ahora).
-- [ ] **Fase 0.2 — HierarchyPanel real** → `TODO_HIERARCHY_SYSTEM.md`
-  - Panel conectado a la `Scene`, raíces separadas por familia (Object3D/Object2D/UI),
-    selección **multi** bidireccional (gizmo ↔ inspector), rename F2, drag&drop.
+- [x] **Fase 0.1 — Iconos del TreeView** → `TODO_UI_TREEVIEW.md`
+  - Hecho: slot de icono + toggle `SetIconsEnabled`, cache por hash (`UITextureCache` con HiDPI),
+    PNGs en `assets/icons/` (object3d/object2d/uielement).
+- [x] **Fase 0.2 — HierarchyPanel real** → `TODO_HIERARCHY_SYSTEM.md`
+  - Hecho: panel conectado a la `Scene`, raíces por familia, selección **multi** bidireccional
+    (gizmo ↔ inspector), rename F2, drag&drop de 3 zonas, filtro de búsqueda, botón "+" con
+    ContextMenu.
 
 ## Editor multipropósito (P1)
 
-- [ ] **Familias de objetos + guard de parenting** → `TODO_HIERARCHY_SYSTEM.md`
-  - `ObjectFamily` en `CoreObject`, `SetParent` rechaza cross-family (engine) + validación
-    en el drag del hierarchy (editor). UINode para UI.
-- [ ] **ContextMenu** → `TODO_UI_CONTEXT_MENU.md`
-  - `UIContextMenu` (popup al click derecho, overlay, se cierra fuera/ESC).
+- [ ] **Familias de objetos + guard de parenting** → `TODO_HIERARCHY_SYSTEM.md` (⚠ parcial)
+  - ✅ hecho: validación cross-family en el drag del hierarchy (editor).
+  - ⏳ pendiente: `ObjectFamily` en `CoreObject` + `SetParent` rechaza cross-family (engine) +
+    `UINode` para UI.
+- [x] **ContextMenu** → `TODO_UI_CONTEXT_MENU.md`
+  - Hecho: `UIContextMenu` (popup al click derecho/+, overlay, se cierra fuera/ESC); el botón "+"
+    del HierarchyPanel lo abre con Object3D/… wired en `main.cpp`.
 - [ ] **UIMenuBar + UIMenuBarItem** → `TODO_UI_MENU_BAR.md`
   - WPF-style: barra arriba con File/Save All, File/New Scene, File/Save Scene, Help/About.
 - [ ] **Tabs de escenas (Godot-style)** → `TODO_VIEWPORT_VIEW_MODES.md`
@@ -100,16 +110,17 @@ análisis de almacenamiento (sparse-set + owned groups SoA), SIMD por plataforma
 
 ## Próximos pasos (orden sugerido)
 
-1. Fase 0.1 — Iconos del TreeView (autocontenido, desbloquea todo).
-2. Fase 0.2 — HierarchyPanel real (selección multi, familias, rename, drag).
-3. **Hybrid ECS — Fase 0** (refactor data-oriented del código actual, ver `TODO_HYBRID_ECS.md`).
-4. Familias/guard en CoreObject + UINode.
-5. ContextMenu + UIMenuBar.
-6. Tabs de escenas + vistas 2D/3D/UI.
-7. Atoms + File Explorer de guardado.
-8. Inspector avanzado.
-9. Serialización + metadata + Contents.
-10. **Hybrid ECS — Fase 1** (núcleo ECS custom, ver `TODO_HYBRID_ECS.md`).
-11. UIDocuments + LXML (futuro).
+✅ Hechos: Fase 0.1 (iconos), Fase 0.2 (HierarchyPanel), ContextMenu, Hybrid ECS Fase 0/1/2/3.
+
+Pendientes (orden sugerido):
+1. Familias/guard en el engine (`ObjectFamily`/`UINode`) + guard cross-family en `SetParent`.
+2. UIMenuBar + UIMenuBarItem (File/Save All, File/New Scene, Help/About).
+3. Tabs de escenas (Godot-style) + vistas 2D/3D/UI + botones de toolbar.
+4. Viewport 2D (cámara ortográfica + grid 2D + rulers + gizmos 2D).
+5. Atoms + File Explorer de guardado.
+6. Inspector avanzado (componentes colapsables/reordenables, Transform2D/3D).
+7. Serialización + metadata (.mdata) + panel Contents.
+8. Vista UI (layout/flex/anchoring).
+9. UIDocuments + LXML (futuro).
 
 ---
