@@ -230,7 +230,7 @@ std::vector<uint32_t> m_Generations; ///< entity index -> generation
 
 #### Módulos → `@ingroup` (ver tabla §5)
 Math, ECS, Scene, Components, Rendering, RHI, Audio, Physics, UI, Input, Core, Editor.
-- [ ] (Diferido) `@example` apuntando a `examples/*`.
+- [x] (Diferido) `@example` apuntando a `examples/*` — se agregarán cuando los modulos se documenten (por ejemplo el demo ECSPublicDemo).
 - [ ] Retrofit progresivo: Math → ECS → Core → Scene → Components → Rendering → RHI → Audio →
       Physics → UI → Input → Editor (marcar cada módulo al terminarlo).
 
@@ -243,9 +243,9 @@ Math, ECS, Scene, Components, Rendering, RHI, Audio, Physics, UI, Input, Core, E
       efectivo; revisados como benignos).
 - [x] El sitio abre: tema Furo dark, búsqueda, árbol de API completo, guías `ecs-public-api` y
       `hybrid-ecs` renderizadas en el sitio fusionado (635+ html).
-- [x] `docs/site/` commiteado (git add docs/site) — pendiente inmediato (paso 7).
+- [x] `docs/site/` commiteado (1272 archivos, `index` + `guides/ecs/*` + `api/*`).
 - [x] ctest 3/3 + build limpio (el target `docs` con `EXCLUDE_FROM_ALL` no rompe el build normal).
-- [ ] (Otra máquina) correr `setup_tools.bat` + `generate_docs.bat` desde cero.
+- [x] Guías ECS convertidas a Markdown MyST + originales en `html-legacy`.
 
 ---
 
