@@ -46,7 +46,7 @@ endif()
 
 if(Python3_EXECUTABLE)
     add_custom_target(docs_sphinx
-        COMMAND "${Python3_EXECUTABLE}" -m sphinx -b html
+        COMMAND "${Python3_EXECUTABLE}" -m sphinx -q -b html
                 "${CMAKE_SOURCE_DIR}/docs/sphinx"
                 "${CMAKE_SOURCE_DIR}/docs/site"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -63,3 +63,6 @@ add_custom_target(docs
     COMMENT "docs: Doxygen -> Sphinx (abrir docs/site/index.html)"
     EXCLUDE_FROM_ALL
 )
+if(TARGET docs_sphinx AND TARGET docs_api)
+    add_dependencies(docs_sphinx docs_api)
+endif()

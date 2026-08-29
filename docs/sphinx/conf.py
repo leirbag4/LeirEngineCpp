@@ -63,3 +63,22 @@ master_doc = "index"
 # parsea, símbolos globales de tests/). No afectan el render; se silencian para un
 # log limpio en el .bat. Se revisitan con el retrofit de docblocks (§3.6).
 suppress_warnings = ["*"]
+
+# --- Fix Furo: Exhale genera `.. contents::` sin la clase mágica que Furo exige ---
+# Furo lanza ERROR si encuentra `.. contents::` bare. Lo parcheamos post-generación.
+def _patch_furo_contents(app):
+    import pathlib
+    api_dir = pathlib.Path(here) / "api"
+    if not api_dir.is_dir():
+        return
+    for p in list(api_dir.glob("*.rst")) + list(api_dir.glob("*.rst.include")):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if ".. contents::" in text and "this-will-duplicate-information" not in text:
+            text = text.replace(".. contents::", ".. contents::\n   :class: this-will-duplicate-information-and-it-is-still-useful-here")
+            p.write_text(text, encoding="utf-8")
+
+def setup(app):
+    app.connect("builder-inited", _patch_furo_contents)

@@ -61,7 +61,7 @@ struct Entity {
     uint32_t generation = 0;
     explicit operator bool() const { return index != kNullIndex && generation != 0; }
 };
-```text
+```
 
 Ventajas: sin punteros colgantes, handles baratos (8 bytes). Costo: un salto de indirección por
 acceso — que los pools resuelven con sparse-set.
@@ -73,14 +73,14 @@ acceso — que los pools resuelven con sparse-set.
 Un pool por tipo de componente: un dense contiguo (cache-friendly) y un sparse (`entityIndex →
 denseIndex`). Add/remove son O(1) con swap-and-pop.
 
-```
+```text
 entity:  0   1   2   3   4
 sparse:  -   1   0   -   2
                 ↓
 dense[0]: entity2  data...
 dense[1]: entity1  data...
 dense[2]: entity4  data...
-```text
+```
 
 ```cpp
 T*  Get(uint32_t ei);
@@ -106,7 +106,7 @@ cols.Set(ei, pos);          // add-or-update (sparse O(1))
 cols.Remove(ei);
 bool ok = cols.Get(ei, out);  // materializa (gather por columnas)
 const float* x = cols.Col(0); // columna contigua → SIMD
-```text
+```
 
 :::{note}
 SoAPool **complementa** a TypedPool — no lo reemplaza. La API `World::Get<T> → T&` necesita el objeto
@@ -118,21 +118,21 @@ completo (AoS); el SoAPool es para sistemas que iteran una columna en bulk (cull
 El `World` registra cada cambio estructural en un journal (`{ entityIndex, typeId, kind }`). Las
 queries son conjuntos derivados del journal: `Sync()` las reconcilia y `ForEach()` itera sin chequeos.
 
-```
-world.Add<T>(e) → Journal + ChangeVersion++ → group.Sync(world) → ForEach (O(miembros))
 ```text
+world.Add<T>(e) → Journal + ChangeVersion++ → group.Sync(world) → ForEach (O(miembros))
+```
 
 ### Orden estable (tombstones)
 
 Remover un miembro NO reordena: solo deja un tombstone (row muerta) reutilizable. Así el orden de los
 vivos nunca cambia — crítico para z-order, serialización y simulación determinista.
 
-```
+```text
 row:     0   1   2   3            remove(B) →
 member:  A   B   C   D            row:     0   1   2   3
 alive:   1   1   1   1            member:  A  (B†)  C   D
                                   alive:   1   0   1   1
-```text
+```
 
 ## HierarchyTree — scene graph compacto
 
@@ -140,13 +140,13 @@ La jerarquía es un grafo de escena compacto por índice de entidad: arrays de a
 firstChild / lastChild / nextSibling / prevSibling / depth). O(1) en los getters, `SetParent` con
 detach+append y guard de ciclos.
 
-```
+```text
 index:       0    1    2    3    4    5
 parent:      -    -    1    1    3    -
 firstChild:  2    2    -    -    5    -
 nextSibling: -    3    -    -    4    -
 depth:       0    0    1    1    2    -
-```text
+```
 
 ```cpp
 tree.SetParent(child, parent);  // detach + append + guard de ciclos
@@ -177,7 +177,7 @@ aplasta al hijo en ese caso. Guard epsilon (`1e-8`) para ejes a escala 0.
 const Matrix4x4 combined = parentWT->worldMatrix * localRotM;
 const Vector3 colLen = ComputeColumnLengths(combined);
 lt.scale = { scale.x / (colLen.x > 1e-8f ? colLen.x : 1.0f), ... };
-```text
+```
 
 :::{note}
 **Límite honesto (modelo TRS):** si el padre está rotado + escalado no-uniforme, la matriz de mundo
@@ -211,10 +211,10 @@ Cada `ISystem` declara qué tipos lee/escribe (`GetAccess`). El `SystemPipeline`
 topológico por niveles dentro de cada fase: dos sistemas conflictan si comparten un tipo y alguno lo
 escribe; los de un mismo nivel (independientes) corren en paralelo vía el `JobSystem`.
 
-```
+```text
 nivel 0:  MoveSystem (writes Pos)   ExpireSystem (reads Life)   ← en paralelo
 nivel 1:  ReadPosSystem (reads Pos)                             ← después de Move
-```text
+```
 
 El `JobSystem::ParallelFor` usa chunking (cada grab toma 64 índices) — sin chunks el `fetch_add` por
 índice hacía el paralelo más lento (0.14×); con chunks 5× más rápido.
@@ -224,9 +224,9 @@ El `JobSystem::ParallelFor` usa chunking (cada grab toma 64 índices) — sin ch
 Los cambios estructurales diferidos se encolan mientras se itera; `Replay` los aplica en el sync point
 (entre fases, en el hilo del caller). Thread-safe (mutex).
 
-```
-Sistemas paralelos → CommandBuffer (mutex) → Sync point: Replay → World actualizado
 ```text
+Sistemas paralelos → CommandBuffer (mutex) → Sync point: Replay → World actualizado
+```
 
 ## Componentes híbridos (data + OOP)
 
@@ -262,7 +262,7 @@ void Scene::OnUpdate(float dt) {
     m_CameraGroup.Sync(m_World);  m_LightGroup.Sync(m_World);
     m_World.ClearJournal();
 }
-```text
+```
 
 El render corre después (OnRender) leyendo los grupos journal-fresh — nunca stale.
 
@@ -272,9 +272,9 @@ El `RenderPipeline` consume `ISceneStorage` (grupos journal-synced) y arma el re
 pasada: cull de frustum (6 planos, SIMD), copy SIMD de la world matrix, y draw command build en
 columnas por campo. Los draws fuera del frustum se saltan completos.
 
-```
-Renderables group → Frustum::CullBatch (columnas, 4/lote) → renderList (columnas) → Draw
 ```text
+Renderables group → Frustum::CullBatch (columnas, 4/lote) → renderList (columnas) → Draw
+```
 
 La esfera de cull es conservadora (radio local de la malla × max-axis del worldScale) — sin falsos
 negativos. Paridad SIMD==escalar verificada por-elemento en 100k esferas.

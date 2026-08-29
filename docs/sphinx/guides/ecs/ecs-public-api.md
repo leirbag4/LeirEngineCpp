@@ -45,7 +45,7 @@ Entity foe  = world.Create();
 world.Destroy(foe);
 Entity fresh = world.Create();   // quizá reutiliza el índice, con otra generación
 bool alive = world.IsAlive(foe); // false — el handle viejo nunca resuelve
-```text
+```
 
 ## Campos — componentes de datos (POD)
 
@@ -71,7 +71,7 @@ marcar "dirty" a mano:
 ```cpp
 const std::vector<ChangeRecord>& j = world.GetJournal();
 world.ClearJournal(); // el dueño del sync point lo limpia
-```text
+```
 
 ## Queries — OwnedGroup (orden estable)
 
@@ -125,7 +125,7 @@ SystemPipeline pipeline;
 pipeline.Add(&moveSys, SystemPhase::Update);
 JobSystem jobs;
 pipeline.Run(0.016f, dt, &jobs, &cb, &world); // fases + cb replayed + paralelo
-```text
+```
 
 Las fases son `FixedUpdate` → `Update` → `Render`. El pipeline aplica el `CommandBuffer` entre fases,
 en el hilo del caller.
@@ -158,7 +158,7 @@ Mathf::SimdAddFloats(cols.Col(0), cols.Col(0), inc.data(), cols.Count());
 Position p{};
 cols.Get(3, p);   // materializar una fila (gather por columnas)
 cols.Remove(3);   // swap-and-pop O(1)
-```text
+```
 
 ## Facets — HybridComponent
 
@@ -190,7 +190,7 @@ ts.SetParent(kid, root);          // worldPositionStays = true (lossy-preserve)
 ts.Update();
 
 WorldTransform* wt = ts.GetWorld(kid);
-```text
+```
 
 ## Marcadores — Tags
 
