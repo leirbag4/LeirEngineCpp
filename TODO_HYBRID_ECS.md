@@ -574,7 +574,24 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       que secuencial (0.14×); con chunks se eliminó el cuello de botella. **Validación a escala (§11)
       completa**: spawn 10k (4.5 ms), add/remove 100k (O(1)), render list 100k, transform 100k (full +
       10k dirty), reparent 1k (0.06 ms) — medidos en `ECSTest` (ver tabla en §11).
-- [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).
+- [ ] (Futuro) **AVX/AVX-512 con dispatcher runtime** (post-Fase 2). No implementado (solo documentado
+      2026-08-28): la razón de no hacerlo ya es que el engine es una DLL x64 que corre en cualquier CPU,
+      y AVX2/AVX-512 no están garantizados (SSE2 sí, desde 2004) → compilar con `/arch:AVX2` crashea con
+      "illegal instruction" en CPUs sin AVX2. Requiere el mecanismo de **dispatch en runtime**:
+      (1) **Detección** una vez por proceso: `__cpuid` (leaf 1 → ECX bit 28 = AVX; leaf 7 → EBX bit 5 =
+      AVX2; leaf 7 → EBX bits 16/17/30/31 = AVX-512 F/VL/BW/DQ) + `XGETBV` (el OS debe guardar YMM/ZMM).
+      (2) **Variantes**: los kernels calientes se compilan 3 veces — MSVC en TUs separadas con
+      `/arch:AVX2` / `/arch:AVX512` (solo x64; ARM/wasm intactos); GCC/Clang con
+      `__attribute__((target("avx2")))` por-función (sin TUs separadas). (3) **Dispatcher**: tabla de
+      punteros a función elegida en `Init()` con fallback SSE2 (nunca crash). Plan concreto (Opción A):
+      `Math/SimdWide.h` (`Simd8f`/`Simd16f`, 8/16 floats = 2×/4× SSE2) + `Math/SimdKernels.cpp`
+      (`SimdAddFloats`/`SimdMulFloats`/`SimdFmaFloats` + `Frustum::CullBatch8/16`) en 3 variantes +
+      `Math/CpuDispatch.{h,cpp}` (cpuid + `Init()` + log `[CpuDispatch] variant=AVX2`). `Mathf::`
+      redirige al dispatcher. Benchmark en `ECSTest`: SSE2 vs AVX2 vs AVX-512 (paridad exacta).
+      **Máquina del dev (i5-1035G1, Ice Lake-U)**: AVX ✓ y AVX2 ✓ (verificado vía
+      `IsProcessorFeaturePresent` 41/42); AVX-512 ✓ por modelo (F/VL/BW/DQ/CD/VPOPCNTDQ, 1 unidad FMA
+      con downclock bajo carga) → ambos se pueden medir localmente. Opciones B/C (matriz AVX 2-a-la-vez,
+      VEX en toda la capa Simd4f) descartadas por coste/beneficio.
 
 ### Fase 3 — Tier advanced ECS (opcional, para power users)
 - [ ] Exponer el `World` ECS público (crear entidades/sistemas directamente, estilo Unity DOTS).
