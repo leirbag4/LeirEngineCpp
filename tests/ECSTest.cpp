@@ -781,6 +781,117 @@ int main()
             printf("bench: frustum cull 100k simd=%.2f ms scalar=%.2f ms (Debug spill; /O2 x3.55, %zu visible)\n",
                    simdMs, scalarMs, simdVisible);
         }
+
+        // --- §11 scale benchmarks (informational; Debug, x64) ---
+        struct BenchComp { int a = 1; float b = 2.0f; };
+
+        // Spawn 10k entities (target < 10 ms).
+        {
+            World w;
+            std::vector<Entity> es;
+            es.reserve(10000);
+            auto t0 = Clock::now();
+            for (int i = 0; i < 10000; ++i) es.push_back(w.Create());
+            auto t1 = Clock::now();
+            double spawnMs = ms(t0, t1);
+            printf("bench: spawn 10k entities = %.2f ms (%.1f ns/entity)\n",
+                   spawnMs, spawnMs * 1e6 / 10000.0);
+        }
+
+        // Add/remove component, O(1) (target < 50 ns/op).
+        {
+            World w;
+            const int n = 100000;
+            std::vector<Entity> es;
+            es.reserve((size_t)n);
+            for (int i = 0; i < n; ++i) es.push_back(w.Create());
+            auto t0 = Clock::now();
+            for (int i = 0; i < n; ++i) w.Add<BenchComp>(es[i]);
+            auto t1 = Clock::now();
+            for (int i = 0; i < n; ++i) w.Remove<BenchComp>(es[i]);
+            auto t2 = Clock::now();
+            double addMs = ms(t0, t1), remMs = ms(t1, t2);
+            printf("bench: component add = %.1f ns/op, remove = %.1f ns/op (%d ops)\n",
+                   addMs * 1e6 / n, remMs * 1e6 / n, n);
+        }
+
+        // Render list iteration: OwnedGroup<MeshRenderer, Active, WorldTransform>
+        // over 100k renderables (target < 1 ms).
+        {
+            World w;
+            const size_t n = 100000;
+            std::vector<Entity> es(n);
+            for (size_t i = 0; i < n; ++i) es[i] = w.Create();
+            for (size_t i = 0; i < n; ++i) {
+                w.Add<MeshRenderer>(es[i]);
+                w.Add<ECS::Active>(es[i]);
+                w.Add<ECS::WorldTransform>(es[i]);
+            }
+            ECS::OwnedGroup<MeshRenderer, ECS::Active, ECS::WorldTransform> g(&w);
+            g.Sync(w);
+            w.ClearJournal();
+            size_t sum = 0;
+            auto t0 = Clock::now();
+            g.ForEach([&](MeshRenderer&, ECS::Active&, ECS::WorldTransform& wt, ECS::Entity) {
+                sum += (size_t)(wt.worldPosition.x + 1.0f);
+            });
+            auto t1 = Clock::now();
+            Check(g.Count() == n && sum == n, "render group iterates all 100k rows");
+            printf("bench: render list iterate 100k = %.2f ms\n", ms(t0, t1));
+        }
+
+        // Transform propagation: 100k nodes (1000 roots × 100 children), 10k
+        // dirty leaves (target < 1 ms for the incremental Update).
+        {
+            World w;
+            HierarchyTree t;
+            TransformSystem ts(&w, &t);
+            const int roots = 1000;
+            const int perRoot = 100;
+            const int total = roots * perRoot;
+            std::vector<Entity> es((size_t)total);
+            for (int i = 0; i < total; ++i) es[i] = w.Create();
+            for (int i = 0; i < total; ++i)
+                ts.SetLocal(es[i], LocalTransform{{ (float)(i % 37), (float)(i % 11), 0.0f },
+                                                  Quaternion::Identity(), Vector3::One()});
+            for (int i = roots; i < total; ++i)
+                ts.SetParent(es[i], es[(i - roots) / perRoot]);
+            auto tFull0 = Clock::now();
+            ts.Update(); // full build, 100k dirty (baseline, not the target)
+            auto tFull1 = Clock::now();
+
+            // Mark 10k leaves dirty, then measure the incremental Update.
+            for (int k = 0; k < 10000; ++k)
+                ts.SetLocal(es[roots + k],
+                            LocalTransform{{ (float)k, 0.0f, 0.0f }, Quaternion::Identity(), Vector3::One()});
+            auto t0 = Clock::now();
+            ts.Update();
+            auto t1 = Clock::now();
+
+            // Sanity: leaf k=3 (es[1003], local {3,0,0}) hangs under root 0
+            // (es[0], world {0,0,0}) → world position {3,0,0}.
+            const Entity leaf = es[roots + 3];
+            auto* wt = ts.GetWorld(leaf);
+            bool correct = wt &&
+                wt->worldPosition.x == 3.0f && wt->worldPosition.y == 0.0f && wt->worldPosition.z == 0.0f;
+            Check(correct, "transform propagation recomputes a dirty leaf correctly");
+            printf("bench: transform propagation full 100k = %.2f ms, 10k dirty = %.2f ms\n",
+                   ms(tFull0, tFull1), ms(t0, t1));
+        }
+
+        // Reparent a 1k-subtree (target < 0.1 ms). Node 0 is the null sentinel, so
+        // the subtree root is node 1 with children 2..1001.
+        {
+            HierarchyTree t;
+            for (uint32_t i = 2; i <= 1001; ++i)
+                t.SetParent(i, 1);
+            const uint32_t target = 2000;
+            auto t0 = Clock::now();
+            t.SetParent(1, target);
+            auto t1 = Clock::now();
+            Check(t.GetParent(1) == target && t.GetDepth(2) == 2, "1k subtree reparented under target");
+            printf("bench: reparent 1k subtree = %.2f ms\n", ms(t0, t1));
+        }
     }
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);

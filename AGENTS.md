@@ -1055,6 +1055,18 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: benchmarks de escala §11 en `ECSTest`** (2026-08-28, `TODO_HYBRID_ECS.md` §11):
+  validados los targets a escala real con Worlds de 100k entidades — spawn 10k (4.5 ms), add/remove
+  componente O(1) (100k ops), iterar render list 100k (`OwnedGroup<MeshRenderer, Active, WorldTransform>`,
+  paridad de count), transform propagation 100k nodos (1000 roots × 100 hijos; full 469 ms + **10k dirty
+  45.7 ms** con sanity check del leaf recomputado), reparent de subtree 1k (**0.06 ms**). Todos en Debug
+  x64 (los targets son /O2; Debug mide ~10-30× peor, documentado). **Dos bugs encontrados al escribir
+  los benchmarks**: (1) indexé `es[roots + k*perRoot]` fuera de rango en el marcado dirty (crash
+  `vector subscript out of range` en Debug — MessageBox del CRT); (2) usé el **nodo 0 como root del
+  subtree** en el reparent, pero `kNullIndex == 0` (índice 0 = entidad null reservada, EnTT-style) → todo
+  el subtree quedaba "rooted at null". Corregidos (nodo 1 como root, hijos 2..1001). Verificado: build
+  limpio, ctest 3/3 (**ALL PASS**), smoke editor OK.
+
 - **Hybrid ECS — Fase 2: render list / draw command build vectorizado (frustum culling SIMD)** (2026-08-28,
   `TODO_HYBRID_ECS.md` §5/§10): `RenderPipeline::Render` arma el render list en una pasada contigua —
   cada renderable activo se culliza contra el frustum (6 planos, 4 lanes por `Simd4f`, FMA + `|n|`

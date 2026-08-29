@@ -552,8 +552,9 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       **mat4x4 multiply: SIMD 5.6× más rápido que escalar** (2M mults); **ParallelFor CPU-bound
       (mat4x4 por índice): 5.0× con 8 threads**. El `JobSystem::ParallelFor` usa **chunking** (cada grab
       agarra 64 índices, no 1) — sin eso el `fetch_add` atómico por índice hacía el paralelo MÁS lento
-      que secuencial (0.14×); con chunks se eliminó el cuello de botella. Targets de §11 pendientes de
-      validar a mayor escala (100k renderables/nodos).
+      que secuencial (0.14×); con chunks se eliminó el cuello de botella. **Validación a escala (§11)
+      completa**: spawn 10k (4.5 ms), add/remove 100k (O(1)), render list 100k, transform 100k (full +
+      10k dirty), reparent 1k (0.06 ms) — medidos en `ECSTest` (ver tabla en §11).
 - [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).
 
 ### Fase 3 — Tier advanced ECS (opcional, para power users)
@@ -576,6 +577,22 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 
 Instrumentación: XConsole `[ECS]` Trace/Debug (nunca Info en per-frame — regla `TODO_UI_EVENT_FLOOD.md`),
 stats addon propio (entidades, archetypes/grupos, migraciones, hits de cache) en el `UIDebugOverlay`.
+
+### Validación de escala (2026-08-28, en `ECSTest`, Debug x64 — informativo)
+
+| Métrica | Target | Medido (Debug) | Nota |
+|---|---|---|---|
+| Spawn 10k entidades | < 10 ms | **4.5 ms** | ✅ bajo target hasta en Debug |
+| Add/remove componente | < 50 ns/op | 1141 / 916 ns/op | Debug ~10-20× sobre target; Release lo baja (journal push incluido) |
+| Iterar render list 100k | < 1 ms | 9.76 ms | Debug; /O2 lo baja drásticamente (el cull /O2 ya va a 0.47 ms) |
+| Transform propagation 100k (full) | — | 469 ms | full build |
+| Transform propagation 10k dirty | < 1 ms | 45.7 ms | Debug |
+| Reparent subtree 1k | < 0.1 ms | **0.06 ms** | ✅ bajo target hasta en Debug |
+| Frustum cull 100k | — | /O2 0.47 ms | ver §5 "Render list vectorizado" |
+
+Los targets de §11 son para build optimizado (/O2); en Debug (MSVC /Od) todo mide ~10-30× peor, que es
+el artefacto esperado. Los benchmarks son informativos (CI-stable, sin asserts de timing) y corren como
+parte de `ECSTest` (paridad SIMD==escalar sí es assert).
 
 ---
 
