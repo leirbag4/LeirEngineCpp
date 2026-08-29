@@ -133,12 +133,16 @@ docs/
 - [x] Verificado: `cmake --build build/windows-debug --target docs` → exit 0 → doxygen + sphinx → sitio.
 
 ### 3.5 Contenido inicial (guías en Markdown)
-- [ ] `docs/sphinx/index.md` — main page.
+- [x] `docs/generate_docs.bat` (entry point): setup si faltan tools → `cmake --build build/windows-debug
+      --target docs` → `start docs\site\index.html`. Localiza cmake (PATH o vswhere vía `set /p` a
+      archivo temp — `for /f` con backticks rompe con `(x86)`; no usar paréntesis en textos dentro de
+      bloques `if ( )`). Verificado end-to-end (exit 0, sitio abierto).
+- [ ] `docs/sphinx/index.md` — main page (hecha en §3.3).
 - [ ] Convertir `docs/ecs/ecs-public-api.html` → `docs/sphinx/guides/ecs/ecs-public-api.md`.
 - [ ] Convertir `docs/ecs/hybrid-ecs.html` → `docs/sphinx/guides/ecs/hybrid-ecs.md`.
 - [ ] Mover los `.html` originales a `docs/ecs/html-legacy/`.
 - [ ] (Opcional) Guías iniciales: `guides/engine/getting-started.md`, `guides/engine/architecture.md`.
-- [ ] `docs/.gitignore` (ignora `tools/`, mantiene `site/`).
+- [ ] `docs/.gitignore` (ignora `tools/` + `sphinx/_xml/` + `sphinx/api/`, mantiene `site/`). ✅ en §3.1.
 
 ### 3.6 Documentación del código (convención Doxygen)
 
