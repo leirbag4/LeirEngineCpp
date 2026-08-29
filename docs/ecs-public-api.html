@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeirEngine — API pública del ECS</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #f0883e;
+    --accent4: #bc8cff;
+    --code-bg: #0a0e14;
+    --keyword: #ff7b72;
+    --type: #79c0ff;
+    --string: #a5d6ff;
+    --number: #79c0ff;
+    --fn: #d2a8ff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 20px 120px; }
+  header.hero {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 36px;
+  }
+  header.hero h1 { font-size: 2.4em; margin: 0 0 8px; letter-spacing: -0.5px; }
+  header.hero h1 span { color: var(--accent); }
+  header.hero .sub { color: var(--muted); font-size: 1.05em; max-width: 640px; }
+  .badges { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.78em;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .badge.hl { color: var(--accent); border-color: var(--accent); }
+  nav.toc {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 40px;
+  }
+  nav.toc h2 { font-size: 1em; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 10px; }
+  nav.toc ol { margin: 0; padding-left: 22px; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  nav.toc li { margin: 3px 0; }
+  h2.section {
+    font-size: 1.7em;
+    margin: 56px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    scroll-margin-top: 20px;
+  }
+  h2.section span.idx { color: var(--accent3); }
+  h3 { font-size: 1.2em; margin: 28px 0 10px; color: var(--accent); }
+  p { margin: 10px 0; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.88em;
+    color: var(--fn);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.55;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 1em; }
+  .tok-k { color: var(--keyword); }
+  .tok-t { color: var(--type); }
+  .tok-s { color: var(--string); }
+  .tok-n { color: var(--number); }
+  .tok-f { color: var(--fn); }
+  .tok-c { color: var(--muted); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.92em; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--bg2); color: var(--muted); font-weight: 600; }
+  tr:nth-child(even) td { background: var(--bg2); }
+  .vocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card .name { font-weight: 700; color: var(--accent); font-family: "Cascadia Code", Consolas, monospace; }
+  .card .role { color: var(--muted); font-size: 0.82em; margin-top: 4px; }
+  .note {
+    background: rgba(240, 136, 62, 0.08);
+    border-left: 3px solid var(--accent3);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 14px 0;
+  }
+  .tip {
+    background: rgba(63, 185, 80, 0.08);
+    border-left: 3px solid var(--accent2);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 14px 0;
+  }
+  .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+  .flow .box {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.85em;
+  }
+  .flow .box.hl { border-color: var(--accent); color: var(--accent); }
+  .flow .arrow { color: var(--muted); }
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85em; }
+  @media (max-width: 640px) {
+    header.hero h1 { font-size: 1.8em; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Leir<span>Engine</span> · API pública del ECS</h1>
+  <div class="sub">La capa de datos orientada a rendimiento del motor, expuesta como API de primer nivel
+  para power users. Creada de cero, con nombres propios y sin copiar el estilo de Unity.</div>
+  <div class="badges">
+    <span class="badge hl">Fase 3</span>
+    <span class="badge">C++20</span>
+    <span class="badge">Data-oriented</span>
+    <span class="badge">SIMD + multithreading</span>
+    <span class="badge">Demo: ECSPublicDemo</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>Contenido</h2>
+  <ol>
+    <li><a href="#intro">Introducción — dos caminos, un solo motor</a></li>
+    <li><a href="#vocabulario">El vocabulario (nombres propios)</a></li>
+    <li><a href="#records">World y Record — entidades generacionales</a></li>
+    <li><a href="#campos">Campos — componentes de datos (POD)</a></li>
+    <li><a href="#queries">Queries — OwnedGroup (orden estable)</a></li>
+    <li><a href="#sistemas">Sistemas — ISystem + SystemPipeline</a></li>
+    <li><a href="#diferidos">Cambios diferidos — CommandBuffer</a></li>
+    <li><a href="#soa">Columnas SoA — SoAPool + SIMD</a></li>
+    <li><a href="#facet">Facets — HybridComponent</a></li>
+    <li><a href="#jerarquia">Jerarquía y poses — HierarchyTree + TransformSystem</a></li>
+    <li><a href="#tags">Marcadores — Tags</a></li>
+    <li><a href="#footguns">Consejos y footguns</a></li>
+    <li><a href="#demo">El demo — ECSPublicDemo</a></li>
+  </ol>
+</nav>
+
+<h2 class="section" id="intro"><span class="idx">1.</span> Introducción — dos caminos, un solo motor</h2>
+<p>LeirEngine tiene <b>dos maneras de construir tus sistemas</b>, y ambas comparten la misma fuente de datos:</p>
+<div class="flow">
+  <div class="box">Camino OOP (default)</div>
+  <span class="arrow">→</span>
+  <div class="box">Scene · CoreObject · AddComponent</div>
+  <span class="arrow">→</span>
+  <div class="box hl">Mismo almacenamiento ECS</div>
+</div>
+<div class="flow">
+  <div class="box">Camino ECS (power users)</div>
+  <span class="arrow">→</span>
+  <div class="box">World · Record · Field · Query · System</div>
+  <span class="arrow">→</span>
+  <div class="box hl">Mismo almacenamiento ECS</div>
+</div>
+<p>Esta guía documenta el <b>camino ECS</b>: control directo de entidades, componentes de datos, queries,
+sistemas con scheduling paralelo, comandos diferidos y almacenamiento en columnas SIMD — sin pasar por el
+facade orientado a objetos. Úsalo cuando necesites simulación masiva, procesamiento paralelo o acceso
+fino a la memoria.</p>
+
+<h2 class="section" id="vocabulario"><span class="idx">2.</span> El vocabulario (nombres propios)</h2>
+<div class="vocab">
+  <div class="card"><div class="name">World</div><div class="role">El contenedor: records, campos, pools, journal y registro de hybrids.</div></div>
+  <div class="card"><div class="name">Entity / Record</div><div class="role">Handle generacional de entidad: {índice, generación}. Nunca resuelve handles viejos.</div></div>
+  <div class="card"><div class="name">TypedPool&lt;T&gt;</div><div class="role">Pool de campos (AoS): filas POD contiguas, sparse-set, add/remove O(1).</div></div>
+  <div class="card"><div class="name">SoAPool&lt;T&gt;</div><div class="role">Pool de columnas SoA: una columna contigua por campo, lista para SIMD.</div></div>
+  <div class="card"><div class="name">OwnedGroup&lt;Ts...&gt;</div><div class="role">Query cacheada por journal, con orden estable y ForEach sin chequeos.</div></div>
+  <div class="card"><div class="name">CommandBuffer</div><div class="role">Cambios estructurales diferidos (create/destroy/add/remove), thread-safe, replay en sync points.</div></div>
+  <div class="card"><div class="name">ISystem</div><div class="role">Un paso del simulador con acceso declarado a los campos.</div></div>
+  <div class="card"><div class="name">SystemPipeline</div><div class="role">Fases FixedUpdate → Update → Render, scheduling topológico paralelo.</div></div>
+  <div class="card"><div class="name">JobSystem</div><div class="role">Thread pool con ParallelFor y Dispatch/WaitAll (en web, inline).</div></div>
+  <div class="card"><div class="name">HybridComponent&lt;T&gt;</div><div class="role">Faceta OOP boxeada en el ECS: Component clásico con lifecycle dentro de un World.</div></div>
+  <div class="card"><div class="name">Tags</div><div class="role">Marcadores vacíos (Tag3D/Tag2D/TagUI, Active) para filtrar familias.</div></div>
+  <div class="card"><div class="name">HierarchyTree</div><div class="role">Scene graph compacto: parent / firstChild / nextSibling / depth por índice.</div></div>
+  <div class="card"><div class="name">TransformSystem</div><div class="role">Poses mundiales con dirty-frontier, lossy-preserve y SIMD.</div></div>
+</div>
+
+<h2 class="section" id="records"><span class="idx">3.</span> World y Record — entidades generacionales</h2>
+<p>Un <code>Record</code> es un handle <b>generacional</b>: cuando destruís una entidad, su índice se recicla
+pero la generación sube, así cualquier handle viejo queda inválido de forma segura. El índice 0 está
+reservado como "entidad nula" (estilo EnTT).</p>
+<pre><code><span class="tok-t">World</span> world;
+
+<span class="tok-c">// Crear records.</span>
+<span class="tok-t">Entity</span> hero = world.<span class="tok-f">Create</span>();
+<span class="tok-t">Entity</span> foe  = world.<span class="tok-f">Create</span>();
+
+<span class="tok-c">// Los records son generacionales: destruir y re-crear NO revalida handles viejos.</span>
+world.<span class="tok-f">Destroy</span>(foe);
+<span class="tok-t">Entity</span> fresh = world.<span class="tok-f">Create</span>();   <span class="tok-c">// quizá reutiliza el índice, con otra generación</span>
+<span class="tok-k">bool</span> alive = world.<span class="tok-f">IsAlive</span>(foe); <span class="tok-c">// false — el handle viejo nunca resuelve</span></code></pre>
+
+<h2 class="section" id="campos"><span class="idx">4.</span> Campos — componentes de datos (POD)</h2>
+<p>Un campo es simplemente un <b>struct POD tuyo</b>. El World lo guarda en un pool sparse-set
+(one-per-type por entidad, semántica Unity/Godot). Sin macros, sin registros, sin boxes:</p>
+<pre><code><span class="tok-c">// Tus campos son PODs planos — 100% tuyos.</span>
+<span class="tok-k">struct</span> <span class="tok-t">Position</span> { <span class="tok-k">float</span> x = <span class="tok-n">0</span>, y = <span class="tok-n">0</span>, z = <span class="tok-n">0</span>; };
+<span class="tok-k">struct</span> <span class="tok-t">Velocity</span> { <span class="tok-k">float</span> x = <span class="tok-n">0</span>, y = <span class="tok-n">0</span>, z = <span class="tok-n">0</span>; };
+
+<span class="tok-t">Entity</span> e = world.<span class="tok-f">Create</span>();
+world.<span class="tok-f">Add</span>&lt;<span class="tok-t">Position</span>&gt;(e) = { <span class="tok-n">0</span>, <span class="tok-n">0</span>, <span class="tok-n">0</span> };
+world.<span class="tok-f">Add</span>&lt;<span class="tok-t">Velocity</span>&gt;(e) = { <span class="tok-n">1</span>, <span class="tok-n">0</span>, <span class="tok-n">0</span> };
+
+<span class="tok-t">Position</span>* p = world.<span class="tok-f">Get</span>&lt;<span class="tok-t">Position</span>&gt;(e);  <span class="tok-c">// puntero al POD vivo (AoS)</span>
+<span class="tok-k">bool</span> has  = world.<span class="tok-f">Has</span>&lt;<span class="tok-t">Position</span>&gt;(e);
+world.<span class="tok-f">Remove</span>&lt;<span class="tok-t">Position</span>&gt;(e);            <span class="tok-c">// O(1), swap-and-pop</span></code></pre>
+<p>El <code>World</code> mantiene un <b>journal</b> de cambios estructurales (add/remove/destroy/create)
+que alimenta a las queries — nunca tenés que marcar "dirty" a mano:</p>
+<pre><code><span class="tok-k">const</span> <span class="tok-t">std::vector</span>&lt;<span class="tok-t">ChangeRecord</span>&gt;&amp; j = world.<span class="tok-f">GetJournal</span>();
+world.<span class="tok-f">ClearJournal</span>(); <span class="tok-c">// el dueño del sync point lo limpia</span></code></pre>
+
+<h2 class="section" id="queries"><span class="idx">5.</span> Queries — OwnedGroup (orden estable)</h2>
+<p><code>OwnedGroup&lt;Ts...&gt;</code> es el conjunto ordenado de records que poseen TODOS los campos
+declarados. Se mantiene <b>incrementalmente desde el journal</b>: <code>Sync()</code> consume los cambios
+y <code>ForEach()</code> itera sin chequeos de membresía por entidad. El orden es <b>estable</b>
+(remover solo deja un tombstone; el orden de los vivos nunca cambia — clave para z-order y
+determinismo).</p>
+<div class="flow">
+  <div class="box">world.Add/Remove/Destroy</div>
+  <span class="arrow">→</span>
+  <div class="box">Journal</div>
+  <span class="arrow">→</span>
+  <div class="box">group.Sync(world)</div>
+  <span class="arrow">→</span>
+  <div class="box hl">group.ForEach</div>
+</div>
+<pre><code><span class="t-t"><span class="tok-t">OwnedGroup</span></span>&lt;<span class="tok-t">Position</span>, <span class="tok-t">Velocity</span>&gt; movers(&amp;world);
+movers.<span class="tok-f">Sync</span>(world);   <span class="tok-c">// consume el journal UNA vez (antes de ClearJournal)</span>
+world.<span class="tok-f">ClearJournal</span>();
+
+movers.<span class="tok-f">ForEach</span>([&amp;](<span class="tok-t">Position</span>&amp; p, <span class="tok-t">Velocity</span>&amp; v, <span class="tok-t">Entity</span> e) {
+    p.x += v.x * dt;      <span class="tok-c">// lee datos VIVOS del pool</span>
+});</code></pre>
+<div class="tip"><b>Regla:</b> re-sincronizá tus queries después de cambios estructurales (p. ej. tras un
+<code>CommandBuffer::Replay</code>) <b>antes de leerlas</b>. Una query stale puede referenciar un record
+destruido.</div>
+
+<h2 class="section" id="sistemas"><span class="idx">6.</span> Sistemas — ISystem + SystemPipeline</h2>
+<p>Un sistema es un paso del simulador. Declarás qué campos lee y cuáles escribe
+(<code>GetAccess</code>); el <code>SystemPipeline</code> usa eso para el <b>scheduling topológico</b>:
+dos sistemas que comparten un tipo y alguno lo escribe corren en orden de registro; los independientes
+corren <b>en paralelo</b> vía el <code>JobSystem</code>.</p>
+<pre><code><span class="tok-k">class</span> <span class="tok-t">MovementSystem</span> : <span class="tok-k">public</span> <span class="tok-t">ISystem</span> {
+<span class="tok-k">public</span>:
+    <span class="tok-t">MovementSystem</span>(<span class="tok-t">World</span>* w, <span class="tok-t">OwnedGroup</span>&lt;<span class="tok-t">Position</span>, <span class="tok-t">Velocity</span>&gt;* g)
+        : <span class="tok-t">ISystem</span>(<span class="tok-s">"Movement"</span>), m_G(g),
+          m_Pos(w-&gt;<span class="tok-f">ComponentType</span>&lt;<span class="tok-t">Position</span>&gt;()),
+          m_Vel(w-&gt;<span class="tok-f">ComponentType</span>&lt;<span class="tok-t">Velocity</span>&gt;()) {}
+
+    <span class="tok-t">std::vector</span>&lt;<span class="tok-t">SystemAccess</span>&gt; <span class="tok-f">GetAccess</span>() <span class="tok-k">const override</span> {
+        <span class="tok-k">return</span> { { m_Pos, <span class="tok-k">true</span> }, { m_Vel, <span class="tok-k">false</span> } }; <span class="tok-c">// escribe Position, lee Velocity</span>
+    }
+    <span class="tok-k">void</span> <span class="tok-f">Update</span>(<span class="tok-k">float</span> dt) <span class="tok-k">override</span> {
+        m_G-&gt;<span class="tok-f">ForEach</span>([dt](<span class="tok-t">Position</span>&amp; p, <span class="tok-t">Velocity</span>&amp; v, <span class="tok-t">Entity</span>) {
+            p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
+        });
+    }
+<span class="tok-k">private</span>:
+    <span class="tok-t">OwnedGroup</span>&lt;<span class="tok-t">Position</span>, <span class="tok-t">Velocity</span>&gt;* m_G;
+    <span class="tok-t">uint32_t</span> m_Pos, m_Vel;
+};
+
+<span class="tok-t">SystemPipeline</span> pipeline;
+pipeline.<span class="tok-f">Add</span>(&amp;moveSys, <span class="tok-t">SystemPhase</span>::<span class="tok-t">Update</span>);
+<span class="tok-t">JobSystem</span> jobs;
+pipeline.<span class="tok-f">Run</span>(<span class="tok-n">0.016f</span>, dt, &amp;jobs, &amp;cb, &amp;world); <span class="tok-c">// fases + cb replayed en sync points + paralelo</span></code></pre>
+<p>Las fases son <code>FixedUpdate</code> (timestep fijo, física) → <code>Update</code> (gameplay) →
+<code>Render</code> (build de comandos). El pipeline aplica el <code>CommandBuffer</code> entre fases, en
+el hilo del caller, así los cambios estructurales son seguros con sistemas en paralelo.</p>
+
+<h2 class="section" id="diferidos"><span class="idx">7.</span> Cambios diferidos — CommandBuffer</h2>
+<p>Nunca destruyas o agregues componentes <b>mientras iterás</b>: encolá en el
+<code>CommandBuffer</code> y aplicalo en el sync point. Es thread-safe (mutex), así los sistemas
+paralelos encolan con seguridad.</p>
+<pre><code><span class="tok-t">CommandBuffer</span> cb;
+cb.<span class="tok-f">Destroy</span>(e);                     <span class="tok-c">// destrucción diferida</span>
+cb.<span class="tok-f">Add</span>&lt;<span class="tok-t">Health</span>&gt;(e, { <span class="tok-n">50</span> });        <span class="tok-c">// add con datos</span>
+cb.<span class="tok-f">Remove</span>&lt;<span class="tok-t">Velocity</span>&gt;(e);            <span class="tok-c">// remove</span>
+
+cb.<span class="tok-f">Replay</span>(world);                    <span class="tok-c">// sync point: swap atómico + aplicar fuera del lock</span></code></pre>
+
+<h2 class="section" id="soa"><span class="idx">8.</span> Columnas SoA — SoAPool + SIMD</h2>
+<p>Para sistemas que procesan UN campo en bulk, <code>SoAPool&lt;T&gt;</code> guarda cada campo en una
+<b>columna contigua de floats</b> — lista para SIMD sin gathers. Complementa (no reemplaza) al
+<code>TypedPool</code> AoS.</p>
+<pre><code><span class="tok-t">SoAPool</span>&lt;<span class="tok-t">Position</span>&gt; cols;
+<span class="tok-k">for</span> (<span class="tok-k">int</span> i = <span class="tok-n">0</span>; i &lt; <span class="tok-n">8</span>; ++i) cols.<span class="tok-f">Add</span>((<span class="tok-t">uint32_t</span>)i, { (<span class="tok-k">float</span>)i, <span class="tok-n">0</span>, <span class="tok-n">0</span> });
+
+<span class="tok-c">// Avanzar la columna x de TODOS los records en un solo pase vectorizado (4 a la vez).</span>
+<span class="tok-t">std::vector</span>&lt;<span class="tok-k">float</span>&gt; inc(cols.<span class="tok-f">Count</span>(), <span class="tok-n">0.1f</span>);
+<span class="tok-t">Mathf</span>::<span class="tok-f">SimdAddFloats</span>(cols.<span class="tok-f">Col</span>(<span class="tok-n">0</span>), cols.<span class="tok-f">Col</span>(<span class="tok-n">0</span>), inc.data(), cols.<span class="tok-f">Count</span>());
+
+<span class="tok-t">Position</span> p{};
+cols.<span class="tok-f">Get</span>(<span class="tok-n">3</span>, p);       <span class="tok-c">// materializar una fila (gather por columnas)</span>
+cols.<span class="tok-f">Remove</span>(<span class="tok-n">3</span>);         <span class="tok-c">// swap-and-pop O(1)</span></code></pre>
+
+<h2 class="section" id="facet"><span class="idx">9.</span> Facets — HybridComponent</h2>
+<p>¿Necesitás comportamiento OOP dentro del mundo de datos? Un <code>HybridComponent&lt;T&gt;</code>
+boxea un <code>Component</code> clásico (con <code>OnStart/OnUpdate/OnDestroy</code>) en el ECS. La
+instancia la maneja el World; removerla o destruir la entidad la destruye (llamando <code>OnDestroy</code>).</p>
+<pre><code><span class="tok-t">Entity</span> npc = world.<span class="tok-f">Create</span>();
+world.<span class="tok-f">AddHybrid</span>&lt;<span class="tok-t">Pinger</span>&gt;(npc);   <span class="tok-c">// boxea un Component OOP</span>
+
+<span class="tok-c">// El driver (Scene o tu loop) tickea el lifecycle OOP cada frame:</span>
+<span class="tok-k">for</span> (<span class="tok-t">Component</span>* c : world.<span class="tok-f">GetHybrids</span>())
+    c-&gt;<span class="tok-f">Tick</span>(dt);   <span class="tok-c">// OnStart una vez + OnUpdate si está activo</span></code></pre>
+<p>Es el puente "híbrido": campos de datos (rápidos, SoA/SIMD) y facets OOP (amigables) conviven en el
+mismo World — no tenés que elegir entre lo cómodo y lo veloz.</p>
+
+<h2 class="section" id="jerarquia"><span class="idx">10.</span> Jerarquía y poses — HierarchyTree + TransformSystem</h2>
+<p><code>HierarchyTree</code> es un scene graph compacto por índice de entidad (parent, firstChild,
+nextSibling, depth). <code>TransformSystem</code> computa las poses mundiales con un
+<b>dirty-frontier</b> (solo subtrees mutados), lossy-preserve exacto al reparentar, y SIMD
+(<code>MultiplySimd</code>) en el hot path.</p>
+<pre><code><span class="tok-t">HierarchyTree</span> tree;
+<span class="tok-t">TransformSystem</span> ts(&amp;world, &amp;tree);
+
+<span class="tok-t">Entity</span> root = world.<span class="tok-f">Create</span>();
+ts.<span class="tok-f">SetLocal</span>(root, { { <span class="tok-n">0</span>, <span class="tok-n">0</span>, <span class="tok-n">0</span> }, <span class="tok-t">Quaternion</span>::<span class="tok-f">Identity</span>(), <span class="tok-t">Vector3</span>::<span class="tok-f">One</span>() });
+<span class="tok-t">Entity</span> kid  = world.<span class="tok-f">Create</span>();
+ts.<span class="tok-f">SetLocal</span>(kid,  { { <span class="tok-n">2</span>, <span class="tok-n">0</span>, <span class="tok-n">0</span> }, <span class="tok-t">Quaternion</span>::<span class="tok-f">Identity</span>(), <span class="tok-t">Vector3</span>::<span class="tok-f">One</span>() });
+ts.<span class="tok-f">SetParent</span>(kid, root);        <span class="tok-c">// worldPositionStays = true por defecto (lossy-preserve)</span>
+ts.<span class="tok-f">Update</span>();
+
+<span class="tok-t">WorldTransform</span>* wt = ts.<span class="tok-f">GetWorld</span>(kid);  <span class="tok-c">// worldMatrix, worldPosition, worldRotation, worldScale</span></code></pre>
+
+<h2 class="section" id="tags"><span class="idx">11.</span> Marcadores — Tags</h2>
+<p>Los tags son componentes vacíos para agrupar familias sin RTTI:</p>
+<pre><code>world.<span class="tok-f">Add</span>&lt;<span class="tok-t">Tag3D</span>&gt;(obj3d);   <span class="tok-c">// familia 3D</span>
+world.<span class="tok-f">Add</span>&lt;<span class="tok-t">Tag2D</span>&gt;(uiObj);   <span class="tok-c">// familia 2D</span>
+world.<span class="tok-f">Add</span>&lt;<span class="tok-t">Active</span>&gt;(e) = { <span class="tok-k">false</span> };  <span class="tok-c">// espejo de CoreObject::SetActive</span>
+
+size_t n = <span class="tok-n">0</span>;
+world.<span class="tok-f">Each</span>&lt;<span class="tok-t">Tag3D</span>&gt;([&amp;](<span class="tok-t">Tag3D</span>&amp;, <span class="tok-t">Entity</span>) { ++n; });</code></pre>
+
+<h2 class="section" id="footguns"><span class="idx">12.</span> Consejos y footguns</h2>
+<ul>
+  <li><b>Nunca iteres y destruyas en el mismo pase.</b> Encolá en un <code>CommandBuffer</code> y reaplicá en el sync point; los iteradores siguen válidos.</li>
+  <li><b>Re-sincronizá las queries después de cambios estructurales</b> (<code>group.Sync(world)</code> + <code>world.ClearJournal()</code>) antes de leerlas — una query stale puede apuntar a un record destruido.</li>
+  <li><b>El índice 0 es la entidad nula.</b> No lo uses como nodo real de jerarquía.</li>
+  <li><b>Las queries son de orden estable</b>: el orden de los vivos no cambia al remover (tombstones). Si necesitás orden por valor, ordená tu propio índice.</li>
+  <li><b>Logging:</b> en paths per-frame usá <code>XConsole::Trace/Debug</code>, nunca Info/Warning/Error (evitan el feedback loop del ConsolePanel).</li>
+  <li><b>Debug vs Release:</b> los benchmarks del motor se miden en Debug (~10-30× más lento por diseño). Para números reales, compilá con <code>/O2</code>.</li>
+</ul>
+
+<h2 class="section" id="demo"><span class="idx">13.</span> El demo — ECSPublicDemo</h2>
+<p>Un demo renderless que recorre todo el vocabulario: records + campos, query estable,
+scheduler paralelo con CommandBuffer (destrucciones diferidas que se ven en vivo), columna SoA con SIMD,
+un facet híbrido (Pinger) con su lifecycle, y jerarquía con poses mundiales.</p>
+<pre><code><span class="tok-c"># Desde la raíz del repo:</span>
+& <span class="tok-s">"build\windows-debug\examples\ECSPublicDemo\Debug\LeirEngineECSPublicDemo.exe"</span>
+<span class="tok-c"># Espera: records que expiran progresivamente, pings del facet, y "ECSPublicDemo OK".</span></code></pre>
+<p>Ver también: <code>docs/hybrid-ecs.html</code> — la arquitectura interna en detalle (transforms,
+jerarquía, SIMD, scheduler, física/audio a data, benchmarks).</p>
+
+<footer>LeirEngine · Hybrid ECS · Fase 3 — API pública. Documentación de la capa de datos.
+Escrita para el equipo; los nombres son propios (sin copiar Unity/EnTT/Bevy).</footer>
+
+</div>
+</body>
+</html>

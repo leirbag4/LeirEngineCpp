@@ -594,8 +594,18 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       VEX en toda la capa Simd4f) descartadas por coste/beneficio.
 
 ### Fase 3 — Tier advanced ECS (opcional, para power users)
-- [ ] Exponer el `World` ECS público (crear entidades/sistemas directamente, estilo Unity DOTS).
-- [ ] El camino OOP sigue siendo el default documentado.
+- [x] Exponer el `World` ECS público (crear entidades/sistemas directamente, estilo Unity DOTS pero con
+      **nombres propios** — no copiamos Unity/EnTT/Bevy). Sin renombrar internos (World/Entity/TypedPool/
+      SoAPool/OwnedGroup/CommandBuffer/SystemPipeline/ISystem/JobSystem/HybridComponent/HierarchyTree/
+      TransformSystem/Tags ya eran nuestros). Entregas: **demo renderless `examples/ECSPublicDemo`**
+      (records + campos POD, query estable, scheduler paralelo con CommandBuffer en vivo, columna SoA +
+      SIMD, facet híbrido Pinger con lifecycle, jerarquía con poses) + **`docs/ecs-public-api.html`**
+      (guía dark de la API pública) + **`docs/hybrid-ecs.html`** (arquitectura interna en detalle con
+      gráficos). Footgun descubierto al escribir el demo: una query STALE leída en la fase Render tras
+      un destroy diferido crashea (deref de miembro destruido) → el patrón correcto es re-sync de
+      queries entre fases antes de leer (como hace el Scene). Verificado: build limpio, demo corre
+      (exit 0, expiraciones + pings + OK), ctest 3/3.
+- [x] El camino OOP sigue siendo el default documentado.
 
 ---
 

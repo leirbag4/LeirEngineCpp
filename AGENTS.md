@@ -1055,6 +1055,22 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 3 COMPLETA: API pública del World + docs** (2026-08-28, `TODO_HYBRID_ECS.md` §10):
+  el ECS queda expuesto como API de primer nivel para power users con **nombres propios** (nada de
+  copiar Unity/EnTT/Bevy — `World`/`Entity`/`TypedPool`/`SoAPool`/`OwnedGroup`/`CommandBuffer`/
+  `SystemPipeline`/`ISystem`/`JobSystem`/`HybridComponent`/`HierarchyTree`/`TransformSystem`/`Tags` ya
+  eran nuestros; son los genéricos de industria, no marca de Unity). Entregas: **demo renderless
+  `examples/ECSPublicDemo`** (records + campos POD, query estable, scheduler paralelo con CommandBuffer
+  (destrucciones diferidas que bajan el conteo en vivo), columna SoA + SIMD, facet híbrido Pinger con
+  lifecycle + pings, jerarquía con poses mundiales — exit 0) + **`docs/ecs-public-api.html`** (guía dark
+  de la API pública con vocabulario, ejemplos, footguns) + **`docs/hybrid-ecs.html`** (arquitectura
+  interna en detalle con gráficos: generaciones, pools, journal, jerarquía, transforms con
+  lossy-preserve, SIMD, scheduler, física/audio a data, benchmarks, glosario). **Footgun descubierto al
+  escribir el demo**: leer una query STALE en la fase Render tras un destroy diferido crashea (deref de
+  miembro destruido) → patrón correcto: re-sync de queries entre fases antes de leer (como hace el
+  Scene). El camino OOP sigue siendo el default documentado. Verificado: build limpio, demo corre (exit
+  0), ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Componentes a data (Incremento 5): storage SoA por campo + cull en lote** (2026-08-28,
   `TODO_HYBRID_ECS.md` §10): nuevo `ECS/SoAPool.h` — pool de columnas SoA para componentes pure-float
   POD (una columna contigua por campo, sparse + swap-and-pop, `Add/Set/Remove/Get/Col`, materializa al
