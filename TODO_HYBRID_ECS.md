@@ -501,7 +501,12 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       estructurales diferidos encolados por sistemas paralelos se aplican en el sync point, no a mitad
       de iteración. Verificado en `ECSTest` (**ALL PASS**): un sistema en fase Update encola un destroy
       y el `Replay` del sync point lo aplica (entidad muerta, viva intacta, buffer drenado).
-- [ ] Benchmarks: fps / frame time / cache misses por plataforma (targets en §11).
+- [x] **Benchmarks (§11, en `ECSTest`, informativos)**: en esta máquina (Debug, x64) —
+      **mat4x4 multiply: SIMD 5.6× más rápido que escalar** (2M mults); **ParallelFor CPU-bound
+      (mat4x4 por índice): 5.0× con 8 threads**. El `JobSystem::ParallelFor` usa **chunking** (cada grab
+      agarra 64 índices, no 1) — sin eso el `fetch_add` atómico por índice hacía el paralelo MÁS lento
+      que secuencial (0.14×); con chunks se eliminó el cuello de botella. Targets de §11 pendientes de
+      validar a mayor escala (100k renderables/nodos).
 - [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).
 
 ### Fase 3 — Tier advanced ECS (opcional, para power users)

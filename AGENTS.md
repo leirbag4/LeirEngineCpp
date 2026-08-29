@@ -1055,6 +1055,12 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: benchmarks + chunking del `JobSystem::ParallelFor`** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §11): benchmarks en `ECSTest` (informativos): **mat4x4 multiply SIMD 5.6× vs
+  escalar** (2M mults) y **ParallelFor CPU-bound 5.0× con 8 threads**. El primer ParallelFor salía
+  MÁS lento (0.14×) porque el `fetch_add` atómico **por índice** dominaba con trabajo fino; fix con
+  **chunking** (cada grab agarra 64 índices). Build limpio, ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Fase 2: command buffer en sync points (paralelo seguro)** (2026-08-28,
   `TODO_HYBRID_ECS.md` §6/§10): `CommandBuffer` thread-safe (mutex; `Replay` swapea los ops
   atómicamente y los aplica fuera del lock). `SystemPipeline::Run(fixedDt, dt, jobs*, cb*, world*)`

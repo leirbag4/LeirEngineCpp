@@ -87,17 +87,22 @@ void JobSystem::ParallelFor(size_t count, const std::function<void(size_t)>& fn)
 
 void JobSystem::WorkerLoopRange()
 {
-    // Copy the fn once (no per-index locking).
+    // Copy the fn once (no per-index locking). Each grab takes a CHUNK of
+    // indices (not one at a time) so the shared atomic isn't a bottleneck for
+    // fine-grained work.
     std::function<void(size_t)> fn;
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         fn = m_Fn;
     }
+    constexpr size_t kChunk = 64;
     for (;;) {
-        const size_t idx = m_Next.fetch_add(1, std::memory_order_relaxed);
-        if (idx >= m_Count)
+        const size_t start = m_Next.fetch_add(kChunk, std::memory_order_relaxed);
+        if (start >= m_Count)
             break;
-        fn(idx);
+        const size_t end = std::min(start + kChunk, m_Count);
+        for (size_t i = start; i < end; ++i)
+            fn(i);
     }
 }
 

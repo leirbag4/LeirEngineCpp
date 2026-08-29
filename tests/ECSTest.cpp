@@ -14,6 +14,7 @@
 #include "LeirEngine/Components/MeshRenderer.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 
@@ -660,6 +661,60 @@ int main()
             js.Dispatch([&tasks]() { tasks.fetch_add(1); });
         js.WaitAll();
         Check(tasks == 50, "JobSystem Dispatch/WaitAll runs every task");
+    }
+
+    // --- Fase 2: benchmarks (informational; not asserted, CI-stable) ---
+    {
+        using Clock = std::chrono::steady_clock;
+        auto ms = [](Clock::time_point a, Clock::time_point b) {
+            return std::chrono::duration<double, std::milli>(b - a).count();
+        };
+
+        // SIMD vs scalar mat4x4 multiply.
+        {
+            Matrix4x4 a, b, c;
+            uint32_t seed = 99u;
+            auto rnd = [&seed]() {
+                seed = seed * 1664525u + 1013904223u;
+                return (float)(seed >> 8) / 16777216.0f * 2.0f - 1.0f;
+            };
+            for (float& v : a.m) v = rnd();
+            for (float& v : b.m) v = rnd();
+            const int iters = 2000000;
+            auto t0 = Clock::now();
+            for (int i = 0; i < iters; ++i) c = a * b;
+            auto t1 = Clock::now();
+            for (int i = 0; i < iters; ++i) c = Matrix4x4::MultiplySimd(a, b);
+            auto t2 = Clock::now();
+            double scalarMs = ms(t0, t1), simdMs = ms(t1, t2);
+            printf("bench: mat4x4 multiply scalar=%.2f ms simd=%.2f ms (x%.2f)\n",
+                   scalarMs, simdMs, scalarMs / simdMs);
+        }
+
+        // JobSystem ParallelFor vs sequential — CPU-bound (mat4x4 per index):
+        // distinct-index writes (no races), work per item >> scheduling cost.
+        {
+            const size_t n = 200000;
+            Matrix4x4 a, b;
+            uint32_t seed = 7u;
+            auto rnd = [&seed]() {
+                seed = seed * 1664525u + 1013904223u;
+                return (float)(seed >> 8) / 16777216.0f * 2.0f - 1.0f;
+            };
+            for (float& v : a.m) v = rnd();
+            for (float& v : b.m) v = rnd();
+            std::vector<float> sink(n, 0.0f);
+            auto t0 = Clock::now();
+            for (size_t i = 0; i < n; ++i) { Matrix4x4 r = a * b; sink[i] = r.m[0]; }
+            auto t1 = Clock::now();
+            JobSystem jobs;
+            auto t2 = Clock::now();
+            jobs.ParallelFor(n, [&](size_t i) { Matrix4x4 r = a * b; sink[i] = r.m[0]; });
+            auto t3 = Clock::now();
+            double seqMs = ms(t0, t1), parMs = ms(t2, t3);
+            printf("bench: ParallelFor(mat4x4) seq=%.2f ms par=%.2f ms (%u threads, x%.2f)\n",
+                   seqMs, parMs, jobs.ThreadCount(), seqMs / parMs);
+        }
     }
 
     printf(g_Fails == 0 ? "\nALL PASS\n" : "\n%d FAILURES\n", g_Fails);
