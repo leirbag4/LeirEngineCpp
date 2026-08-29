@@ -88,20 +88,21 @@ docs/
   - [x] Idempotente: si el tool ya existe, no re-descarga.
 
 ### 3.2 Config de Doxygen (`Doxyfile`)
-- [ ] `PROJECT_NAME = "LeirEngine"`, `PROJECT_BRIEF`.
-- [ ] `INPUT = engine/include/LeirEngine editor/src tests` (+ docs/sphinx/guides si se quiere como páginas MD).
-- [ ] `FILE_PATTERNS = *.h *.hpp *.cpp`.
-- [ ] `EXTRACT_ALL = YES`, `EXTRACT_STATIC = NO`, `HIDE_UNDOC_MEMBERS = NO`.
-- [ ] `PREDEFINED = LEIR_API= __declspec(dllexport)= __declspec(dllimport)=` + `MACRO_EXPANSION=YES`
+- [x] `PROJECT_NAME = "LeirEngine"`, `PROJECT_BRIEF`.
+- [x] `INPUT = engine/include/LeirEngine editor/src tests`.
+- [x] `FILE_PATTERNS = *.h *.hpp *.cpp`.
+- [x] `EXTRACT_ALL = YES`, `EXTRACT_STATIC = NO`, `HIDE_UNDOC_MEMBERS = NO`.
+- [x] `PREDEFINED = LEIR_API= __declspec(x)= ...` + `MACRO_EXPANSION=YES` + `EXPAND_ONLY_PREDEF=YES`
       (para que `LEIR_API` no rompa el parseo y se documente todo).
-- [ ] `GENERATE_XML = YES`, `XML_OUTPUT = sphinx/_xml`, `XML_PROGRAMLISTING = NO`.
-- [ ] `GENERATE_HTML = NO` (el HTML lo hace Sphinx).
-- [ ] `HAVE_DOT = YES` + `DOT_PATH` a `tools/graphviz` (si disponible), `CLASS_DIAGRAMS = YES`,
-      `COLLABORATION_GRAPH = YES`, `INHERIT_GRAPH = YES`, `CALL_GRAPH = YES`.
-- [ ] `GROUP_GRAPHS = YES`, `CALLER_GRAPH = NO` (perf).
-- [ ] `RECURSIVE = YES`.
+- [x] `GENERATE_XML = YES`, `XML_OUTPUT = sphinx/_xml`, `XML_PROGRAMLISTING = NO`.
+- [x] `GENERATE_HTML = NO` (el HTML lo hace Sphinx).
+- [x] `HAVE_DOT = YES` + `DOT_PATH` a `docs/tools/graphviz/Graphviz-15.1.1-win64/bin`,
+      `COLLABORATION_GRAPH`, `INHERIT_GRAPH`, `CALL_GRAPH = YES`.
+- [x] `CLASS_DIAGRAMS` es **obsoleto en 1.18.0** (quitado; `CLASS_GRAPH` basta).
+- [x] `RECURSIVE = YES`.
 - [ ] Grupos `@defgroup` por módulo (ver §5): Math, ECS, Scene, Components, Rendering, RHI, Audio,
-      Physics, UI, Input, Core, Editor.
+      Physics, UI, Input, Core, Editor. (Nota: con `EXTRACT_ALL` el sitio funciona sin ellos; se
+      agregan con el retrofit §3.6.)
 
 ### 3.3 Config de Sphinx (`docs/sphinx/conf.py`)
 - [ ] `project = "LeirEngine"`, `html_theme = "furo"`.

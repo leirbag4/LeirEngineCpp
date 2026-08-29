@@ -1,0 +1,72 @@
+# Doxyfile — LeirEngine docs (TODO_DOCS.md §3.2).
+# Doxygen 1.18.0 portátil:  docs\tools\doxygen\doxygen.exe docs\Doxyfile
+# Se corre desde la RAÍZ del repo. Genera SOLO el XML que consumen
+# Sphinx + Breathe + Exhale (el HTML lo hace Sphinx, no Doxygen).
+
+# ---- Proyecto ----
+PROJECT_NAME           = "LeirEngine"
+PROJECT_BRIEF          = "Cross-platform C++ game engine with a custom data-oriented ECS"
+PROJECT_NUMBER         = "1.0"
+
+# ---- Salida ----
+OUTPUT_DIRECTORY       = docs
+XML_OUTPUT             = sphinx/_xml
+
+# ---- Fuentes: engine (headers públicos) + editor (headers) + tests ----
+INPUT                  = engine/include/LeirEngine \
+                         editor/src \
+                         tests
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp *.cpp *.c *.cc *.cxx *.inl
+
+# ---- Extracción ----
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+EXTRACT_LOCAL_CLASSES  = NO
+HIDE_UNDOC_MEMBERS     = NO
+SORT_MEMBER_DOCS       = NO
+SORT_BRIEF_DOCS        = NO
+
+# ---- Preprocesado: LEIR_API / __declspec / macros de plataforma se anulan
+#      para que Doxygen parseé todo (EXPAND_ONLY_PREDEF evita romper templates). ----
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = LEIR_API= \
+                         LEIR_ENGINE_BUILD= \
+                         __declspec(x)= \
+                         _M_X64= \
+                         _WIN32= \
+                         WIN32= \
+                         __EMSCRIPTEN__= \
+                         __GNUC__=
+
+# ---- Generación: SOLO XML (Breathe/Exhale). Sin HTML/Latex. ----
+GENERATE_HTML          = NO
+GENERATE_XML           = YES
+XML_PROGRAMLISTING     = NO
+GENERATE_LATEX         = NO
+
+# ---- Markdown en comentarios ----
+MARKDOWN_SUPPORT       = YES
+
+# ---- Diagramas con Graphviz portátil (best-effort) ----
+HAVE_DOT               = YES
+DOT_PATH               = docs/tools/graphviz/Graphviz-15.1.1-win64/bin
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO
+CALL_GRAPH             = YES
+CALLER_GRAPH           = NO
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 20
+DOT_GRAPH_MAX_NODES    = 60
+
+# ---- Verbosidad ----
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = NO

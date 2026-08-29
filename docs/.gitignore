@@ -1,3 +1,5 @@
 # Herramientas portátiles descargadas por setup_tools.bat — NO se commitean.
 tools/
+# XML intermedio de Doxygen (Breathe/Exhale lo consumen) — NO se commitea.
+sphinx/_xml/
 # El sitio generado SÍ se commitea (site/).
