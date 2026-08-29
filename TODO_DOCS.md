@@ -122,12 +122,15 @@ docs/
       de docblocks (§3.6).
 
 ### 3.4 CMake target `docs`
-- [ ] En `CMakeLists.txt` raíz (o `cmake/DocsTooling.cmake`): `find_package(Doxygen REQUIRED)`
-      + `find_package(Python3 REQUIRED)` con `Python3_EXECUTABLE` apuntando a `LEIR_PYTHON`.
-- [ ] `doxygen_add_docs(docs_api ...)` → genera el XML (dependencia).
-- [ ] `add_custom_target(docs_sphinx COMMAND ${Python3_EXECUTABLE} -m sphinx -b html ... )`.
-- [ ] `add_custom_target(docs DEPENDS docs_api docs_sphinx)`.
-- [ ] `generate_docs.bat`: `cmake --build build/windows-debug --target docs` + `start docs\site\index.html`.
+- [x] `cmake/DocsTooling.cmake` (incluido al final del root `CMakeLists.txt`):
+      `find_package(Doxygen)` con preferencia del **portátil de `docs/tools/doxygen`**; `find_package(Python3)`
+      con `Python3_EXECUTABLE` vía `LEIR_PYTHON` → path del dev → PATH.
+- [x] `docs_api` = corre `doxygen docs/Doxyfile` (WORKING_DIRECTORY = raíz del repo, EXCLUDE_FROM_ALL).
+- [x] `docs_sphinx` = `python -m sphinx -b html docs/sphinx docs/site` (EXCLUDE_FROM_ALL).
+- [x] `docs` DEPENDS docs_api + docs_sphinx, EXCLUDE_FROM_ALL (el build normal NO genera docs).
+- [x] `option(LEIR_BUILD_DOCS ON)` — nota: el primer configure lo dejó OFF en cache (interacción
+      option/cache); forzar `-DLEIR_BUILD_DOCS=ON` la primera vez.
+- [x] Verificado: `cmake --build build/windows-debug --target docs` → exit 0 → doxygen + sphinx → sitio.
 
 ### 3.5 Contenido inicial (guías en Markdown)
 - [ ] `docs/sphinx/index.md` — main page.

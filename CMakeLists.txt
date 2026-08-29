@@ -38,3 +38,6 @@ endif()
 if(LEIR_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+# Documentation system (Doxygen -> XML -> Sphinx site); target `docs`
+include(cmake/DocsTooling.cmake)
