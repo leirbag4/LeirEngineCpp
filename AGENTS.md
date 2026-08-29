@@ -1055,6 +1055,13 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: command buffer en sync points (paralelo seguro)** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §6/§10): `CommandBuffer` thread-safe (mutex; `Replay` swapea los ops
+  atómicamente y los aplica fuera del lock). `SystemPipeline::Run(fixedDt, dt, jobs*, cb*, world*)`
+  aplica el `Replay` **entre fases** (Fixed→Update→Render). Verificado en `ECSTest` (**ALL PASS**):
+  un sistema en fase Update encola un destroy y el replay del sync point lo aplica (entidad muerta,
+  viva intacta, buffer drenado). Build limpio, ctest 3/3, smoke editor OK.
+
 - **Hybrid ECS — Fase 2: scheduler de sistemas paralelo (dependencias de acceso)** (2026-08-28,
   `TODO_HYBRID_ECS.md` §6/§10): `ISystem::GetAccess()` (lista `SystemAccess{typeId, write}`);
   `SystemPipeline::Run(fixedDt, dt, JobSystem*)` hace **scheduling topológico por niveles** — dos

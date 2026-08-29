@@ -13,6 +13,9 @@ class JobSystem;
 
 namespace ECS {
 
+class CommandBuffer;
+class World;
+
 enum class SystemPhase : uint8_t {
     FixedUpdate, // deterministic, fixed timestep (physics)
     Update,      // gameplay
@@ -51,11 +54,14 @@ protected:
 // Render in registration order within each phase, but systems whose declared
 // access does NOT conflict are scheduled on the JobSystem in parallel (level
 // based topological scheduling; conflicting systems keep the registration
-// order). With no JobSystem (or a single thread) it runs sequentially.
+// order). With no JobSystem (or a single thread) it runs sequentially. A
+// CommandBuffer + World may be passed: the deferred structural changes are
+// replayed at the sync points BETWEEN phases (parallel-safe).
 class LEIR_API SystemPipeline {
 public:
     void Add(ISystem* system, SystemPhase phase);
-    void Run(float fixedDt, float dt, JobSystem* jobs = nullptr);
+    void Run(float fixedDt, float dt, JobSystem* jobs = nullptr,
+             CommandBuffer* cb = nullptr, World* world = nullptr);
     size_t Count() const { return m_Fixed.size() + m_Update.size() + m_Render.size(); }
 
 private:

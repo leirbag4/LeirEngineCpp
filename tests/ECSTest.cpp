@@ -431,6 +431,27 @@ int main()
         Check(readA.m_Sum == 17.0f, "parallel: scheduler kept dependency order (6+11)");
     }
 
+    // Command buffer replayed at the sync points during a parallel run.
+    {
+        World wc;
+        OwnedGroup<Health> hg(&wc);
+        CommandBuffer cb;
+        ExpireSystem exp(&wc, &hg, &cb);
+        SystemPipeline pp;
+        pp.Add(&exp, SystemPhase::Update);
+        Entity e1 = wc.Create();
+        wc.Add<Health>(e1).hp = 0.0f;
+        Entity e2 = wc.Create();
+        wc.Add<Health>(e2).hp = 50.0f;
+        hg.Sync(wc);
+        wc.ClearJournal();
+        JobSystem jobs;
+        pp.Run(0.0f, 1.0f, &jobs, &cb, &wc); // Update phase enqueues -> replayed at sync point
+        Check(!wc.IsAlive(e1), "command buffer replayed at the sync point (parallel-safe)");
+        Check(wc.IsAlive(e2), "living entity untouched");
+        Check(cb.IsEmpty(), "command buffer drained after replay");
+    }
+
     // --- HybridComponent (OOP component boxed in the ECS) ---
     World hw;
     Entity he = hw.Create();

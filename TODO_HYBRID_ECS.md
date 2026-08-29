@@ -495,7 +495,12 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       `jobs` (o 1 thread) → secuencial. Verificado en `ECSTest` (**ALL PASS**): un sistema que lee
       Position corre DESPUÉS del que la escribe, tanto en secuencial como en paralelo (resultados
       idénticos).
-- [ ] Command buffer aplicado en sync points (paralelo seguro).
+- [x] **Command buffer en sync points (paralelo seguro)**: `CommandBuffer` es **thread-safe** (mutex;
+      `Replay` swapea los ops atómicamente y los aplica fuera del lock). `SystemPipeline::Run(fixedDt,
+      dt, jobs*, cb*, world*)` aplica el `Replay` **entre fases** (Fixed→Update→Render) — los cambios
+      estructurales diferidos encolados por sistemas paralelos se aplican en el sync point, no a mitad
+      de iteración. Verificado en `ECSTest` (**ALL PASS**): un sistema en fase Update encola un destroy
+      y el `Replay` del sync point lo aplica (entidad muerta, viva intacta, buffer drenado).
 - [ ] Benchmarks: fps / frame time / cache misses por plataforma (targets en §11).
 - [ ] (Futuro) AVX/AVX-512 con dispatcher runtime (`/arch:AVX2` + cpuid).
 

@@ -18,11 +18,17 @@ void SystemPipeline::Add(ISystem* system, SystemPhase phase)
     }
 }
 
-void SystemPipeline::Run(float fixedDt, float dt, JobSystem* jobs)
+void SystemPipeline::Run(float fixedDt, float dt, JobSystem* jobs, CommandBuffer* cb, World* world)
 {
     RunPhase(m_Fixed, fixedDt, jobs);
+    if (cb && world)
+        cb->Replay(*world); // sync point
     RunPhase(m_Update, dt, jobs);
+    if (cb && world)
+        cb->Replay(*world); // sync point
     RunPhase(m_Render, dt, jobs);
+    if (cb && world)
+        cb->Replay(*world); // sync point
 }
 
 namespace {
