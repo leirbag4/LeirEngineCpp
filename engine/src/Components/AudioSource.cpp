@@ -7,6 +7,62 @@
 
 namespace Leir {
 
+AudioSource::AudioSource(AudioSource&& other) noexcept
+    : Component(other)
+    , m_Clip(std::move(other.m_Clip))
+    , m_Source(other.m_Source)
+    , m_Initialized(other.m_Initialized)
+    , m_Playing(other.m_Playing)
+    , m_Started(other.m_Started)
+    , m_Looping(other.m_Looping)
+    , m_Volume(other.m_Volume)
+    , m_Pitch(other.m_Pitch)
+    , m_PlayOnAwake(other.m_PlayOnAwake)
+    , m_Spatial3D(other.m_Spatial3D)
+    , m_MinDistance(other.m_MinDistance)
+    , m_MaxDistance(other.m_MaxDistance)
+{
+    other.m_Source = kInvalidSoundId;
+    other.m_Initialized = false;
+}
+
+AudioSource& AudioSource::operator=(AudioSource&& other) noexcept
+{
+    if (this == &other)
+        return *this;
+    FreeSource();
+    m_Clip = std::move(other.m_Clip);
+    m_Source = other.m_Source;
+    m_Initialized = other.m_Initialized;
+    m_Playing = other.m_Playing;
+    m_Started = other.m_Started;
+    m_Looping = other.m_Looping;
+    m_Volume = other.m_Volume;
+    m_Pitch = other.m_Pitch;
+    m_PlayOnAwake = other.m_PlayOnAwake;
+    m_Spatial3D = other.m_Spatial3D;
+    m_MinDistance = other.m_MinDistance;
+    m_MaxDistance = other.m_MaxDistance;
+    other.m_Source = kInvalidSoundId;
+    other.m_Initialized = false;
+    return *this;
+}
+
+AudioSource::~AudioSource()
+{
+    FreeSource();
+}
+
+void AudioSource::FreeSource()
+{
+    if (m_Initialized) {
+        if (IAudioBackend* backend = AudioEngine::GetInstance().GetBackend())
+            backend->DestroySource(m_Source);
+        m_Initialized = false;
+        m_Source = kInvalidSoundId;
+    }
+}
+
 void AudioSource::SetClip(std::shared_ptr<AudioClip> clip)
 {
     m_Clip = std::move(clip);
@@ -98,30 +154,20 @@ void AudioSource::OnAwake()
     }
 }
 
-void AudioSource::OnStart()
+void AudioSource::AutoStart()
 {
+    if (m_Started)
+        return;
+    m_Started = true;
     if (m_PlayOnAwake)
         Play();
 }
 
-void AudioSource::OnUpdate(float deltaTime)
+void AudioSource::Sync3D(const Vector3& pos)
 {
-    (void)deltaTime;
     if (m_Initialized && m_Spatial3D) {
-        if (IAudioBackend* backend = GetBackend()) {
-            Vector3 pos = GetOwner()->GetTransform().GetWorldPosition();
+        if (IAudioBackend* backend = GetBackend())
             backend->SetSource3D(m_Source, pos);
-        }
-    }
-}
-
-void AudioSource::OnDestroy()
-{
-    if (m_Initialized) {
-        if (IAudioBackend* backend = AudioEngine::GetInstance().GetBackend())
-            backend->DestroySource(m_Source);
-        m_Initialized = false;
-        m_Source = kInvalidSoundId;
     }
 }
 

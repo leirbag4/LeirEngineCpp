@@ -3,6 +3,7 @@
 #include "LeirEngine/Audio/AudioBackend.h"
 #include "LeirEngine/Audio/AudioTypes.h"
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Core/Export.h"
 
 #include <memory>
@@ -12,12 +13,21 @@ namespace Leir {
 
 class AudioClip;
 
-// Unity-style 3D sound emitter component. Plays a clip through the engine's
-// audio backend; when Spatial3D is enabled its position is synced from the
-// owning Transform every frame (OnUpdate) and the sound is 3D-positioned
-// (attenuation by distance from the AudioListener). Otherwise it is 2D.
+// Unity-style 3D sound emitter component (data component, Incremento 3,
+// TODO_HYBRID_ECS.md §10). Plays a clip through the engine's audio backend.
+// OnAwake creates the backend source (called by AddComponent); AutoStart (the
+// play-on-awake trigger) and the per-frame 3D position sync are driven by
+// AudioSyncSystem. The source is owned here: move-only so it can live directly
+// in the ECS pool (the SoundId is transferred on move and freed on destroy).
 class LEIR_API AudioSource : public Component {
 public:
+    AudioSource() = default;
+    ~AudioSource() override;
+    AudioSource(AudioSource&&) noexcept;
+    AudioSource& operator=(AudioSource&&) noexcept;
+    AudioSource(const AudioSource&) = delete;
+    AudioSource& operator=(const AudioSource&) = delete;
+
     void SetClip(std::shared_ptr<AudioClip> clip);
     // Convenience: loads the clip through the AudioEngine cache.
     void SetClipPath(const std::string& path);
@@ -50,18 +60,21 @@ public:
     double GetTime() const;
     float GetDuration() const;
 
+    // Driven by AudioSyncSystem (replaces OnStart/OnUpdate/OnDestroy).
+    void AutoStart();
+    void Sync3D(const Vector3& pos);
+
     void OnAwake() override;
-    void OnStart() override;
-    void OnUpdate(float deltaTime) override;
-    void OnDestroy() override;
 
 private:
+    void FreeSource();
     IAudioBackend* GetBackend() const;
 
     std::shared_ptr<AudioClip> m_Clip;
     SoundId m_Source = kInvalidSoundId;
     bool m_Initialized = false;
     bool m_Playing = false;
+    bool m_Started = false;
 
     bool m_Looping = false;
     float m_Volume = 1.0f;
@@ -74,3 +87,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::AudioSource> : std::true_type {
+};

@@ -74,7 +74,7 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/UI/Dock/DockDropOverlay.cpp
     ${LEIR_ROOT}/engine/src/UI/Dock/DockManager.cpp
     ${LEIR_ROOT}/engine/src/Physics/PhysicsWorld.cpp
-    {LEIR_ROOT}/engine/src/Physics/RigidBody.cpp
+    ${LEIR_ROOT}/engine/src/Physics/RigidBody.cpp
     ${LEIR_ROOT}/engine/src/Physics/PhysicsSyncSystem.cpp
     ${LEIR_ROOT}/engine/src/Physics/Collider.cpp
     ${LEIR_ROOT}/engine/src/Audio/AudioEngine.cpp
@@ -83,6 +83,7 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/Audio/SoundPlayer.cpp
     ${LEIR_ROOT}/engine/src/Components/AudioSource.cpp
     ${LEIR_ROOT}/engine/src/Components/AudioListener.cpp
+    ${LEIR_ROOT}/engine/src/Audio/AudioSyncSystem.cpp
 )
 
 target_include_directories(LeirEngineCore

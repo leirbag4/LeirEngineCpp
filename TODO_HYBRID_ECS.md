@@ -480,8 +480,14 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
         `SetType` destruye y el sistema recrea al siguiente update. `Scene::OnUpdate` lo corre después de
         `StepPhysics`. Verificado: build limpio, ctest 3/3 (**PhysicsTest**: gravity fall + kinematic
         + demás), PhysicsDemo (`objs=10`, sin crash), smoke editor OK.
-  - [ ] **Incremento 3 — Audio a data + sistema**: `AudioSource`/`AudioListener` → POD +
-        `AudioSyncSystem`.
+  - [x] **Incremento 3 — Audio a data + sistema**: `AudioSource`/`AudioListener` → `IsDataComponent`.
+        `AudioSource` es **move-only** (el `SoundId` se transfiere al mover y se libera en el dtor — el
+        pool swap-and-pop necesita moves correctos para recursos no copiables). `OnAwake` sigue creando
+        el source (lo llama `AddComponent`); el lifecycle viejo (OnStart/OnUpdate/OnDestroy) se movió al
+        nuevo **`AudioSyncSystem`** (`Audio/AudioSyncSystem.{h,cpp}`): push del listener (pos + forward/
+        up desde el `WorldTransform`) + play-on-awake + sync 3D de cada source. `Scene::OnUpdate` lo
+        corre. Verificado: build limpio, ctest 3/3, PhysicsDemo (audio: listener + música), smoke editor
+        OK. Pendiente: verificación de audio por el usuario.
   - [ ] **Incremento 4 — SoA por campo + SIMD** en los pools calientes (columnas `posX[]/…`,
         alineadas 16/64B) — Fase 2 pura, ahora sobre data contigua.
 

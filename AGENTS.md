@@ -1055,6 +1055,17 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Componentes a data (Incremento 3): audio a data + `AudioSyncSystem`** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §10): `AudioSource`/`AudioListener` → `IsDataComponent`. `AudioSource` es
+  **move-only** (el `SoundId` se transfiere al mover, se libera en el dtor — el pool swap-and-pop
+  necesita moves correctos para recursos no copiables; sin esto el dtor liberaba el source ya copiado →
+  dangling). `OnAwake` sigue creando el source (lo llama `AddComponent`); el lifecycle (OnStart/OnUpdate/
+  OnDestroy) se movió al nuevo **`AudioSyncSystem`**: push del listener (pos + forward/up del
+  `WorldTransform`) + play-on-awake + sync 3D de cada source. `Scene::OnUpdate` lo corre. **CI web**:
+  el CMakeLists.web.txt quedó roto por una edición (faltaba `$` en `{LEIR_ROOT}/RigidBody.cpp`) →
+  corregido + `AudioSyncSystem.cpp` agregado. Verificado: build limpio, ctest 3/3, PhysicsDemo (audio),
+  smoke editor OK.
+
 - **Hybrid ECS — Componentes a data (Incremento 2): física a data + `PhysicsSyncSystem`** (2026-08-28,
   `TODO_HYBRID_ECS.md` §10): `RigidBody`/`Collider` → `IsDataComponent` (POD en pools). El lifecycle
   viejo (OnStart/OnUpdate) se movió a `Physics/PhysicsSyncSystem.{h,cpp}`: crea el body Jolt lazy desde

@@ -75,6 +75,7 @@ add_library(LeirEngine SHARED
     src/Audio/SoundPlayer.cpp
     src/Components/AudioSource.cpp
     src/Components/AudioListener.cpp
+    src/Audio/AudioSyncSystem.cpp
 )
 
 if(WIN32 AND MSVC)

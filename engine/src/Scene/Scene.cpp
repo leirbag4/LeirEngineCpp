@@ -183,7 +183,10 @@ void Scene::OnUpdate(float deltaTime)
     // Physics data components: lazily create bodies and sync Jolt <-> world.
     m_PhysicsSync.Update(m_World, m_Transforms);
 
-    // Drive the remaining hybrid component lifecycle (audio, future scripts).
+    // Audio data components: listener + 3D source sync.
+    m_AudioSync.Update(m_World);
+
+    // Drive the remaining hybrid component lifecycle (future scripts).
     for (auto* comp : m_World.GetHybrids())
         comp->Tick(deltaTime);
 
