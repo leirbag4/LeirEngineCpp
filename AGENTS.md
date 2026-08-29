@@ -579,6 +579,51 @@ Scene (owns objects, physics world, render queue)
 - Headers in `include/LeirEngine/<Module>/`, sources in `src/`
 - Each public header includes `Core/Export.h` for `LEIR_API`
 
+## Documentación del código (Doxygen) — regla OBLIGATORIA
+
+El repo tiene un sistema de docs automatizado (Doxygen → XML → Sphinx/Breathe/Exhale/MyST/Furo, ver
+`TODO_DOCS.md`). Cuando opencode toca o crea código fuente, **documenta con esta convención**:
+
+**Qué se documenta**
+- ✅ **Headers públicos** (`engine/include/LeirEngine/**`, `editor/src/*.h`): `@file @brief @ingroup`
+  al tope + docblocks completos en TODOS los públicos.
+- ❌ **`.cpp`**: NO docblocks — solo comentarios `//` de implementación (la API vive en los headers).
+- ❌ **Métodos/campos privados**: NO (detalle de implementación). Campos privados solo con `///<` si
+  aportan algo.
+- ✅ Enums + enumerators, funciones libres (Mathf/Primitives), clases/structs, métodos públicos.
+
+**Formato (estándar de industria)**
+- Bloques `/** ... */`; comando con prefijo `@` (`@brief`, `@param`, `@return`, `@code`, `@ingroup`,
+  `@tparam`, `@details`, `@note`, `@warning`). Miembros en una línea con `///<`.
+- Métodos públicos: docblock **completo** = `@brief` + `@param[in/out]` (si tiene) + `@return` (si no
+  es void) + `@throw` (si puede lanzar).
+
+```cpp
+/**
+ * @file World.h
+ * @brief ECS container: entities, pools, journal and hybrid registry.
+ * @ingroup ECS
+ */
+
+/**
+ * @brief Adds a component of type T to the entity (one-per-type).
+ * @tparam T Tipo del campo (POD).
+ * @param[in] e Entidad objetivo.
+ * @return Referencia al componente vivo; el existente si ya estaba.
+ */
+template <typename T> T& Add(Entity e);
+
+std::vector<uint32_t> m_Generations; ///< entity index -> generation
+```
+
+**Módulos → `@ingroup`**: Math, ECS, Scene, Components, Rendering, RHI, Audio, Physics, UI, Input,
+Core, Editor.
+
+**Modo de trabajo**: retrofit **progresivo por módulo** — Math → ECS → Core → Scene → Components →
+Rendering → RHI → Audio → Physics → UI → Input → Editor. Se documenta un header cuando se toca; si
+opencode toca un header público sin docblocks, los agrega en el mismo cambio. Al completar un módulo,
+marcar el checkbox de `TODO_DOCS.md` §3.6.
+
 ## UIRenderer Draw Layers
 
 The UI renderer draws in 3 phases (bottom to top):

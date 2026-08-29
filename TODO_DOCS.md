@@ -126,13 +126,95 @@ docs/
 - [ ] (Opcional) Guías iniciales: `guides/engine/getting-started.md`, `guides/engine/architecture.md`.
 - [ ] `docs/.gitignore` (ignora `tools/`, mantiene `site/`).
 
-### 3.6 Documentación del código (convención)
-- [ ] Los headers ya tienen comentarios `//`; convertirlos a Doxygen `///` o `/** */` en los públicos
-      clave (o usar `EXTRACT_ALL` sin docblocks — documenta todo igual, mejor con docblocks).
-- [ ] Agregar `@defgroup`/`@{ @}` por módulo en un header índice (`engine/include/LeirEngine/Modules.h`
-      o en cada header).
-- [ ] Docblocks con `@brief`, `@param`, `@return`, ejemplos con `@code`.
+### 3.6 Documentación del código (convención Doxygen)
+
+**Regla (aprobada por el usuario 2026-08-28): documentamos los HEADERS públicos con docblocks
+completos; los `.cpp` NO se documentan (solo comentarios `//` de implementación — la API vive en los
+headers). Retrofit PROGRESIVO por módulo: Math → ECS → Core → Scene → Components → Rendering → RHI →
+Audio → Physics → UI → Input → Editor; se documenta un header cuando se toca (o a pedido).**
+Mirror obligatorio en `AGENTS.md` ("Documentación del código (Doxygen)").
+
+#### Formato (el estándar de industria)
+- Bloques multilínea `/** ... */`; comando con prefijo `@` (`@brief`, `@param`, `@return`, `@code`,
+  `@ingroup`, `@tparam`, `@details`, `@note`, `@warning`). Miembros en una línea con `///<`.
+- Un header `@file @brief @ingroup <Módulo>` al tope; cada clase/método/función/enum con docblock.
+
+#### Ejemplos
+```cpp
+// File header (tope de cada header público)
+/**
+ * @file World.h
+ * @brief ECS container: entities, pools, journal and hybrid registry.
+ * @ingroup ECS
+ */
+
+// Clase
+/**
+ * @brief Generational entity handle {index, generation}.
+ * @details Handles viejos jamás resuelven (la generación sube al destruir).
+ *          El índice 0 está reservado como entidad nula.
+ */
+class LEIR_API Entity { ... };
+
+// Método público (docblock completo: brief + params + return)
+/**
+ * @brief Adds a component of type T to the entity (one-per-type).
+ * @tparam T Tipo del campo (POD).
+ * @param[in] e Entidad objetivo.
+ * @return Referencia al componente vivo; el existente si ya estaba.
+ */
+template <typename T> T& Add(Entity e);
+
+// Función libre (Mathf)
+/**
+ * @brief Interpolación lineal entre dos valores.
+ * @param a Valor inicial.
+ * @param b Valor final.
+ * @param t Factor de interpolación [0,1].
+ * @return a + (b - a) * t.
+ */
+inline float Lerp(float a, float b, float t);
+
+// Enum con enumerators (trailing)
+/**
+ * @brief Filtro de verbosidad del logger.
+ */
+enum class LogLevel {
+    Trace,   ///< descartado en el origen (debug-only)
+    Debug,   ///< debug-only
+    Info,    ///< retenido en el ring buffer
+    Error    ///< retenido; además va a stderr
+};
+
+// Campo (trailing)
+std::vector<uint32_t> m_Generations; ///< entity index -> generation
+
+// Grupo por módulo (cada header lleva "@ingroup <Módulo>" en su @file)
+/** @defgroup ECS Entity Component System (núcleo data-oriented) */
+/** @{ */
+/** @} */
+```
+
+#### Scope (qué se documenta)
+| Qué | ¿Se documenta? | Formato |
+|---|---|---|
+| Headers públicos (`engine/include/...`, `editor/src/*.h`) | ✅ siempre | `@file @brief @ingroup` + docblocks |
+| `.cpp` | ❌ (solo `//` normales de implementación) | — |
+| Clases / structs | ✅ | brief + details + `@tparam` |
+| Métodos públicos | ✅ | brief + `@param[in/out]` + `@return` + `@throw` |
+| Campos públicos | ✅ | trailing `///<` |
+| Campos privados | ⚠️ opcional (solo si aporta) | trailing `///<` |
+| Enums + enumerators | ✅ | brief + `///<` por enumerator |
+| Funciones libres | ✅ | brief + `@param` + `@return` |
+| Módulos | ✅ | `@defgroup` (ver §5) + `@ingroup` por header |
+| Ejemplos | ✅ cuando aporta | `@code ... @endcode` |
+| Métodos privados | ❌ (detalle de implementación) | — |
+
+#### Módulos → `@ingroup` (ver tabla §5)
+Math, ECS, Scene, Components, Rendering, RHI, Audio, Physics, UI, Input, Core, Editor.
 - [ ] (Diferido) `@example` apuntando a `examples/*`.
+- [ ] Retrofit progresivo: Math → ECS → Core → Scene → Components → Rendering → RHI → Audio →
+      Physics → UI → Input → Editor (marcar cada módulo al terminarlo).
 
 ### 3.7 Verificación
 - [ ] `setup_tools.bat` corre limpio en esta máquina (baja doxygen+graphviz+pip).
