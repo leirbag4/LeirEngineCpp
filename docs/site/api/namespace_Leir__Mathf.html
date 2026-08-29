@@ -1,0 +1,820 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Namespace Leir::Primitives" href="namespace_Leir__Primitives.html"><link rel="prev" title="Namespace Leir::ECS" href="namespace_Leir__ECS.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Namespace Leir::Mathf - LeirEngine</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/collapsible-lists\css\tree_view.css?v=a885cde7" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=b3b611e7" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">LeirEngine</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">LeirEngine</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">API Reference</a><input aria-label="Toggle navigation of API Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40062320264026327061363130240107047217110277051231.html">Namespace @062320264026327061363130240107047217110277051231</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40074246043211251170131230261106310135274101207043.html">Namespace @074246043211251170131230261106310135274101207043</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40120361354131326011061326332040032143047154032146.html">Namespace @120361354131326011061326332040032143047154032146</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40154150324026135171336301076212056070101056316240.html">Namespace @154150324026135171336301076212056070101056316240</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40200252123362252157160215142201301076060246262027.html">Namespace @200252123362252157160215142201301076060246262027</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40203127160073226037351002121002117005262257042033.html">Namespace @203127160073226037351002121002117005262257042033</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40323143121045117363123153330072000155243217301052.html">Namespace @323143121045117363123153330072000155243217301052</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40370064334242244065053073237044150154332241344067.html">Namespace @370064334242244065053073237044150154332241344067</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_%40376321355112146374152336166153275055054351220213.html">Namespace @376321355112146374152336166153275055054351220213</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_CrashDiagnostics.html">Namespace CrashDiagnostics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_CrashDiagnostics__%40051356047363113032311273270140355077010145324265.html">Namespace CrashDiagnostics::@051356047363113032311273270140355077010145324265</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_JPH.html">Namespace JPH</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir.html">Namespace Leir</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir__ECS.html">Namespace Leir::ECS</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Namespace Leir::Mathf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir__Primitives.html">Namespace Leir::Primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir__RHI.html">Namespace Leir::RHI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir__RHI__%40206316300344362323161174367142204307317312003067.html">Namespace Leir::RHI::@206316300344362323161174367142204307317312003067</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_Leir__SceneGroups.html">Namespace Leir::SceneGroups</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_PhysicsLayers.html">Namespace PhysicsLayers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_slang.html">Namespace slang</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace_std.html">Namespace std</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_editor_grid_1_1_grid_push_constants.html">Struct EditorGrid::GridPushConstants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_editor_grid_1_1_grid_u_b_o.html">Struct EditorGrid::GridUBO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_editor_grid_1_1_grid_vertex.html">Struct EditorGrid::GridVertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_editor_grid_1_1_level_role.html">Struct EditorGrid::LevelRole</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_editor_grid_1_1_line.html">Struct EditorGrid::Line</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_gizmo_renderer_1_1_gizmo_push_constants.html">Struct GizmoRenderer::GizmoPushConstants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_gizmo_renderer_1_1_gizmo_u_b_o.html">Struct GizmoRenderer::GizmoUBO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_gizmo_renderer_1_1_gizmo_vertex.html">Struct GizmoRenderer::GizmoVertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_gizmo_renderer_1_1_line.html">Struct GizmoRenderer::Line</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_gizmo_renderer_1_1_solid_vertex.html">Struct GizmoRenderer::SolidVertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_anchor_set.html">Struct AnchorSet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_bounds.html">Struct Bounds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_char_event.html">Struct CharEvent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_color.html">Struct Color</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_color32.html">Struct Color32</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_dock_panel.html">Struct DockPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_active.html">Struct Active</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_change_record.html">Struct ChangeRecord</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_component_type_info.html">Struct ComponentTypeInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_entity.html">Struct Entity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_hybrid_component.html">Template Struct HybridComponent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_local_transform.html">Struct LocalTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_system_access.html">Struct SystemAccess</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_tag2_d.html">Struct Tag2D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_tag3_d.html">Struct Tag3D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_tag_u_i.html">Struct TagUI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_e_c_s_1_1_world_transform.html">Struct WorldTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_font_1_1_glyph_info.html">Struct Font::GlyphInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_font_1_1_packed_glyph.html">Struct Font::PackedGlyph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component.html">Template Struct IsDataComponent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_audio_listener_01_4.html">Template Struct IsDataComponent&lt; Leir::AudioListener &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_audio_source_01_4.html">Template Struct IsDataComponent&lt; Leir::AudioSource &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_camera_01_4.html">Template Struct IsDataComponent&lt; Leir::Camera &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_collider_01_4.html">Template Struct IsDataComponent&lt; Leir::Collider &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_light_01_4.html">Template Struct IsDataComponent&lt; Leir::Light &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_mesh_renderer_01_4.html">Template Struct IsDataComponent&lt; Leir::MeshRenderer &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_rigid_body_01_4.html">Template Struct IsDataComponent&lt; Leir::RigidBody &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_is_data_component_3_01_leir_1_1_sprite_renderer_01_4.html">Template Struct IsDataComponent&lt; Leir::SpriteRenderer &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_keyboard.html">Struct Keyboard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_key_combo.html">Struct KeyCombo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_key_event.html">Struct KeyEvent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8debug.html">Struct LeirSettings::[struct].debug</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8debug_8stats.html">Struct LeirSettings::[struct].debug.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8dock.html">Struct LeirSettings::[struct].dock</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8graphics.html">Struct LeirSettings::[struct].graphics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8layout.html">Struct LeirSettings::[struct].layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_leir_settings_1_1_0fstruct_0e_8window.html">Struct LeirSettings::[struct].window</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_log_message.html">Struct LogMessage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_matrix3x3.html">Struct Matrix3x3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_matrix4x4.html">Struct Matrix4x4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_mouse.html">Struct Mouse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_offset_set.html">Struct OffsetSet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_per_mesh_u_b_o.html">Struct PerMeshUBO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_plane.html">Struct Plane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_pointer.html">Struct Pointer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_pointer_event.html">Struct PointerEvent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_push_constants.html">Struct PushConstants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_quaternion.html">Struct Quaternion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_queue_family_indices.html">Struct QueueFamilyIndices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_ray.html">Struct Ray</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_rect.html">Struct Rect</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_rect2_d.html">Struct Rect2D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_rect_int.html">Struct RectInt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_compile_result.html">Struct CompileResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_attachment.html">Struct GAttachment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_caps.html">Struct GCaps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_draw_record.html">Struct GDrawRecord</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_record.html">Struct GRecord</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_render_pass_record.html">Struct GRenderPassRecord</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_g_set_binding.html">Struct GSetBinding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_blend_state.html">Struct RHIBlendState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_buffer.html">Struct RHIBuffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_clear_value.html">Struct RHIClearValue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_command_buffer.html">Struct RHICommandBuffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_binding.html">Struct RHIDescriptorBinding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_buffer_info.html">Struct RHIDescriptorBufferInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_image_info.html">Struct RHIDescriptorImageInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_pool.html">Struct RHIDescriptorPool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_set.html">Struct RHIDescriptorSet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_set_layout.html">Struct RHIDescriptorSetLayout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_descriptor_write.html">Struct RHIDescriptorWrite</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_device_memory.html">Struct RHIDeviceMemory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_framebuffer.html">Struct RHIFramebuffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_image.html">Struct RHIImage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_image_view.html">Struct RHIImageView</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_pass_template.html">Struct RHIPassTemplate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_pass_template_desc.html">Struct RHIPassTemplateDesc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_pipeline.html">Struct RHIPipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_pipeline_desc.html">Struct RHIPipelineDesc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_pipeline_layout.html">Struct RHIPipelineLayout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_push_constant_range.html">Struct RHIPushConstantRange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_rect2_d.html">Struct RHIRect2D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_render_pass.html">Struct RHIRenderPass</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_sampler.html">Struct RHISampler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_shader_module.html">Struct RHIShaderModule</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_shader_stage_info.html">Struct RHIShaderStageInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_vertex_attribute.html">Struct RHIVertexAttribute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_vertex_input_binding.html">Struct RHIVertexInputBinding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_viewport.html">Struct RHIViewport</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_r_h_i_viewport_state.html">Struct RHIViewportState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_shader_binding.html">Struct ShaderBinding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_shader_push_constant_range.html">Struct ShaderPushConstantRange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_1_1_shader_reflection.html">Struct ShaderReflection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_r_h_i_set_layout_entry.html">Struct RHISetLayoutEntry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_scroll_event.html">Struct ScrollEvent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_sprite_push_constants.html">Struct SpritePushConstants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_sprite_vertex.html">Struct SpriteVertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_swapchain_support.html">Struct SwapchainSupport</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_text_glyph_quad.html">Struct TextGlyphQuad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_touch.html">Struct Touch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_touch_finger.html">Struct TouchFinger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_transform_1_1_ecs_backing.html">Struct Transform::EcsBacking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_b_o_buffer.html">Struct UBOBuffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_i_context_menu_1_1_item.html">Struct UIContextMenu::Item</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_i_render_stats.html">Struct UIRenderStats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_i_text_area_1_1_visual_row.html">Struct UITextArea::VisualRow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_i_tree_view_1_1_drop_target.html">Struct UITreeView::DropTarget</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_u_i_vertex.html">Struct UIVertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vector2.html">Struct Vector2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vector2i.html">Struct Vector2i</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vector3.html">Struct Vector3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vector3i.html">Struct Vector3i</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vector4.html">Struct Vector4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vertex.html">Struct Vertex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_viewport_draw.html">Struct ViewportDraw</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_leir_1_1_vulkan_device_config.html">Struct VulkanDeviceConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_shader_exporter_1_1_shader_file.html">Struct ShaderExporter::ShaderFile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_shader_hot_reloader_1_1_entry.html">Struct ShaderHotReloader::Entry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structstd_1_1hash_3_01_leir_1_1_e_c_s_1_1_entity_01_4.html">Template Struct hash&lt; Leir::ECS::Entity &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="structstd_1_1hash_3_01_leir_1_1_u_u_i_d_01_4.html">Template Struct hash&lt; Leir::UUID &gt;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_transform_gizmo_1_1_drag_state.html">Struct TransformGizmo::DragState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_transform_gizmo_1_1_frame.html">Struct TransformGizmo::Frame</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_transform_gizmo_1_1_gizmo_frame.html">Struct TransformGizmo::GizmoFrame</a></li>
+<li class="toctree-l2"><a class="reference internal" href="struct_transform_gizmo_1_1_ray.html">Struct TransformGizmo::Ray</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_camera_test_panel.html">Class CameraTestPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_console_panel.html">Class ConsolePanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_debug_panel.html">Class DebugPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_debug_submit_input.html">Class DebugSubmitInput</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_debug_text_panel.html">Class DebugTextPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_editor_app.html">Class EditorApp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_editor_camera.html">Class EditorCamera</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_editor_grid.html">Class EditorGrid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_gizmo_line_test_panel.html">Class GizmoLineTestPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_gizmo_log_panel.html">Class GizmoLogPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_gizmo_renderer.html">Class GizmoRenderer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_grid_panel.html">Class GridPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_hierarchy_panel.html">Class HierarchyPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_inspector_transform_panel.html">Class InspectorTransformPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_audio_clip.html">Class AudioClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_audio_engine.html">Class AudioEngine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_audio_listener.html">Class AudioListener</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_audio_source.html">Class AudioSource</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_audio_sync_system.html">Class AudioSyncSystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_camera.html">Class Camera</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_collider.html">Class Collider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_component.html">Class Component</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_core_application.html">Class CoreApplication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_core_object.html">Class CoreObject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_drop_overlay.html">Class DockDropOverlay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_manager.html">Class DockManager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_node.html">Class DockNode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_pane.html">Class DockPane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_split_node.html">Class DockSplitNode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_splitter.html">Class DockSplitter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_tab.html">Class DockTab</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_dock_tab_bar.html">Class DockTabBar</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_command_buffer.html">Class CommandBuffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_component_pool_base.html">Class ComponentPoolBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_hierarchy_tree.html">Class HierarchyTree</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_i_system.html">Class ISystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_owned_group.html">Template Class OwnedGroup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_so_a_pool.html">Template Class SoAPool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_system_pipeline.html">Class SystemPipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_transform_system.html">Class TransformSystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_typed_pool.html">Template Class TypedPool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_e_c_s_1_1_world.html">Class World</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_event_queue.html">Class EventQueue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_font.html">Class Font</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_struct_leir_1_1_frustum.html">Class Frustum</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_i_audio_backend.html">Class IAudioBackend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_image.html">Class Image</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_input_manager.html">Class InputManager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_i_scene_storage.html">Class ISceneStorage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_job_system.html">Class JobSystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_leir_settings.html">Class LeirSettings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_light.html">Class Light</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_material.html">Class Material</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_mesh.html">Class Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_mesh_renderer.html">Class MeshRenderer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_object2_d.html">Class Object2D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_object3_d.html">Class Object3D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_physics_sync_system.html">Class PhysicsSyncSystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_physics_world.html">Class PhysicsWorld</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_random.html">Class Random</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_render_pipeline.html">Class RenderPipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_render_texture.html">Class RenderTexture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_backend_factory.html">Class BackendFactory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_d3_d12_backend.html">Class D3D12Backend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_g_command_graph.html">Class GCommandGraph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_i_shader_compiler.html">Class IShaderCompiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_render_backend.html">Class RenderBackend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_slang_shader_compiler.html">Class SlangShaderCompiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_vulkan_backend.html">Class VulkanBackend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_r_h_i_1_1_web_g_p_u_backend.html">Class WebGPUBackend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_rigid_body.html">Class RigidBody</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_scene.html">Class Scene</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_scene_manager.html">Class SceneManager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_scroll_view.html">Class ScrollView</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_shader.html">Class Shader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_sound_player.html">Class SoundPlayer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_sprite_renderer.html">Class SpriteRenderer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_sprite_sheet.html">Class SpriteSheet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_texture2_d.html">Class Texture2D</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_transform.html">Class Transform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_button.html">Class UIButton</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_canvas.html">Class UICanvas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_context_menu.html">Class UIContextMenu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_context_menu_1_1_menu_item.html">Class UIContextMenu::MenuItem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_debug_overlay.html">Class UIDebugOverlay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_element.html">Class UIElement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_float_input.html">Class UIFloatInput</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_image.html">Class UIImage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_label.html">Class UILabel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_panel.html">Class UIPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_renderer.html">Class UIRenderer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_scrollbar.html">Class UIScrollbar</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_slider.html">Class UISlider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_text_area.html">Class UITextArea</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_text_input.html">Class UITextInput</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_texture_cache.html">Class UITextureCache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_tree_view.html">Class UITreeView</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_tree_view_item.html">Class UITreeViewItem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_i_viewport_panel.html">Class UIViewportPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_u_u_i_d.html">Class UUID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_vulkan_device.html">Class VulkanDevice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_leir_1_1_x_console.html">Class XConsole</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_shader_exporter.html">Class ShaderExporter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_shader_hot_reloader.html">Class ShaderHotReloader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_text_area_debug_panel.html">Class TextAreaDebugPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_text_area_wrap_panel.html">Class TextAreaWrapPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_toolbar_panel.html">Class ToolbarPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_transform_gizmo.html">Class TransformGizmo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_tree_view_debug_panel.html">Class TreeViewDebugPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_u_i_drag_float_input.html">Class UIDragFloatInput</a></li>
+<li class="toctree-l2"><a class="reference internal" href="class_u_i_test_panel.html">Class UITestPanel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1ada8af6347bb510fb10cab9d43c1a33d6.html">Enum ButtonState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1af9d3aff7efdc829646b6f52c662161f0.html">Enum ButtonTextAlign</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a2081a2a44ea428c062710cc30e8424e5.html">Enum ColliderType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1acfb7755522785ba0b25aab42cc6bf0f0.html">Enum CursorStyle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a23e948ac8ce73e0fd3347006a947865b.html">Enum DockDropZone</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a2e3acd361f428660ad2c1b45be079589.html">Enum DockNodeType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a5454c1774b42f4df883a6cd35377efa0.html">Enum DockOrientation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_e_c_s_1a8ad2cd3008b9094ae14d52f3139ac0fb.html">Enum SystemPhase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a0d95d1dd10157670a9737ccd7e3bb2a8.html">Enum EventAction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1ae7595931bcc8e7ca01bc0393ced7bdbe.html">Enum Key</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a5c5a9c4c2e00c48b3cf307ac16c1cdf2.html">Enum LayoutMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a4fd89f21a3e9fdb49be008254258ce9d.html">Enum LightType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a23d9e5d7d40ea91427192ee517c33c00.html">Enum LogLevel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1a40e8bccdc977f79caa6c5a926eb7b466.html">Enum PointerButton</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1ae0f58505b774347fcc26eea154c1a1a5.html">Enum PointerSource</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a664785114c6798e66081c82ff5d1ad6a.html">Enum Aspect</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a3d7ec42270acf165895506869354fc92.html">Enum BufferUsage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1aa0dd998685a064c27a2ed4c9f36e4aa9.html">Enum CullMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a8e6ae278915abaca93aa05835e3eb718.html">Enum DescriptorType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1adbe51e67479a10c234035272ab6a5c41.html">Enum Filter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a08d48414a7c837943470fb4e1514b823.html">Enum Format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a33e82074d6cfaaef06a0487e006add78.html">Enum GRecordType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a149286102de95c47169cd79d2dea538a.html">Enum ImageLayout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a47efe02e6809038ead8a3436279d904d.html">Enum ImageUsage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a57afdd95bb1ce4f8629edc0b45e67a26.html">Enum LoadOp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1aab774d2d28b3838ead8f0248197bc792.html">Enum MemoryProperty</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a0e6c54536e57bd9b078941b84d697bbb.html">Enum PolygonMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a8180322bc3ba22b7066e0d9ab77fae4b.html">Enum SamplerAddressMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1acb061b48997655c2583d74bf1337f2d2.html">Enum ShaderStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1aaaa857ebdbb91c0999c358312762292d.html">Enum ShaderStageMask</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a34607bfe3da60eeaf9e24555d63c1a5f.html">Enum ShaderTarget</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1aad1078c0235c91e5f41922d698ad0cad.html">Enum StoreOp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1a23ac47172dbca0eed8d72ab615e16252.html">Enum Topology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1_1_r_h_i_1ac7292c4808b3d57a84b37d5cbb8cb533.html">Enum VertexInputRate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1aa4a89cbd21323426525adbf7967a8d87.html">Enum RigidBodyType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1aad210c112afe9ce1e0bda52cbc71d9ab.html">Enum SizePolicy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enum_namespace_leir_1af550e87a9a47befcb0dc72f0bc92d455.html">Enum SoundState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function__shader_exporter_8cpp_1a77ba737ffd02f04f7a0bd714785df206.html">Function AllTargets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_crash_diagnostics_1a489fea695a85bca90d51450fee6d728b.html">Function CrashDiagnostics::Init</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_main_8cpp_1a25dffd2f29b6585eb8cb42e80726e68c.html">Function DeleteNonOwnedSubtree</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_main_8cpp_1a33aafd89c0aa7de3d3e7b2c4cf16c28f.html">Function DeleteUiSubtree</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a23781ee19441b7c965145eedfce18b5a.html">Function Leir::Any</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a5db3be6d7d0b10167776cf95613ad907.html">Function Leir::CreatePipelineLayoutFromReflection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a1400499dc66b3cf69e2143377c8dd76a.html">Function Leir::CreateSetLayoutsFromReflection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1af553568b0a73868369309a8ee8733e3f.html">Function Leir::Has</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1adb469e4bf96bfb80690f7975f359663a.html">Function Leir::LoadShaderReflectionFromSidecars</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a82c231f24da15b10527038de702952cf.html">Function Leir::Mathf::Abs(float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aeb2eae2ca410d3d258a8ba2ffa852dd2.html">Function Leir::Mathf::Abs(int)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac07d4e7d15e222ef37bfb68e0674fc37.html">Function Leir::Mathf::Acos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3cbec03b1f44e6698dc7c1f08fa5e709.html">Function Leir::Mathf::Approximately</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a43e032852dde7de82cfe336f52757ad2.html">Function Leir::Mathf::Asin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3050e1b8bcc8b463ce9f93a79fef3d48.html">Function Leir::Mathf::Atan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a16e83192bd9c4c1341447f8f608ddaa9.html">Function Leir::Mathf::Atan2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a38255410a31861d6838803bd0b191c5e.html">Function Leir::Mathf::Ceil</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a838868533bdc05dbaba3826466e4c768.html">Function Leir::Mathf::CeilToInt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1af8e3387d612ac49316fd967967a31919.html">Function Leir::Mathf::Clamp(float, float, float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a174b80c6c70d20fca29ef73e865c44c0.html">Function Leir::Mathf::Clamp(int, int, int)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a948111109b611f1d9e7c5cd14c87df47.html">Function Leir::Mathf::Clamp01</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac5d69bdf0e62589da42c1efcbed5e6d3.html">Function Leir::Mathf::Cos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3efa2e1d593e63265773492f6c92169d.html">Function Leir::Mathf::DeltaAngle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a2ad3d380d350ceed3ab0e380e200c4c9.html">Function Leir::Mathf::Floor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1af56dd02501ae98b6c7cd7fec82d96e8f.html">Function Leir::Mathf::FloorToInt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3d21a7f266763654ecbfcd7790f709d3.html">Function Leir::Mathf::InverseLerp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a14369ac48c702d089fc43ef8fac74fdb.html">Function Leir::Mathf::IsFinite(float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ae311ff41a22d8c20a90d026e3f1ca528.html">Function Leir::Mathf::IsFinite(double)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a716bfcf9c92cedbe51d75e3ea3c15ca4.html">Function Leir::Mathf::Lerp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a753ba124407bb30724bd7dcb9db259a6.html">Function Leir::Mathf::LerpUnclamped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad8ee8d54a9a7f0afcb357d81dcd3b8e8.html">Template Function Leir::Mathf::Max</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a8cf4a3af08533dd8b0a73cb140668e54.html">Template Function Leir::Mathf::Min</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a429d6db652fc25fd5145ba50842207c2.html">Function Leir::Mathf::MoveTowards</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ae3f7b59c35e6e6615c2c913784c9a735.html">Function Leir::Mathf::PingPong</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3ad6404c4535ffe963814af51bbd76f6.html">Function Leir::Mathf::Repeat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aeeb39e812ac49fa7864594130bd3d517.html">Function Leir::Mathf::Round</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a5b3f87edb12840793a224113e1833510.html">Function Leir::Mathf::RoundToInt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a911fd3cac82fdea3243fe3e29a430fa8.html">Function Leir::Mathf::Sign(float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1adc743d8bdef4991f0b9e70be212cb4be.html">Function Leir::Mathf::Sign(int)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ab296ba39483d4f30e7417bf91ae26a7e.html">Function Leir::Mathf::SimdAdd</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac258f82ea50f4331b0068339ffa8ab8d.html">Function Leir::Mathf::SimdAddFloats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a44c7fab810df0f412a462303c0822c32.html">Function Leir::Mathf::SimdFma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a0d6f565f86f3ccddf07bdaebc1caeb65.html">Function Leir::Mathf::SimdFmaFloats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad98bad01c55c5526ccb3bd14cdd77bb0.html">Function Leir::Mathf::SimdGetLane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a6cad8b7fe14aafecd1e0792d535337f5.html">Function Leir::Mathf::SimdGetX</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3c8dba9f24a3551c5e34e1eda902726e.html">Function Leir::Mathf::SimdHMin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a636dc9083412e543565e62332e467d24.html">Function Leir::Mathf::SimdLess</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1abf741e809c0bade0ecb1a4845161f4fc.html">Function Leir::Mathf::SimdLoad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad563728dd6584ca02deaeedeed49114e.html">Function Leir::Mathf::SimdMul</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a0dd0b93dc784dd70f3829983213ff9e0.html">Function Leir::Mathf::SimdMulFloats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a841e52ba3bfb99e093625bcf5cf18f2a.html">Function Leir::Mathf::SimdOr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aecd97a59da75b87b036ae45eda0465e8.html">Function Leir::Mathf::SimdSplat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a848e5d9692175fefe99fb1136462422b.html">Function Leir::Mathf::SimdStore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a25d119781e5a219ad14fd3e8c770592c.html">Function Leir::Mathf::Sin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a8f707c9f7aebb98bc3ab250f9175fc0b.html">Function Leir::Mathf::SmoothDamp(float, float, float&amp;, float, float, float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac1bca069a790e25d30d3d1566335324c.html">Function Leir::Mathf::SmoothDamp(float, float, float&amp;, float, float)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aa0c446ad1c38dbc27c819132bbd90127.html">Function Leir::Mathf::SmoothStep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a95efead0279facc63feeb6b2125bf948.html">Function Leir::Mathf::Sqrt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a63a2d81421d9088af8728cfc7c7ee317.html">Function Leir::Mathf::Tan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1adac7ecd27c6c3a435009887961f83934.html">Function Leir::operator&amp;</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a4986fac2c32accaae06a2a0e556021bb.html">Function Leir::operator*(float, const Color&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1ab0a1daa5f0d1121530e6f5a96e2d5686.html">Function Leir::operator*(float, const Vector2&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1acd581624326957a63b293aeee7720394.html">Function Leir::operator*(int, const Vector2i&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a785f383f54a7dcf088828f873c42be90.html">Function Leir::operator*(float, const Vector3&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1aaff87c142e530799b1d5cdb9b233a9e7.html">Function Leir::operator*(int, const Vector3i&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1acd97d94825714222931f2d5a38f089af.html">Function Leir::operator*(float, const Vector4&amp;)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a04a895d39393d5854342d68e87b8cc48.html">Function Leir::operator|(Key, Key)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1afd7adf2ce00ca5c0356da79c4a2f06cf.html">Function Leir::operator|(Key, KeyCombo)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a4b043f1ac341453627eb33bd0e54a1ab.html">Function Leir::operator|(KeyCombo, Key)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a2be9df4a25f84bda2fea7c586043494c.html">Function Leir::operator|(PointerButton, PointerButton)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1ab48c2c7ece44baff948bc9b43c7acd43.html">Function Leir::operator~</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_primitives_1a6b5f0b13836c2972e4519c0a9625bf80.html">Function Leir::Primitives::CreateCube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_primitives_1a94b53234147794ce60aeed5d1a58fbdf.html">Function Leir::Primitives::CreatePlane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_primitives_1a7d88c0eabef4400bc269fda57961f9bb.html">Function Leir::Primitives::CreateSphere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_r_h_i_1a47245560d59bd8f7887a3a15c2e0aa69.html">Function Leir::RHI::operator|(ShaderStageMask, ShaderStageMask)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_r_h_i_1a70fd4aabe9d8340c2ac9276545725502.html">Function Leir::RHI::operator|(BufferUsage, BufferUsage)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_r_h_i_1aadda884d7a58255e16ae1b349a2941fa.html">Function Leir::RHI::operator|(MemoryProperty, MemoryProperty)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_r_h_i_1aa8f1eb254f008a58bb3f796bc80a9645.html">Function Leir::RHI::operator|(ImageUsage, ImageUsage)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1_1_r_h_i_1abbfc31effdf07b12ef66a46399d94ebe.html">Function Leir::RHI::operator|(Aspect, Aspect)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_namespace_leir_1a0c5e5910727d8aed2f0b84f64e04c7f1.html">Function Leir::ValidateSetLayoutAgainstReflection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function_main_8cpp_1ae66f6b31b5ad750f1fe042a706a4e3d4.html">Function main</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable__hierarchy_panel_8cpp_1abf1a9786f0831c2c6b9e27c382f7653c.html">Variable kHierarchyBg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_e_c_s_1af8cab95e65ebbb7e587fd17661a905f6.html">Variable Leir::ECS::kNullEntity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_e_c_s_1a0108becae08130dd00cce9a6c1fc2304.html">Variable Leir::ECS::kNullIndex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1a0c41373ac5acce1cbd83043d26b4a4e4.html">Variable Leir::kInvalidSoundId</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1ab4f04680b35962caac1a55355f95f80e.html">Variable Leir::Mathf::Deg2Rad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a01b647adafc8f8ba42151c6780d0207b.html">Variable Leir::Mathf::Epsilon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a2ea14867c8f16af0e74897be1b4e2d39.html">Variable Leir::Mathf::Infinity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a86c5e3dbcb14935a63e9f67c24804fee.html">Variable Leir::Mathf::NegativeInfinity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1ad5a2d3eadb47ed162b75b4397244c673.html">Variable Leir::Mathf::PI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1af1ec34448eb9968ca8c2e64cffb3e443.html">Variable Leir::Mathf::Rad2Deg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_physics_layers_1a4d77e04b85f4b61b47d6ca7218b3c482.html">Variable PhysicsLayers::MOVING</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable_namespace_physics_layers_1a6992c8122f79891336f49c13d18cc8a7.html">Variable PhysicsLayers::NON_MOVING</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__quaternion_8h_1abd75661fe7969e19439052a5f69ba5d1.html">Define GLM_ENABLE_EXPERIMENTAL</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__export_8h_1a88775c7d159df987301545d087ced1be.html">Define LEIR_API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__r_h_i_8h_1a3008534d12f66b0de7553140c1156590.html">Define LEIR_BACKEND</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__r_h_i_8h_1ac3ed5aa5fc6c44da9252e84402bfb39f.html">Define LEIR_BACKEND_D3D12</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__r_h_i_8h_1af65da77a86dc39a01d717b6a54b1ebf9.html">Define LEIR_BACKEND_VULKAN</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__r_h_i_8h_1a3711a88e7c4366394fae71fd6d67cd53.html">Define LEIR_BACKEND_WEBGPU</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__simd_8h_1a6f449ef0ac930a388008e84dc6932692.html">Define LEIR_SIMD_SSE2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="define__crash_diagnostics_8cpp_1a9f918755b601cf4bffca775992e6fb90.html">Define NOMINMAX</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1a6eb1c5b3ba08d53ab9c2c894ff0b9801.html">Typedef Leir::ClipId</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1a76ef86502cfe0cafd2d24b4386ae72a5.html">Typedef Leir::EntityID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1ae41a4c760bc646b2cf624f0995be6b76.html">Typedef Leir::InputEvent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_mathf_1a5e9700eb1d4339ae7b4f040554207ace.html">Typedef Leir::Mathf::Simd4f</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_r_h_i_1af105762c62e877e6ee842a96175c1967.html">Typedef Leir::RHI::Handle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_scene_groups_1a65737bcaa97a71210e7f1feb81c58478.html">Typedef Leir::SceneGroups::Cameras</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_scene_groups_1ab4e5a44d433838d3648c6a0566c78c3f.html">Typedef Leir::SceneGroups::Lights</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_scene_groups_1ab542616745dd1898440481d449ae3594.html">Typedef Leir::SceneGroups::Renderables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1_1_scene_groups_1a3c1f05c049c0d998bcd4a9a7b9252754.html">Typedef Leir::SceneGroups::Sprites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="typedef_namespace_leir_1a2d2d26d635994dfe1523f2238cb68990.html">Typedef Leir::SoundId</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Guías</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../guides/ecs/ecs-public-api.html">API pública del ECS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/ecs/hybrid-ecs.html">Hybrid ECS — arquitectura interna</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          
+
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="namespace-leir-mathf">
+<span id="id1"></span><h1>Namespace Leir::Mathf<a class="headerlink" href="#namespace-leir-mathf" title="Link to this heading">¶</a></h1>
+<nav class="contents local" id="contents">
+<p class="topic-title">Contents</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#functions" id="id2">Functions</a></p></li>
+<li><p><a class="reference internal" href="#typedefs" id="id3">Typedefs</a></p></li>
+<li><p><a class="reference internal" href="#variables" id="id4">Variables</a></p></li>
+</ul>
+</nav>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a82c231f24da15b10527038de702952cf.html#exhale-function-namespace-leir-1-1-mathf-1a82c231f24da15b10527038de702952cf"><span class="std std-ref">Function Leir::Mathf::Abs(float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aeb2eae2ca410d3d258a8ba2ffa852dd2.html#exhale-function-namespace-leir-1-1-mathf-1aeb2eae2ca410d3d258a8ba2ffa852dd2"><span class="std std-ref">Function Leir::Mathf::Abs(int)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac07d4e7d15e222ef37bfb68e0674fc37.html#exhale-function-namespace-leir-1-1-mathf-1ac07d4e7d15e222ef37bfb68e0674fc37"><span class="std std-ref">Function Leir::Mathf::Acos</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3cbec03b1f44e6698dc7c1f08fa5e709.html#exhale-function-namespace-leir-1-1-mathf-1a3cbec03b1f44e6698dc7c1f08fa5e709"><span class="std std-ref">Function Leir::Mathf::Approximately</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a43e032852dde7de82cfe336f52757ad2.html#exhale-function-namespace-leir-1-1-mathf-1a43e032852dde7de82cfe336f52757ad2"><span class="std std-ref">Function Leir::Mathf::Asin</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3050e1b8bcc8b463ce9f93a79fef3d48.html#exhale-function-namespace-leir-1-1-mathf-1a3050e1b8bcc8b463ce9f93a79fef3d48"><span class="std std-ref">Function Leir::Mathf::Atan</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a16e83192bd9c4c1341447f8f608ddaa9.html#exhale-function-namespace-leir-1-1-mathf-1a16e83192bd9c4c1341447f8f608ddaa9"><span class="std std-ref">Function Leir::Mathf::Atan2</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a38255410a31861d6838803bd0b191c5e.html#exhale-function-namespace-leir-1-1-mathf-1a38255410a31861d6838803bd0b191c5e"><span class="std std-ref">Function Leir::Mathf::Ceil</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a838868533bdc05dbaba3826466e4c768.html#exhale-function-namespace-leir-1-1-mathf-1a838868533bdc05dbaba3826466e4c768"><span class="std std-ref">Function Leir::Mathf::CeilToInt</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1af8e3387d612ac49316fd967967a31919.html#exhale-function-namespace-leir-1-1-mathf-1af8e3387d612ac49316fd967967a31919"><span class="std std-ref">Function Leir::Mathf::Clamp(float, float, float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a174b80c6c70d20fca29ef73e865c44c0.html#exhale-function-namespace-leir-1-1-mathf-1a174b80c6c70d20fca29ef73e865c44c0"><span class="std std-ref">Function Leir::Mathf::Clamp(int, int, int)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a948111109b611f1d9e7c5cd14c87df47.html#exhale-function-namespace-leir-1-1-mathf-1a948111109b611f1d9e7c5cd14c87df47"><span class="std std-ref">Function Leir::Mathf::Clamp01</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac5d69bdf0e62589da42c1efcbed5e6d3.html#exhale-function-namespace-leir-1-1-mathf-1ac5d69bdf0e62589da42c1efcbed5e6d3"><span class="std std-ref">Function Leir::Mathf::Cos</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3efa2e1d593e63265773492f6c92169d.html#exhale-function-namespace-leir-1-1-mathf-1a3efa2e1d593e63265773492f6c92169d"><span class="std std-ref">Function Leir::Mathf::DeltaAngle</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a2ad3d380d350ceed3ab0e380e200c4c9.html#exhale-function-namespace-leir-1-1-mathf-1a2ad3d380d350ceed3ab0e380e200c4c9"><span class="std std-ref">Function Leir::Mathf::Floor</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1af56dd02501ae98b6c7cd7fec82d96e8f.html#exhale-function-namespace-leir-1-1-mathf-1af56dd02501ae98b6c7cd7fec82d96e8f"><span class="std std-ref">Function Leir::Mathf::FloorToInt</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3d21a7f266763654ecbfcd7790f709d3.html#exhale-function-namespace-leir-1-1-mathf-1a3d21a7f266763654ecbfcd7790f709d3"><span class="std std-ref">Function Leir::Mathf::InverseLerp</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a14369ac48c702d089fc43ef8fac74fdb.html#exhale-function-namespace-leir-1-1-mathf-1a14369ac48c702d089fc43ef8fac74fdb"><span class="std std-ref">Function Leir::Mathf::IsFinite(float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ae311ff41a22d8c20a90d026e3f1ca528.html#exhale-function-namespace-leir-1-1-mathf-1ae311ff41a22d8c20a90d026e3f1ca528"><span class="std std-ref">Function Leir::Mathf::IsFinite(double)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a716bfcf9c92cedbe51d75e3ea3c15ca4.html#exhale-function-namespace-leir-1-1-mathf-1a716bfcf9c92cedbe51d75e3ea3c15ca4"><span class="std std-ref">Function Leir::Mathf::Lerp</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a753ba124407bb30724bd7dcb9db259a6.html#exhale-function-namespace-leir-1-1-mathf-1a753ba124407bb30724bd7dcb9db259a6"><span class="std std-ref">Function Leir::Mathf::LerpUnclamped</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad8ee8d54a9a7f0afcb357d81dcd3b8e8.html#exhale-function-namespace-leir-1-1-mathf-1ad8ee8d54a9a7f0afcb357d81dcd3b8e8"><span class="std std-ref">Template Function Leir::Mathf::Max</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a8cf4a3af08533dd8b0a73cb140668e54.html#exhale-function-namespace-leir-1-1-mathf-1a8cf4a3af08533dd8b0a73cb140668e54"><span class="std std-ref">Template Function Leir::Mathf::Min</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a429d6db652fc25fd5145ba50842207c2.html#exhale-function-namespace-leir-1-1-mathf-1a429d6db652fc25fd5145ba50842207c2"><span class="std std-ref">Function Leir::Mathf::MoveTowards</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ae3f7b59c35e6e6615c2c913784c9a735.html#exhale-function-namespace-leir-1-1-mathf-1ae3f7b59c35e6e6615c2c913784c9a735"><span class="std std-ref">Function Leir::Mathf::PingPong</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3ad6404c4535ffe963814af51bbd76f6.html#exhale-function-namespace-leir-1-1-mathf-1a3ad6404c4535ffe963814af51bbd76f6"><span class="std std-ref">Function Leir::Mathf::Repeat</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aeeb39e812ac49fa7864594130bd3d517.html#exhale-function-namespace-leir-1-1-mathf-1aeeb39e812ac49fa7864594130bd3d517"><span class="std std-ref">Function Leir::Mathf::Round</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a5b3f87edb12840793a224113e1833510.html#exhale-function-namespace-leir-1-1-mathf-1a5b3f87edb12840793a224113e1833510"><span class="std std-ref">Function Leir::Mathf::RoundToInt</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a911fd3cac82fdea3243fe3e29a430fa8.html#exhale-function-namespace-leir-1-1-mathf-1a911fd3cac82fdea3243fe3e29a430fa8"><span class="std std-ref">Function Leir::Mathf::Sign(float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1adc743d8bdef4991f0b9e70be212cb4be.html#exhale-function-namespace-leir-1-1-mathf-1adc743d8bdef4991f0b9e70be212cb4be"><span class="std std-ref">Function Leir::Mathf::Sign(int)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ab296ba39483d4f30e7417bf91ae26a7e.html#exhale-function-namespace-leir-1-1-mathf-1ab296ba39483d4f30e7417bf91ae26a7e"><span class="std std-ref">Function Leir::Mathf::SimdAdd</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac258f82ea50f4331b0068339ffa8ab8d.html#exhale-function-namespace-leir-1-1-mathf-1ac258f82ea50f4331b0068339ffa8ab8d"><span class="std std-ref">Function Leir::Mathf::SimdAddFloats</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a44c7fab810df0f412a462303c0822c32.html#exhale-function-namespace-leir-1-1-mathf-1a44c7fab810df0f412a462303c0822c32"><span class="std std-ref">Function Leir::Mathf::SimdFma</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a0d6f565f86f3ccddf07bdaebc1caeb65.html#exhale-function-namespace-leir-1-1-mathf-1a0d6f565f86f3ccddf07bdaebc1caeb65"><span class="std std-ref">Function Leir::Mathf::SimdFmaFloats</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad98bad01c55c5526ccb3bd14cdd77bb0.html#exhale-function-namespace-leir-1-1-mathf-1ad98bad01c55c5526ccb3bd14cdd77bb0"><span class="std std-ref">Function Leir::Mathf::SimdGetLane</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a6cad8b7fe14aafecd1e0792d535337f5.html#exhale-function-namespace-leir-1-1-mathf-1a6cad8b7fe14aafecd1e0792d535337f5"><span class="std std-ref">Function Leir::Mathf::SimdGetX</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a3c8dba9f24a3551c5e34e1eda902726e.html#exhale-function-namespace-leir-1-1-mathf-1a3c8dba9f24a3551c5e34e1eda902726e"><span class="std std-ref">Function Leir::Mathf::SimdHMin</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a636dc9083412e543565e62332e467d24.html#exhale-function-namespace-leir-1-1-mathf-1a636dc9083412e543565e62332e467d24"><span class="std std-ref">Function Leir::Mathf::SimdLess</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1abf741e809c0bade0ecb1a4845161f4fc.html#exhale-function-namespace-leir-1-1-mathf-1abf741e809c0bade0ecb1a4845161f4fc"><span class="std std-ref">Function Leir::Mathf::SimdLoad</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ad563728dd6584ca02deaeedeed49114e.html#exhale-function-namespace-leir-1-1-mathf-1ad563728dd6584ca02deaeedeed49114e"><span class="std std-ref">Function Leir::Mathf::SimdMul</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a0dd0b93dc784dd70f3829983213ff9e0.html#exhale-function-namespace-leir-1-1-mathf-1a0dd0b93dc784dd70f3829983213ff9e0"><span class="std std-ref">Function Leir::Mathf::SimdMulFloats</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a841e52ba3bfb99e093625bcf5cf18f2a.html#exhale-function-namespace-leir-1-1-mathf-1a841e52ba3bfb99e093625bcf5cf18f2a"><span class="std std-ref">Function Leir::Mathf::SimdOr</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aecd97a59da75b87b036ae45eda0465e8.html#exhale-function-namespace-leir-1-1-mathf-1aecd97a59da75b87b036ae45eda0465e8"><span class="std std-ref">Function Leir::Mathf::SimdSplat</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a848e5d9692175fefe99fb1136462422b.html#exhale-function-namespace-leir-1-1-mathf-1a848e5d9692175fefe99fb1136462422b"><span class="std std-ref">Function Leir::Mathf::SimdStore</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a25d119781e5a219ad14fd3e8c770592c.html#exhale-function-namespace-leir-1-1-mathf-1a25d119781e5a219ad14fd3e8c770592c"><span class="std std-ref">Function Leir::Mathf::Sin</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a8f707c9f7aebb98bc3ab250f9175fc0b.html#exhale-function-namespace-leir-1-1-mathf-1a8f707c9f7aebb98bc3ab250f9175fc0b"><span class="std std-ref">Function Leir::Mathf::SmoothDamp(float, float, float&amp;, float, float, float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1ac1bca069a790e25d30d3d1566335324c.html#exhale-function-namespace-leir-1-1-mathf-1ac1bca069a790e25d30d3d1566335324c"><span class="std std-ref">Function Leir::Mathf::SmoothDamp(float, float, float&amp;, float, float)</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1aa0c446ad1c38dbc27c819132bbd90127.html#exhale-function-namespace-leir-1-1-mathf-1aa0c446ad1c38dbc27c819132bbd90127"><span class="std std-ref">Function Leir::Mathf::SmoothStep</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a95efead0279facc63feeb6b2125bf948.html#exhale-function-namespace-leir-1-1-mathf-1a95efead0279facc63feeb6b2125bf948"><span class="std std-ref">Function Leir::Mathf::Sqrt</span></a></p></li>
+<li><p><a class="reference internal" href="function_namespace_leir_1_1_mathf_1a63a2d81421d9088af8728cfc7c7ee317.html#exhale-function-namespace-leir-1-1-mathf-1a63a2d81421d9088af8728cfc7c7ee317"><span class="std std-ref">Function Leir::Mathf::Tan</span></a></p></li>
+</ul>
+</section>
+<section id="typedefs">
+<h2>Typedefs<a class="headerlink" href="#typedefs" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="typedef_namespace_leir_1_1_mathf_1a5e9700eb1d4339ae7b4f040554207ace.html#exhale-typedef-namespace-leir-1-1-mathf-1a5e9700eb1d4339ae7b4f040554207ace"><span class="std std-ref">Typedef Leir::Mathf::Simd4f</span></a></p></li>
+</ul>
+</section>
+<section id="variables">
+<h2>Variables<a class="headerlink" href="#variables" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1ab4f04680b35962caac1a55355f95f80e.html#exhale-variable-namespace-leir-1-1-mathf-1ab4f04680b35962caac1a55355f95f80e"><span class="std std-ref">Variable Leir::Mathf::Deg2Rad</span></a></p></li>
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a01b647adafc8f8ba42151c6780d0207b.html#exhale-variable-namespace-leir-1-1-mathf-1a01b647adafc8f8ba42151c6780d0207b"><span class="std std-ref">Variable Leir::Mathf::Epsilon</span></a></p></li>
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a2ea14867c8f16af0e74897be1b4e2d39.html#exhale-variable-namespace-leir-1-1-mathf-1a2ea14867c8f16af0e74897be1b4e2d39"><span class="std std-ref">Variable Leir::Mathf::Infinity</span></a></p></li>
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1a86c5e3dbcb14935a63e9f67c24804fee.html#exhale-variable-namespace-leir-1-1-mathf-1a86c5e3dbcb14935a63e9f67c24804fee"><span class="std std-ref">Variable Leir::Mathf::NegativeInfinity</span></a></p></li>
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1ad5a2d3eadb47ed162b75b4397244c673.html#exhale-variable-namespace-leir-1-1-mathf-1ad5a2d3eadb47ed162b75b4397244c673"><span class="std std-ref">Variable Leir::Mathf::PI</span></a></p></li>
+<li><p><a class="reference internal" href="variable_namespace_leir_1_1_mathf_1af1ec34448eb9968ca8c2e64cffb3e443.html#exhale-variable-namespace-leir-1-1-mathf-1af1ec34448eb9968ca8c2e64cffb3e443"><span class="std std-ref">Variable Leir::Mathf::Rad2Deg</span></a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="namespace_Leir__Primitives.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Namespace Leir::Primitives</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="namespace_Leir__ECS.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Namespace Leir::ECS</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026 LeirEngine
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Namespace Leir::Mathf</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#typedefs">Typedefs</a></li>
+<li><a class="reference internal" href="#variables">Variables</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=2882ecd3"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/collapsible-lists\js\CollapsibleLists.compressed.js?v=73120307"></script>
+    <script src="../_static/collapsible-lists\js\apply-collapsible-lists.js?v=660e4f45"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

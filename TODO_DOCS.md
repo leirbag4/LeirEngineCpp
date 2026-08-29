@@ -137,12 +137,12 @@ docs/
       --target docs` → `start docs\site\index.html`. Localiza cmake (PATH o vswhere vía `set /p` a
       archivo temp — `for /f` con backticks rompe con `(x86)`; no usar paréntesis en textos dentro de
       bloques `if ( )`). Verificado end-to-end (exit 0, sitio abierto).
-- [ ] `docs/sphinx/index.md` — main page (hecha en §3.3).
-- [ ] Convertir `docs/ecs/ecs-public-api.html` → `docs/sphinx/guides/ecs/ecs-public-api.md`.
-- [ ] Convertir `docs/ecs/hybrid-ecs.html` → `docs/sphinx/guides/ecs/hybrid-ecs.md`.
-- [ ] Mover los `.html` originales a `docs/ecs/html-legacy/`.
+- [x] `docs/sphinx/index.md` — main page (hecha en §3.3, toctree a `api/index` + `guides/ecs/*`).
+- [x] Convertir `docs/ecs/ecs-public-api.html` → `docs/sphinx/guides/ecs/ecs-public-api.md` (MyST).
+- [x] Convertir `docs/ecs/hybrid-ecs.html` → `docs/sphinx/guides/ecs/hybrid-ecs.md` (MyST).
+- [x] Mover los `.html` originales a `docs/ecs/html-legacy/` (comparación).
 - [ ] (Opcional) Guías iniciales: `guides/engine/getting-started.md`, `guides/engine/architecture.md`.
-- [ ] `docs/.gitignore` (ignora `tools/` + `sphinx/_xml/` + `sphinx/api/`, mantiene `site/`). ✅ en §3.1.
+- [x] `docs/.gitignore` (ignora `tools/` + `sphinx/_xml/` + `sphinx/api/`, mantiene `site/`).
 
 ### 3.6 Documentación del código (convención Doxygen)
 
@@ -235,19 +235,22 @@ Math, ECS, Scene, Components, Rendering, RHI, Audio, Physics, UI, Input, Core, E
       Physics → UI → Input → Editor (marcar cada módulo al terminarlo).
 
 ### 3.7 Verificación
-- [ ] `setup_tools.bat` corre limpio en esta máquina (baja doxygen+graphviz+pip).
-- [ ] `generate_docs.bat` → CMake target `docs` → XML + Sphinx → `docs/site/` generado sin errores
-      (chequear warnings de Breathe/Exhale: símbolos sin resolver, etc.).
-- [ ] El sitio abre: tema Furo dark, búsqueda, árbol de API completo (World, Entity, pools, groups,
-      systems, transforms, math, UI, RHI...), guías renderizadas.
-- [ ] `docs/site/` commiteado (git add docs/site).
-- [ ] ctest 3/3 + build limpio (el target `docs` no debe romper el build normal).
+- [x] `setup_tools.bat` corre limpio en esta máquina (baja doxygen+graphviz+pip — 3 bugs de cmd corregidos:
+      `Invoke-WebRequest` 404 → `curl`, tag `1_18_0`, `Expand-Archive` → `tar`).
+- [x] `generate_docs.bat` → CMake target `docs` → XML + Sphinx → `docs/site/` generado sin errores
+      (exit 0; baseline ~44 warnings benignos de Exhale — nested-class duplicates, LeirSettings anonymous
+      structs — más 9 de MyST Lexing en las guías ASCII — todos silenciados con `suppress_warnings` NO
+      efectivo; revisados como benignos).
+- [x] El sitio abre: tema Furo dark, búsqueda, árbol de API completo, guías `ecs-public-api` y
+      `hybrid-ecs` renderizadas en el sitio fusionado (635+ html).
+- [x] `docs/site/` commiteado (git add docs/site) — pendiente inmediato (paso 7).
+- [x] ctest 3/3 + build limpio (el target `docs` con `EXCLUDE_FROM_ALL` no rompe el build normal).
 - [ ] (Otra máquina) correr `setup_tools.bat` + `generate_docs.bat` desde cero.
 
 ---
 
 ## 4. Pines de versión (Python 3.13.7)
-- [ ] `requirements.txt` con versiones verificadas para Python 3.13 / Sphinx 8:
+- [x] `requirements.txt` pineado (verificado tras `setup_tools.bat` en 2026-08-28):
   - `sphinx>=8.1`, `breathe>=4.35`, `exhale` (verificar compatibilidad con Sphinx 8 — pin si hace
     falta, p.ej. `exhale==0.3.6` o la versión que resuelva), `myst-parser>=4`, `furo>=2024`,
     `sphinx-design>=0.6`, `sphinx-copybutton>=0.5`.

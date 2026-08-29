@@ -18,8 +18,10 @@ api/index
 ```{toctree}
 :maxdepth: 2
 :caption: Guías
+guides/ecs/ecs-public-api
+guides/ecs/hybrid-ecs
 ```
 
 ```{note}
-Guías en camino: ver `TODO_DOCS.md` §3.5 (migración de `docs/ecs/*.html` a Markdown).
+Más guías en camino (engine, editor, web): ver `TODO_DOCS.md` §3.5.
 ```
