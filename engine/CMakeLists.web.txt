@@ -37,7 +37,8 @@ add_library(LeirEngineCore STATIC
     ${LEIR_ROOT}/engine/src/Input/Pointer.cpp
     ${LEIR_ROOT}/engine/src/RHI/BackendFactory.cpp
     ${LEIR_ROOT}/engine/src/RHI/WebGPUBackend.cpp
-    ${LEIR_ROOT}/engine/src/Rendering/Shader.cpp
+    /engine/src/Rendering/Shader.cpp
+    /engine/src/Rendering/Frustum.cpp
     ${LEIR_ROOT}/engine/src/Rendering/ShaderLayout.cpp
     ${LEIR_ROOT}/engine/src/Rendering/Image.cpp
     ${LEIR_ROOT}/engine/src/Rendering/Texture2D.cpp

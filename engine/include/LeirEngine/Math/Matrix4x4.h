@@ -54,6 +54,18 @@ struct Matrix4x4 {
         return c;
     }
 
+    // SIMD 4x4 copy (Fase 2, "Render list vectorizado"): 4 wide loads + stores.
+    static Matrix4x4 CopySimd(const Matrix4x4& src) {
+        Matrix4x4 dst;
+        const float* s = src.m.data();
+        float* d = dst.m.data();
+        Mathf::SimdStore(&d[0], Mathf::SimdLoad(&s[0]));
+        Mathf::SimdStore(&d[4], Mathf::SimdLoad(&s[4]));
+        Mathf::SimdStore(&d[8], Mathf::SimdLoad(&s[8]));
+        Mathf::SimdStore(&d[12], Mathf::SimdLoad(&s[12]));
+        return dst;
+    }
+
     Matrix4x4 Inverse() const;
     Matrix4x4 Transpose() const;
 

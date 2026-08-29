@@ -1,5 +1,6 @@
 #include "LeirEngine/Rendering/RenderPipeline.h"
 #include "LeirEngine/RHI/RenderBackend.h"
+#include "LeirEngine/Rendering/Frustum.h"
 #include "LeirEngine/Rendering/Mesh.h"
 #include "LeirEngine/Rendering/Material.h"
 #include "LeirEngine/Rendering/Texture2D.h"
@@ -11,6 +12,7 @@
 #include "LeirEngine/Components/SpriteRenderer.h"
 #include "LeirEngine/Core/CoreObject.h"
 #include "LeirEngine/Core/Transform.h"
+#include "LeirEngine/Math/Mathf.h"
 #include "LeirEngine/Scene/Scene.h"
 
 #include "LeirEngine/Core/Log.h"
@@ -270,12 +272,19 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
     primaryCamera->RecalculateViewMatrix();
     Matrix4x4 viewProj = primaryCamera->GetViewProjectionMatrix();
 
-    PushConstants push{};
-    if (primaryLight) {
-        push.lightDir = primaryLight->GetDirection();
-        push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
-    }
-
+    // SIMD frustum culling ("Render list vectorizado"): the render list is
+    // built in one contiguous pass — each active renderable is sphere-culled
+    // against the 6 planes (4 lanes per Simd4f) and its world matrix is copied
+    // with a SIMD 16-float copy into the list. Draws fully outside the frustum
+    // are skipped (real win for large scenes).
+    struct DrawCommand {
+        MeshRenderer* renderer;
+        Matrix4x4 world;
+        Vector4 color;
+    };
+    std::vector<DrawCommand> renderList;
+    Frustum frustum;
+    frustum.Extract(viewProj);
     scene->GetRenderGroup().ForEach([&](auto& renderer, auto& active, auto& wt, ECS::Entity) {
         if (!active.value)
             return;
@@ -283,9 +292,24 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
         auto material = renderer.GetMaterial();
         if (!mesh || !material)
             return;
-        push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-        RenderMeshRenderer(graph, &renderer, viewProj, wt.worldMatrix, push);
+        float maxScale = Mathf::Max(Mathf::Abs(wt.worldScale.x),
+                         Mathf::Max(Mathf::Abs(wt.worldScale.y), Mathf::Abs(wt.worldScale.z)));
+        float radius = mesh->GetBoundsRadius() * maxScale;
+        if (!frustum.TestSphere(wt.worldPosition, radius))
+            return;
+        renderList.push_back({ &renderer, Matrix4x4::CopySimd(wt.worldMatrix), material->GetColor() });
     });
+
+    PushConstants push{};
+    if (primaryLight) {
+        push.lightDir = primaryLight->GetDirection();
+        push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
+    }
+
+    for (const DrawCommand& cmd : renderList) {
+        push.color = cmd.color;
+        RenderMeshRenderer(graph, cmd.renderer, viewProj, cmd.world, push);
+    }
 }
 
 void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* scene)

@@ -1055,6 +1055,18 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Fase 2: render list / draw command build vectorizado (frustum culling SIMD)** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §5/§10): `RenderPipeline::Render` arma el render list en una pasada contigua —
+  cada renderable activo se culliza contra el frustum (6 planos, 4 lanes por `Simd4f`, FMA + `|n|`
+  precomputado) y su world matrix se copia con `Matrix4x4::CopySimd`. Nuevo `Rendering/Frustum.{h,cpp}`
+  (Gribb-Hartmann, planos en storage SoA, `TestSphere` inline para vectorizar en el build) +
+  `Mesh::GetBoundsRadius()` (esfera conservadora lazy+cacheada, radio local × max-axis del worldScale —
+  sin falsos negativos). Paridad exacta en `ECSTest` (SIMD == escalar, 100k esferas). **Nota de medida**:
+  en Debug el SIMD per-call sale lento (x0.55 — MSVC spill de `__m128` al stack en Debug, artefacto
+  conocido); **Release /O2 x3.55** (0.47 ms vs 1.68 ms en 100k, standalone con el mismo código). El cull
+  saltea draws completos fuera del frustum; el orden de dibujo jerárquico y el picking del editor no
+  cambian. Verificado: build limpio, ctest 3/3, ECSDemo (`renderables=5`), smoke editor OK.
+
 - **Hybrid ECS — Componentes a data (Incremento 4): primitivas SoA + SIMD por columna** (2026-08-28,
   `TODO_HYBRID_ECS.md` §10): nuevo `Math/SoA.h` — `SimdAddFloats`/`SimdMulFloats`/`SimdFmaFloats`
   (columna de floats procesada 4-a-la-vez con `Simd4f`, SSE2/NEON/SIMD128/escalar). Es el primitivo

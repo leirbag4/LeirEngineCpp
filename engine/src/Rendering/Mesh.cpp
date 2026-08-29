@@ -108,6 +108,21 @@ void Mesh::Draw(RHI::GCommandGraph& graph) const
     graph.DrawIndexed((uint32_t)m_Indices.size(), 1, 0);
 }
 
+float Mesh::GetBoundsRadius() const
+{
+    if (m_BoundsRadius < 0.0f) {
+        float r2 = 0.0f;
+        for (const Vertex& v : m_Vertices) {
+            float d2 = v.position.x * v.position.x +
+                       v.position.y * v.position.y +
+                       v.position.z * v.position.z;
+            if (d2 > r2) r2 = d2;
+        }
+        m_BoundsRadius = Mathf::Sqrt(r2);
+    }
+    return m_BoundsRadius;
+}
+
 namespace Primitives {
 
 std::pair<std::vector<Vertex>, std::vector<uint32_t>> CreateCube()

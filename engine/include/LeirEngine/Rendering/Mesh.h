@@ -36,6 +36,10 @@ public:
     size_t GetVertexCount() const { return m_Vertices.size(); }
     size_t GetIndexCount() const { return m_Indices.size(); }
 
+    // Conservative local-space bounding-sphere radius (max |vertex|). Lazy +
+    // cached; used by the SIMD frustum cull ("Render list vectorizado").
+    float GetBoundsRadius() const;
+
 private:
     RHI::RenderBackend* m_Device;
 
@@ -46,6 +50,8 @@ private:
     RHI::RHIDeviceMemory m_VertexMemory;
     RHI::RHIBuffer m_IndexBuffer;
     RHI::RHIDeviceMemory m_IndexMemory;
+
+    mutable float m_BoundsRadius = -1.0f; // <0 = not computed yet
 };
 
 // Built-in primitives

@@ -25,6 +25,7 @@ add_library(LeirEngine SHARED
     src/RHI/VulkanBackend.cpp
     src/RHI/BackendFactory.cpp
     src/Rendering/Shader.cpp
+    src/Rendering/Frustum.cpp
     src/Rendering/ShaderLayout.cpp
 
     src/Rendering/Image.cpp

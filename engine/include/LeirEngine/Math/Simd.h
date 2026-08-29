@@ -48,6 +48,11 @@ inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return _mm_add_ps(_mm_mul_
 inline Simd4f SimdSplat(float f) { return _mm_set1_ps(f); }
 inline float SimdGetX(Simd4f v) { return _mm_cvtss_f32(v); }
 inline float SimdGetLane(Simd4f v, int lane) { return ((const float*)&v)[lane]; }
+inline float SimdHMin(Simd4f v) {
+    v = _mm_min_ps(v, _mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+    v = _mm_min_ps(v, _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 3, 0, 1)));
+    return _mm_cvtss_f32(v);
+}
 
 #elif defined(LEIR_SIMD_NEON)
 using Simd4f = float32x4_t;
@@ -59,6 +64,7 @@ inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return vfmaq_f32(c, a, b);
 inline Simd4f SimdSplat(float f) { return vdupq_n_f32(f); }
 inline float SimdGetX(Simd4f v) { return vgetq_lane_f32(v, 0); }
 inline float SimdGetLane(Simd4f v, int lane) { float f[4]; vst1q_f32(f, v); return f[lane]; }
+inline float SimdHMin(Simd4f v) { return vminvq_f32(v); }
 
 #elif defined(LEIR_SIMD_WASM)
 using Simd4f = v128_t;
@@ -70,6 +76,11 @@ inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return f32x4_add(f32x4_mul
 inline Simd4f SimdSplat(float f) { return f32x4_splat(f); }
 inline float SimdGetX(Simd4f v) { return wasm_f32x4_extract_lane(v, 0); }
 inline float SimdGetLane(Simd4f v, int lane) { float f[4]; wasm_v128_store(f, v); return f[lane]; }
+inline float SimdHMin(Simd4f v) {
+    v = f32x4_min(v, wasm_i32x4_shuffle(v, v, 1, 0, 3, 2));
+    v = f32x4_min(v, wasm_i32x4_shuffle(v, v, 2, 3, 0, 1));
+    return wasm_f32x4_extract_lane(v, 0);
+}
 
 #else // LEIR_SIMD_SCALAR (portable fallback — e.g. RISC-V, or x86 without SSE2)
 struct LEIR_API Simd4f {
@@ -83,6 +94,7 @@ inline Simd4f SimdFma(Simd4f a, Simd4f b, Simd4f c) { return SimdAdd(SimdMul(a, 
 inline Simd4f SimdSplat(float f) { return {f, f, f, f}; }
 inline float SimdGetX(Simd4f v) { return v.x; }
 inline float SimdGetLane(Simd4f v, int lane) { return lane == 0 ? v.x : (lane == 1 ? v.y : (lane == 2 ? v.z : v.w)); }
+inline float SimdHMin(Simd4f v) { return Min(v.x, Min(v.y, Min(v.z, v.w))); }
 #endif
 
 } // namespace Mathf

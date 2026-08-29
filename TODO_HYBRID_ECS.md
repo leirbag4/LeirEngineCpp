@@ -460,7 +460,7 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       `ECSScene` de prueba (aditivo, riesgo nulo) → **Etapa A** `CoreObject` → handle del ECS
       (migración definitiva; el código de prueba de B se borró). Tags de familia `Tag3D/Tag2D/TagUI`
       (los tags existen; el panel ya filtra por ellos).
-- [ ] **Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas** — plan de
+- [x] **Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas** — plan de
       incrementos (POD en pools, contiguo → SoA/SIMD de Fase 2; la API `AddComponent<T>`/`GetComponent<T>`
       NO cambia; `HybridComponent` se mantiene para futuros `ScriptComponent`):
 
@@ -516,7 +516,19 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 - [x] **Transform propagation SIMD (4×4 por lanes)**: `TransformSystem::ComputeWorld` usa
       `Matrix4x4::MultiplySimd` para el hot path `parentWorld × local`. Verificado: build limpio, ctest
       3/3, ECSDemo (`renderables=5`), smoke editor OK.
-- [ ] Render list / draw command build vectorizado.
+- [x] **Render list / draw command build vectorizado**: `RenderPipeline::Render` arma el render list en
+      una pasada contigua — cada renderable activo se culliza contra el frustum (6 planos, 4 lanes por
+      `Simd4f`, FMA + `|n|` precomputado para el radio) y su world matrix se copia con
+      `Matrix4x4::CopySimd` (4 loads/stores de 16 floats) al list. Nuevo `Rendering/Frustum.{h,cpp}`
+      (Gribb-Hartmann, storage SoA de planos, `TestSphere` inline en el header para que vectorice en el
+      build) + `Mesh::GetBoundsRadius()` (esfera conservadora, lazy + cacheada; radio local × max-axis
+      del worldScale — sin falsos negativos, rotación preserva |v|). Paridad verificada en `ECSTest`
+      (**ALL PASS**: SIMD == escalar exacto en 100k esferas sintéticas). Benchmark informativo: Debug
+      x0.55 (spill de `__m128` por-call, artefacto conocido) / **Release /O2 x3.55** (0.47 ms vs 1.68 ms
+      en 100k, medido standalone con el mismo código). El cull saltea draws completos fuera del frustum
+      (win real para escenas grandes); el orden de dibujo jerárquico y el picking del editor no cambian
+      (solo afecta el 3D render group). Verificado: build limpio, ctest 3/3, ECSDemo (`renderables=5`),
+      smoke editor OK.
 - [x] **Job system** (`Core/JobSystem.{h,cpp}`): thread pool con `ParallelFor` (rango dividido por
       contador atómico compartido; el caller participa + workers) y `Dispatch`/`WaitAll` (cola de tareas
       con mutex+cv, `m_Pending`). **Web = inline** (`__EMSCRIPTEN__` — decisión single-thread, sin
