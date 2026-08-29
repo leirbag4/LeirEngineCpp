@@ -53,6 +53,9 @@ inline float SimdHMin(Simd4f v) {
     v = _mm_min_ps(v, _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 3, 0, 1)));
     return _mm_cvtss_f32(v);
 }
+// Per-lane compare: lane = -1.0f (true) or 0.0f. Or: bitwise OR (accumulate masks).
+inline Simd4f SimdLess(Simd4f a, Simd4f b) { return _mm_cmplt_ps(a, b); }
+inline Simd4f SimdOr(Simd4f a, Simd4f b) { return _mm_or_ps(a, b); }
 
 #elif defined(LEIR_SIMD_NEON)
 using Simd4f = float32x4_t;
@@ -65,6 +68,8 @@ inline Simd4f SimdSplat(float f) { return vdupq_n_f32(f); }
 inline float SimdGetX(Simd4f v) { return vgetq_lane_f32(v, 0); }
 inline float SimdGetLane(Simd4f v, int lane) { float f[4]; vst1q_f32(f, v); return f[lane]; }
 inline float SimdHMin(Simd4f v) { return vminvq_f32(v); }
+inline Simd4f SimdLess(Simd4f a, Simd4f b) { return vreinterpretq_f32_u32(vcltq_f32(a, b)); }
+inline Simd4f SimdOr(Simd4f a, Simd4f b) { return vreinterpretq_f32_u32(vorrq_u32(vreinterpretq_u32_f32(a), vreinterpretq_u32_f32(b))); }
 
 #elif defined(LEIR_SIMD_WASM)
 using Simd4f = v128_t;
@@ -81,6 +86,8 @@ inline float SimdHMin(Simd4f v) {
     v = f32x4_min(v, wasm_i32x4_shuffle(v, v, 2, 3, 0, 1));
     return wasm_f32x4_extract_lane(v, 0);
 }
+inline Simd4f SimdLess(Simd4f a, Simd4f b) { return wasm_f32x4_lt(a, b); }
+inline Simd4f SimdOr(Simd4f a, Simd4f b) { return wasm_v128_or(a, b); }
 
 #else // LEIR_SIMD_SCALAR (portable fallback — e.g. RISC-V, or x86 without SSE2)
 struct LEIR_API Simd4f {
@@ -95,6 +102,8 @@ inline Simd4f SimdSplat(float f) { return {f, f, f, f}; }
 inline float SimdGetX(Simd4f v) { return v.x; }
 inline float SimdGetLane(Simd4f v, int lane) { return lane == 0 ? v.x : (lane == 1 ? v.y : (lane == 2 ? v.z : v.w)); }
 inline float SimdHMin(Simd4f v) { return Min(v.x, Min(v.y, Min(v.z, v.w))); }
+inline Simd4f SimdLess(Simd4f a, Simd4f b) { return {a.x < b.x ? -1.0f : 0.0f, a.y < b.y ? -1.0f : 0.0f, a.z < b.z ? -1.0f : 0.0f, a.w < b.w ? -1.0f : 0.0f}; }
+inline Simd4f SimdOr(Simd4f a, Simd4f b) { return {(a.x != 0.0f || b.x != 0.0f) ? -1.0f : 0.0f, (a.y != 0.0f || b.y != 0.0f) ? -1.0f : 0.0f, (a.z != 0.0f || b.z != 0.0f) ? -1.0f : 0.0f, (a.w != 0.0f || b.w != 0.0f) ? -1.0f : 0.0f}; }
 #endif
 
 } // namespace Mathf

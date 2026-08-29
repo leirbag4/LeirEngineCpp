@@ -4,6 +4,7 @@
 #include "LeirEngine/ECS/TransformSystem.h"
 #include "LeirEngine/ECS/System.h"
 #include "LeirEngine/ECS/CommandBuffer.h"
+#include "LeirEngine/ECS/SoAPool.h"
 #include "LeirEngine/ECS/HybridComponent.h"
 #include "LeirEngine/ECS/Tags.h"
 #include "LeirEngine/Scene/Scene.h"
@@ -672,6 +673,34 @@ int main()
             return std::chrono::duration<double, std::milli>(b - a).count();
         };
 
+        // SoAPool (Incremento 5 — storage SoA por campo): add/get/set/remove
+        // with column identity and swap-and-pop correctness.
+        {
+            struct CullData { float x, y, z, sx, sy, sz; };
+            SoAPool<CullData> pool;
+            pool.Add(10, CullData{1, 2, 3, 4, 5, 6});
+            CullData out{};
+            Check(pool.Count() == 1 && pool.Get(10, out) &&
+                  out.x == 1.0f && out.sy == 5.0f, "SoAPool add/get materializes a row");
+            pool.Set(10, CullData{7, 8, 9, 0, 0, 0});
+            CullData out2{};
+            Check(pool.Get(10, out2) && out2.x == 7.0f && out2.y == 8.0f, "SoAPool set updates a row");
+            Check(pool.Col(0)[0] == 7.0f && pool.Col(1)[0] == 8.0f, "SoAPool columns are contiguous per field");
+            pool.Add(20, CullData{20, 0, 0, 0, 0, 0});
+            pool.Add(30, CullData{30, 0, 0, 0, 0, 0});
+            pool.Remove(20);
+            CullData out3{};
+            Check(pool.Count() == 2 && pool.Get(30, out3) && out3.x == 30.0f, "SoAPool swap-and-pop keeps live rows");
+            Check(!pool.Has(20), "SoAPool removed row is gone");
+            // SoA columns == the interleaved AoS layout (storage identity).
+            std::vector<float> flat = { 7, 8, 9, 0, 0, 0, 30, 0, 0, 0, 0, 0 };
+            bool colOk = true;
+            for (size_t r = 0; r < pool.Count(); ++r)
+                for (size_t f = 0; f < SoAPool<CullData>::kFloats; ++f)
+                    if (pool.Col(f)[r] != flat[r * SoAPool<CullData>::kFloats + f]) { colOk = false; break; }
+            Check(colOk, "SoAPool columns match the interleaved AoS layout");
+        }
+
         // SIMD vs scalar mat4x4 multiply.
         {
             Matrix4x4 a, b, c;
@@ -780,6 +809,25 @@ int main()
             // cull is what runs in the render list build.
             printf("bench: frustum cull 100k simd=%.2f ms scalar=%.2f ms (Debug spill; /O2 x3.55, %zu visible)\n",
                    simdMs, scalarMs, simdVisible);
+
+            // SoA batch cull (Incremento 5): same spheres as contiguous columns,
+            // 4 per pass (lane = renderable).
+            std::vector<float> px(n), py(n), pz(n), rr(n);
+            std::vector<uint8_t> batchCulled(n), scalarCulled(n);
+            for (size_t i = 0; i < n; ++i) {
+                px[i] = centers[i].x; py[i] = centers[i].y; pz[i] = centers[i].z; rr[i] = radii[i];
+                scalarCulled[i] = fr.TestSphereScalar(centers[i], radii[i]) ? 0 : 1;
+            }
+            auto t3 = Clock::now();
+            fr.CullBatch(px.data(), py.data(), pz.data(), rr.data(), n, batchCulled.data());
+            auto t4 = Clock::now();
+            bool par = true;
+            for (size_t i = 0; i < n; ++i)
+                if (batchCulled[i] != scalarCulled[i]) { par = false; break; }
+            Check(par, "SoA CullBatch matches scalar exactly");
+            double batchMs = ms(t3, t4);
+            printf("bench: frustum cull batch 100k = %.2f ms (per-call %.2f ms, scalar %.2f ms)\n",
+                   batchMs, simdMs, scalarMs);
         }
 
         // --- §11 scale benchmarks (informational; Debug, x64) ---

@@ -1055,6 +1055,19 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Componentes a data (Incremento 5): storage SoA por campo + cull en lote** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §10): nuevo `ECS/SoAPool.h` — pool de columnas SoA para componentes pure-float
+  POD (una columna contigua por campo, sparse + swap-and-pop, `Add/Set/Remove/Get/Col`, materializa al
+  leer; complementa a `TypedPool` para sistemas que iteran un campo en bulk). `Frustum::CullBatch`
+  (lane = renderable): cull de 4 esferas por pasada sobre columnas, bit-idéntico al escalar.
+  `RenderPipeline::Render` mantiene el draw command build en **columnas paralelas por campo** y corre
+  el CullBatch. Nuevos `SimdLess`/`SimdOr` en `Simd.h`. **Bug real encontrado**: el primer `CullBatch`
+  cargaba 4 planos distintos en los lanes (mezclaba planos y renderables, 37% mismatch) — con
+  lane=renderable cada plano se splattea. `TestSphereScalar` alineado a la asociación FMA (right-assoc)
+  para paridad bit-exacta por-elemento (el check viejo comparaba conteos). Verificado: `ECSTest` **ALL
+  PASS** (SoAPool + CullBatch == escalar exacto 100k), benchmark batch 5.96 ms vs per-call 8.84 ms en
+  Debug (x1.48), build limpio, ctest 3/3, ECSDemo (`renderables=5`), smoke editor OK.
+
 - **Hybrid ECS — Fase 2: benchmarks de escala §11 en `ECSTest`** (2026-08-28, `TODO_HYBRID_ECS.md` §11):
   validados los targets a escala real con Worlds de 100k entidades — spawn 10k (4.5 ms), add/remove
   componente O(1) (100k ops), iterar render list 100k (`OwnedGroup<MeshRenderer, Active, WorldTransform>`,

@@ -41,15 +41,50 @@ public:
         return true;
     }
 
-    // Scalar reference implementation (used by tests/benchmarks).
+    // Scalar reference implementation (used by tests/benchmarks). Uses the SAME
+    // operation association as the SIMD FMA chain (mul-then-add, right-assoc:
+    // nx*cx + (ny*cy + (nz*cz + d))) so tests compare bit-exactly.
     bool TestSphereScalar(const Vector3& c, float radius) const
     {
         for (int i = 0; i < m_Count; ++i) {
-            float dist = m_NX[i] * c.x + m_NY[i] * c.y + m_NZ[i] * c.z + m_D[i];
+            float dist = m_NX[i] * c.x + (m_NY[i] * c.y + (m_NZ[i] * c.z + m_D[i]));
             if (dist + m_Norm[i] * radius < 0.0f)
                 return false;
         }
         return true;
+    }
+
+    // SoA batch cull (Incremento 5 — "storage SoA por campo"): tests `count`
+    // spheres given as contiguous per-field columns (px/py/pz/radius), 4 at a
+    // time (lane = renderable). Same math as TestSphere per (sphere, plane) →
+    // bit-identical results. outCulled[i] = 1 when sphere i is fully outside.
+    // Contiguous columns let a hot system (the render list build) keep its data
+    // SoA and process it without per-renderable gathers.
+    void CullBatch(const float* px, const float* py, const float* pz,
+                   const float* radius, size_t count, uint8_t* outCulled) const
+    {
+        using namespace Mathf;
+        size_t i = 0;
+        for (; i + 4 <= count; i += 4) {
+            Simd4f cx = SimdLoad(&px[i]), cy = SimdLoad(&py[i]), cz = SimdLoad(&pz[i]);
+            Simd4f r = SimdLoad(&radius[i]);
+            Simd4f culled = SimdSplat(0.0f);
+            // Lane = renderable: each plane is SPLATTED across the 4 lanes.
+            for (int p = 0; p < m_Count; ++p) {
+                Simd4f nx = SimdSplat(m_NX[p]), ny = SimdSplat(m_NY[p]), nz = SimdSplat(m_NZ[p]);
+                Simd4f d = SimdSplat(m_D[p]), norm = SimdSplat(m_Norm[p]);
+                Simd4f dist = SimdFma(nx, cx, SimdFma(ny, cy, SimdFma(nz, cz, d)));
+                Simd4f t = SimdAdd(dist, SimdMul(norm, r));
+                // Lane set (any plane) → that renderable is culled.
+                culled = SimdOr(culled, SimdLess(t, SimdSplat(0.0f)));
+            }
+            outCulled[i + 0] = SimdGetLane(culled, 0) != 0.0f;
+            outCulled[i + 1] = SimdGetLane(culled, 1) != 0.0f;
+            outCulled[i + 2] = SimdGetLane(culled, 2) != 0.0f;
+            outCulled[i + 3] = SimdGetLane(culled, 3) != 0.0f;
+        }
+        for (; i < count; ++i)
+            outCulled[i] = TestSphereScalar(Vector3{px[i], py[i], pz[i]}, radius[i]) ? 0 : 1;
     }
 
 private:

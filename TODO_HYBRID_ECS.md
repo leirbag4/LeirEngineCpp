@@ -498,6 +498,25 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
         pool concreto queda como follow-up cuando exista el sistema que la aproveche (hoy los hot pools
         ya son POD contiguos — AoS; el paso a columnas es aditivo por campo).
 
+- [x] **Incremento 5 — Storage SoA por campo (`SoAPool`) + cull en lote sobre columnas**: el
+        follow-up del Incremento 4. Nuevo `ECS/SoAPool.h` — pool de columnas SoA para componentes
+        pure-float POD (una columna contigua `float` por campo, sparse `entityIndex→row` +
+        swap-and-pop, `Add/Set/Remove/Get/Col`; materializa al leer). Complementa (no reemplaza) a
+        `TypedPool` — para sistemas que iteran UN campo en bulk. **`Frustum::CullBatch`** (lane =
+        renderable): cull de 4 esferas por pasada sobre columnas contiguas (cada plano splatteado),
+        bit-idéntico al escalar. `RenderPipeline::Render` reescrito: el draw command build mantiene los
+        datos de cull y los draws en **columnas paralelas por campo** (posiciones/radii/renderers/
+        worlds/colors) y corre el CullBatch → salta draws culled. Nuevos `SimdLess`/`SimdOr` en
+        `Simd.h`. **Bug real encontrado y corregido**: el primer `CullBatch` cargaba `m_NX[g..g+3]`
+        (4 planos distintos) en los lanes mezclando planos y renderables (37% de mismatch) — con
+        lane=renderable hay que splattear cada plano. También se alineó `TestSphereScalar` a la
+        asociación FMA (right-assoc) para paridad bit-exacta por-elemento (el check viejo comparaba
+        conteos y escondía desvíos de redondeo). Verificado en `ECSTest` (**ALL PASS**: SoAPool
+        add/get/set/remove/swap-and-pop + columnas == layout AoS; CullBatch == escalar exacto en 100k).
+        Benchmark informativo: **batch 5.96 ms vs per-call 8.84 ms en Debug** (x1.48) — el SoA
+        lane=renderable gana incluso en Debug. Build limpio, ctest 3/3, ECSDemo (`renderables=5`),
+        smoke editor OK.
+
 - [x] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía) — hoy consume
       las caches de `ISceneStorage` + `GetComponent` (O(1)); el paso a `OwnedGroup` es de Fase 2.
 - [x] Tests de regresión: el editor (d3d12/vulkan/webgpu) y los demos (PhysicsDemo/ECSDemo) se ven y

@@ -272,19 +272,19 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
     primaryCamera->RecalculateViewMatrix();
     Matrix4x4 viewProj = primaryCamera->GetViewProjectionMatrix();
 
-    // SIMD frustum culling ("Render list vectorizado"): the render list is
-    // built in one contiguous pass — each active renderable is sphere-culled
-    // against the 6 planes (4 lanes per Simd4f) and its world matrix is copied
-    // with a SIMD 16-float copy into the list. Draws fully outside the frustum
-    // are skipped (real win for large scenes).
-    struct DrawCommand {
-        MeshRenderer* renderer;
-        Matrix4x4 world;
-        Vector4 color;
-    };
-    std::vector<DrawCommand> renderList;
-    Frustum frustum;
-    frustum.Extract(viewProj);
+    // "Storage SoA por campo" (Incremento 5): the draw command build keeps the
+    // per-renderable cull data in contiguous columns (positions + radii) and
+    // runs the SIMD frustum cull in batches of 4 (Frustum::CullBatch, lane =
+    // renderable) — no per-renderable gathers. Culled rows are skipped in the
+    // final draw pass, so whole draws outside the frustum are dropped (win for
+    // large scenes). Draw data is also stored per-field (parallel columns).
+    std::vector<float> cullPx, cullPy, cullPz, cullRadius;
+    std::vector<MeshRenderer*> drawRenderers;
+    std::vector<Matrix4x4> drawWorlds;
+    std::vector<Vector4> drawColors;
+    const size_t cap = scene->GetRenderGroup().Count();
+    cullPx.reserve(cap); cullPy.reserve(cap); cullPz.reserve(cap); cullRadius.reserve(cap);
+    drawRenderers.reserve(cap); drawWorlds.reserve(cap); drawColors.reserve(cap);
     scene->GetRenderGroup().ForEach([&](auto& renderer, auto& active, auto& wt, ECS::Entity) {
         if (!active.value)
             return;
@@ -294,21 +294,31 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
             return;
         float maxScale = Mathf::Max(Mathf::Abs(wt.worldScale.x),
                          Mathf::Max(Mathf::Abs(wt.worldScale.y), Mathf::Abs(wt.worldScale.z)));
-        float radius = mesh->GetBoundsRadius() * maxScale;
-        if (!frustum.TestSphere(wt.worldPosition, radius))
-            return;
-        renderList.push_back({ &renderer, Matrix4x4::CopySimd(wt.worldMatrix), material->GetColor() });
+        cullPx.push_back(wt.worldPosition.x);
+        cullPy.push_back(wt.worldPosition.y);
+        cullPz.push_back(wt.worldPosition.z);
+        cullRadius.push_back(mesh->GetBoundsRadius() * maxScale);
+        drawRenderers.push_back(&renderer);
+        drawWorlds.push_back(Matrix4x4::CopySimd(wt.worldMatrix));
+        drawColors.push_back(material->GetColor());
     });
+
+    std::vector<uint8_t> culled(cullPx.size(), 0);
+    Frustum frustum;
+    frustum.Extract(viewProj);
+    frustum.CullBatch(cullPx.data(), cullPy.data(), cullPz.data(), cullRadius.data(),
+                      cullPx.size(), culled.data());
 
     PushConstants push{};
     if (primaryLight) {
         push.lightDir = primaryLight->GetDirection();
         push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
     }
-
-    for (const DrawCommand& cmd : renderList) {
-        push.color = cmd.color;
-        RenderMeshRenderer(graph, cmd.renderer, viewProj, cmd.world, push);
+    for (size_t i = 0; i < drawRenderers.size(); ++i) {
+        if (culled[i])
+            continue;
+        push.color = drawColors[i];
+        RenderMeshRenderer(graph, drawRenderers[i], viewProj, drawWorlds[i], push);
     }
 }
 
