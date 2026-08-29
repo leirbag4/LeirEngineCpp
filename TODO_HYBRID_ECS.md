@@ -459,11 +459,28 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
 - [x] **Bridge** en dos etapas (ver §7 "Estrategia del Bridge"): **Etapa B** `HybridComponent` +
       `ECSScene` de prueba (aditivo, riesgo nulo) → **Etapa A** `CoreObject` → handle del ECS
       (migración definitiva; el código de prueba de B se borró). Tags de familia `Tag3D/Tag2D/TagUI`
-      (los tags existen; el panel aún filtra por `dynamic_cast`).
-- [ ] Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a **data + sistemas** (hoy son
-      `HybridComponent`s OOP boxeados — correctos y funcionando, pero el paso "data-oriented puro"
-      los convierte en PODs procesados por sistemas + SoA).
-- [ ] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía) — hoy consume
+      (los tags existen; el panel ya filtra por ellos).
+- [ ] **Migrar MeshRenderer/Camera/Light/Sprite/RigidBody/Collider/Audio a data + sistemas** — plan de
+      incrementos (POD en pools, contiguo → SoA/SIMD de Fase 2; la API `AddComponent<T>`/`GetComponent<T>`
+      NO cambia; `HybridComponent` se mantiene para futuros `ScriptComponent`):
+
+  - [x] **Incremento 1 — Componentes de render a POD en pools** (MeshRenderer, Camera, Light,
+        SpriteRenderer): `CoreObject::AddComponent/GetComponent/RemoveComponent` eligen por trait
+        `IsDataComponent<T>` → `World::Add/Get/Remove<T>` (one-per-type, **sin box** — datos contiguos
+        en el pool, cache-friendly); el `RenderPipeline` lee los campos del POD directo; `SceneGroups`
+        pasan a `OwnedGroup<MeshRenderer/Camera/Light/SpriteRenderer, Active, WorldTransform>`.
+        `HybridComponent` queda para los componentes con lifecycle (física/audio, Incrementos 2-3) y
+        futuros `ScriptComponent`. API sin cambios. Verificado: build limpio, ctest 3/3, ECSDemo
+        (`renderables=5`), smoke editor OK (el render lee los PODs contiguos).
+  - [ ] **Incremento 2 — Física a data + sistema**: `RigidBody`/`Collider` → `RigidBodyData`/
+        `ColliderData` + `PhysicsSyncSystem` (cuerpos lazy + sync Jolt↔WorldTransform; porta el
+        OnStart/OnUpdate). El de mayor riesgo.
+  - [ ] **Incremento 3 — Audio a data + sistema**: `AudioSource`/`AudioListener` → POD +
+        `AudioSyncSystem`.
+  - [ ] **Incremento 4 — SoA por campo + SIMD** en los pools calientes (columnas `posX[]/…`,
+        alineadas 16/64B) — Fase 2 pura, ahora sobre data contigua.
+
+- [x] Render pipeline sobre Renderables group (+ fix de orden de dibujo por jerarquía) — hoy consume
       las caches de `ISceneStorage` + `GetComponent` (O(1)); el paso a `OwnedGroup` es de Fase 2.
 - [x] Tests de regresión: el editor (d3d12/vulkan/webgpu) y los demos (PhysicsDemo/ECSDemo) se ven y
       andan idénticos — verificado por el usuario.

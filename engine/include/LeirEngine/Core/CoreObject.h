@@ -5,6 +5,7 @@
 #include "LeirEngine/Core/UUID.h"
 #include "LeirEngine/Core/Transform.h"
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/ECS/World.h"
 
 #include <cassert>
@@ -50,15 +51,18 @@ public:
     // Scene
     Scene* GetScene() const { return m_Scene; }
 
-    // Components (Etapa A: every scene object is ECS-backed, so components live as
-    // HybridComponent<T> in the ECS world — one per type per object).
+    // Components. Data components (IsDataComponent<T>) live DIRECTLY in the ECS
+    // pools (contiguous, no box); lifecycle components stay boxed as
+    // HybridComponent<T>. Either way, one per type per object.
     template<typename T, typename... Args>
     T& AddComponent(Args&&... args) {
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         assert(m_Transform.IsEcsBacked() && "CoreObject must be ECS-backed to hold components");
         if (T* existing = GetComponent<T>())
             return *existing;
-        T& ref = m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
+        T& ref = IsDataComponent<T>::value
+            ? m_Transform.GetEcsWorld()->Add<T>(m_Transform.GetEcsEntity())
+            : m_Transform.GetEcsWorld()->AddHybrid<T>(m_Transform.GetEcsEntity(), std::forward<Args>(args)...);
         ref.m_Owner = this;
         ref.OnAwake();
         NotifyStructuralChange();
@@ -70,7 +74,9 @@ public:
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         if (!m_Transform.IsEcsBacked())
             return nullptr;
-        return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
+        return IsDataComponent<T>::value
+            ? m_Transform.GetEcsWorld()->Get<T>(m_Transform.GetEcsEntity())
+            : m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
     }
 
     template<typename T>
@@ -78,7 +84,9 @@ public:
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         if (!m_Transform.IsEcsBacked())
             return nullptr;
-        return m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
+        return IsDataComponent<T>::value
+            ? m_Transform.GetEcsWorld()->Get<T>(m_Transform.GetEcsEntity())
+            : m_Transform.GetEcsWorld()->GetHybrid<T>(m_Transform.GetEcsEntity());
     }
 
     template<typename T>
@@ -91,7 +99,10 @@ public:
         static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
         if (!m_Transform.IsEcsBacked())
             return;
-        m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
+        if (IsDataComponent<T>::value)
+            m_Transform.GetEcsWorld()->Remove<T>(m_Transform.GetEcsEntity());
+        else
+            m_Transform.GetEcsWorld()->Remove<ECS::HybridComponent<T>>(m_Transform.GetEcsEntity());
         NotifyStructuralChange();
     }
 

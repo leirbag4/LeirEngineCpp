@@ -244,32 +244,27 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
     // Camera/light/renderables via the journal-synced ECS query groups: the
     // data-oriented render path (no per-frame GetObjects/GetComponent scans).
     Camera* primaryCamera = nullptr;
-    scene->GetCameraGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+    scene->GetCameraGroup().ForEach([&](auto& cam, auto& active, auto&, ECS::Entity) {
         if (!active.value || primaryCamera)
             return;
-        Camera* cam = hc.instance.get();
-        if (cam && cam->IsPrimary())
-            primaryCamera = cam;
+        if (cam.IsPrimary())
+            primaryCamera = &cam;
     });
     if (!primaryCamera) {
-        scene->GetCameraGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+        scene->GetCameraGroup().ForEach([&](auto& cam, auto& active, auto&, ECS::Entity) {
             if (!active.value || primaryCamera)
                 return;
-            Camera* cam = hc.instance.get();
-            if (cam)
-                primaryCamera = cam;
+            primaryCamera = &cam;
         });
     }
     if (!primaryCamera)
         return;
 
     Light* primaryLight = nullptr;
-    scene->GetLightGroup().ForEach([&](auto& hc, auto& active, auto&, ECS::Entity) {
+    scene->GetLightGroup().ForEach([&](auto& light, auto& active, auto&, ECS::Entity) {
         if (!active.value || primaryLight)
             return;
-        Light* light = hc.instance.get();
-        if (light)
-            primaryLight = light;
+        primaryLight = &light;
     });
 
     primaryCamera->RecalculateViewMatrix();
@@ -281,18 +276,15 @@ void RenderPipeline::Render(RHI::GCommandGraph& graph, ISceneStorage* scene)
         push.lightColor = primaryLight->GetColor() * primaryLight->GetIntensity();
     }
 
-    scene->GetRenderGroup().ForEach([&](auto& hc, auto& active, auto& wt, ECS::Entity) {
+    scene->GetRenderGroup().ForEach([&](auto& renderer, auto& active, auto& wt, ECS::Entity) {
         if (!active.value)
             return;
-        MeshRenderer* renderer = hc.instance.get();
-        if (!renderer)
-            return;
-        auto mesh = renderer->GetMesh();
-        auto material = renderer->GetMaterial();
+        auto mesh = renderer.GetMesh();
+        auto material = renderer.GetMaterial();
         if (!mesh || !material)
             return;
         push.color = material ? material->GetColor() : Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-        RenderMeshRenderer(graph, renderer, viewProj, wt.worldMatrix, push);
+        RenderMeshRenderer(graph, &renderer, viewProj, wt.worldMatrix, push);
     });
 }
 
@@ -309,13 +301,10 @@ void RenderPipeline::RenderOverlay(RHI::GCommandGraph& graph, ISceneStorage* sce
         int orderInLayer;
     };
     std::vector<SpriteDraw> draws;
-    scene->GetSpriteGroup().ForEach([&](auto& hc, auto& active, auto& wt, ECS::Entity) {
+    scene->GetSpriteGroup().ForEach([&](auto& spr, auto& active, auto& wt, ECS::Entity) {
         if (!active.value)
             return;
-        SpriteRenderer* spr = hc.instance.get();
-        if (!spr)
-            return;
-        draws.push_back({ spr, wt.worldMatrix, 0, 0 });
+        draws.push_back({ &spr, wt.worldMatrix, 0, 0 });
     });
 
     if (draws.empty()) {

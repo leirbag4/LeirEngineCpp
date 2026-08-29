@@ -1,6 +1,7 @@
 #pragma once
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
 
@@ -46,3 +47,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::SpriteRenderer> : std::true_type {
+};

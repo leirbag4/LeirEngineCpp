@@ -1055,6 +1055,15 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Hybrid ECS — Componentes a data (Incremento 1): render components como POD en pools** (2026-08-28,
+  `TODO_HYBRID_ECS.md` §10): nuevo trait `Core/ComponentTraits.h` (`IsDataComponent<T>`); los 4
+  componentes de render (MeshRenderer/Camera/Light/SpriteRenderer) pasan de `HybridComponent<T>`
+  boxeados (unique_ptr + std::function por instancia) a **`World::Add/Get/Remove<T>` directo en el
+  pool** — datos contiguos (cache-friendly, SoA/SIMD-ready). `CoreObject::AddComponent/GetComponent/
+  RemoveComponent` eligen por trait. `SceneGroups` usan los PODs. API sin cambios. `HybridComponent`
+  queda para física/audio (Incrementos 2-3) y futuros `ScriptComponent`. Verificado: build limpio,
+  ctest 3/3, ECSDemo (`renderables=5`), smoke editor OK.
+
 - **Hybrid ECS — Fase 2: benchmarks + chunking del `JobSystem::ParallelFor`** (2026-08-28,
   `TODO_HYBRID_ECS.md` §11): benchmarks en `ECSTest` (informativos): **mat4x4 multiply SIMD 5.6× vs
   escalar** (2M mults) y **ParallelFor CPU-bound 5.0× con 8 threads**. El primer ParallelFor salía

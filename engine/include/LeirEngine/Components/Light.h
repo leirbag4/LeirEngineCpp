@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Math/Vector3.h"
 
 namespace Leir {
@@ -44,3 +45,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::Light> : std::true_type {
+};

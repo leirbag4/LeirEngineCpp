@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include <memory>
 
 namespace Leir {
@@ -26,3 +27,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::MeshRenderer> : std::true_type {
+};

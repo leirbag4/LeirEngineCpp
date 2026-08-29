@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LeirEngine/Core/Component.h"
+#include "LeirEngine/Core/ComponentTraits.h"
 #include "LeirEngine/Math/Matrix4x4.h"
 
 namespace Leir {
@@ -42,3 +43,7 @@ private:
 };
 
 } // namespace Leir
+
+template<>
+struct Leir::IsDataComponent<Leir::Camera> : std::true_type {
+};
