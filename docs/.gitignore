@@ -2,4 +2,6 @@
 tools/
 # XML intermedio de Doxygen (Breathe/Exhale lo consumen) — NO se commitea.
 sphinx/_xml/
+# Árbol de API generado por Exhale (se regenera en cada build) — NO se commitea.
+sphinx/api/
 # El sitio generado SÍ se commitea (site/).

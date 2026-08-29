@@ -105,14 +105,21 @@ docs/
       agregan con el retrofit §3.6.)
 
 ### 3.3 Config de Sphinx (`docs/sphinx/conf.py`)
-- [ ] `project = "LeirEngine"`, `html_theme = "furo"`.
-- [ ] `extensions = [myst_parser, breathe, exhale, sphinx_design]`.
-- [ ] `breathe_projects = {"LeirEngine": "_xml"}`.
-- [ ] `exhale_args`: `containmentFolder = "api"`, `rootFileName = "index.rst"`,
-      `createTreeView = True`, `afterTitleDescription` breve.
-- [ ] `primary_domain = "cpp"`, `highlight_language = "cpp"`.
-- [ ] `myst_enable_extensions` (colon_fence, tasklist, deflist, html_image, etc.).
-- [ ] `html_static_path` + custom CSS (opcional, para pulir el dark).
+- [x] `project = "LeirEngine"`, `html_theme = "furo"`.
+- [x] `extensions = [myst_parser, breathe, exhale, sphinx_design, sphinx_copybutton]`.
+- [x] `breathe_projects = {"LeirEngine": "_xml"}`.
+- [x] `exhale_args`: `containmentFolder = "api"`, `rootFileName = "index.rst"`,
+      `createTreeView = True`, `exhaleExecutesDoxygen = False`.
+- [x] `primary_domain = "cpp"`, `highlight_language = "cpp"`.
+- [x] `myst_enable_extensions` (colon_fence, tasklist, deflist, dollarmath, html_image, fieldlist).
+- [x] `html_static_path` + `_static/custom.css` (acento del engine + dark).
+- [x] `docs/sphinx/index.md` (main page con toctree a `api/index`).
+- [x] Verificado: `python -m sphinx -b html docs/sphinx docs/site` → **build succeeded**, 635 html.
+- [x] Baseline de warnings (~44, benignos): `Duplicate` (34, nested classes de Exhale), `Invalid` (7,
+      un miembro de `LeirSettings` que Breathe no parsea), 3 menores de símbolos sueltos. Los de
+      `tests/` (Check/LOG/TEST/main) se eliminaron sacando `tests` del INPUT de Doxygen (no son API
+      pública). `suppress_warnings` NO los silencia (warnings sin tipo). Se revisitan con el retrofit
+      de docblocks (§3.6).
 
 ### 3.4 CMake target `docs`
 - [ ] En `CMakeLists.txt` raíz (o `cmake/DocsTooling.cmake`): `find_package(Doxygen REQUIRED)`

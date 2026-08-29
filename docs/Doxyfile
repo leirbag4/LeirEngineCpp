@@ -12,10 +12,11 @@ PROJECT_NUMBER         = "1.0"
 OUTPUT_DIRECTORY       = docs
 XML_OUTPUT             = sphinx/_xml
 
-# ---- Fuentes: engine (headers públicos) + editor (headers) + tests ----
+# ---- Fuentes: engine (headers públicos) + editor (headers) ----
+# (tests/ fuera: son artefactos de CI, no API pública; generaban ruido de
+#  símbolos globales Check/LOG/TEST/main en las file pages.)
 INPUT                  = engine/include/LeirEngine \
-                         editor/src \
-                         tests
+                         editor/src
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp *.cpp *.c *.cc *.cxx *.inl
 
