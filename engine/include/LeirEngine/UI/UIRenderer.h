@@ -1,4 +1,11 @@
 #pragma once
+
+/**
+ * @file UIRenderer.h
+ * @brief UI renderer: builds batches and renders the canvas with GCommandGraph.
+ * @ingroup UI
+ */
+
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
@@ -16,43 +23,85 @@ class UIElement;
 class Texture2D;
 class RenderTexture;
 
+/**
+ * @brief UI vertex: position, UV, color and bindless texture index.
+ * @ingroup UI
+ */
 struct LEIR_API UIVertex {
-    Vector2 position;
-    Vector2 texCoord;
-    Vector4 color;
-    float textureIndex; // bindless index; constant per quad
+    Vector2 position;   ///< Position (logical pixels, NDC via push constants).
+    Vector2 texCoord;   ///< UV coordinates.
+    Vector4 color;      ///< Vertex color (tint).
+    float textureIndex; ///< Bindless texture index (constant per quad).
 };
 
+/**
+ * @brief Viewport draw: quad sampling a RenderTexture.
+ * @ingroup UI
+ */
 struct LEIR_API ViewportDraw {
-    UIVertex verts[4];
-    RenderTexture* texture;
-    Vector4 clip; // logical clip rect; {0,0,w,h} = full canvas (no clip)
+    UIVertex verts[4];      ///< Quad vertices.
+    RenderTexture* texture; ///< RenderTexture sampled.
+    Vector4 clip;           ///< Logical clip rect.
 };
 
-// Per-frame render statistics, read by UIDebugOverlay.
+/**
+ * @brief Per-frame render statistics.
+ * @ingroup UI
+ */
 struct LEIR_API UIRenderStats {
-    uint32_t quads = 0;        // quads submitted last frame
-    uint32_t vertices = 0;     // vertices submitted last frame
-    uint32_t drawCalls = 0;    // actual draw calls (after batching)
-    uint32_t batches = 0;      // number of merged batches (same texture + scissor)
+    uint32_t quads = 0;     ///< Quads submitted last frame.
+    uint32_t vertices = 0;  ///< Vertices submitted last frame.
+    uint32_t drawCalls = 0; ///< Actual draw calls (after batching).
+    uint32_t batches = 0;   ///< Number of merged batches.
 };
 
+/**
+ * @brief UI renderer: traverses the canvas, builds batches and issues draws.
+ * @ingroup UI
+ * @details Handles three draw layers (regular UI, viewports, debug overlay) with
+ *  scissor clipping and bindless textures.
+ */
 class LEIR_API UIRenderer {
 public:
+    /**
+     * @brief Constructs a renderer for a backend.
+     * @param[in] device Render backend.
+     */
     UIRenderer(RHI::RenderBackend* device);
+
+    /**
+     * @brief Destroys the renderer and its pipeline.
+     */
     ~UIRenderer();
 
+    /**
+     * @brief Renders the canvas into the command graph.
+     * @param[in] graph Command graph (draws appended).
+     * @param[in] canvas Canvas to render.
+     */
     void Render(RHI::GCommandGraph& graph, UICanvas* canvas);
 
-    // Hot-reload: re-read UI.vert/UI.frag and recreate the UI pipeline.
+    /**
+     * @brief Hot-reloads UI shaders and recreates the pipeline.
+     */
     void ReloadShaders();
 
-    // Physical/logical ratio (1.0 when HiDPI disabled). Scissor rects are
-    // logical clip rects scaled by this factor.
+    /**
+     * @brief Sets content scale (physical/logical) for scissor conversion.
+     * @param[in] scale Scale factor.
+     */
     void SetContentScale(float scale) { m_ContentScale = scale; }
+
+    /**
+     * @brief Returns content scale.
+     * @return Scale factor.
+     */
     float GetContentScale() const { return m_ContentScale; }
 
-    // Stats from the last Flush (0 if never rendered).
+    /**
+     * @brief Returns stats from the last Flush.
+     * @return Last stats (0 if never rendered).
+     */
     const UIRenderStats& GetLastStats() const { return m_LastStats; }
 
 private:
@@ -63,32 +112,32 @@ private:
     void Flush(RHI::GCommandGraph& graph);
     void ApplyScissor(RHI::GCommandGraph& graph, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid);
 
-    RHI::RenderBackend* m_Device;
+    RHI::RenderBackend* m_Device;                          ///< Backend.
 
-    RHI::RHIPipelineLayout m_PipelineLayout;
-    RHI::RHIPipeline m_Pipeline;
-    RHI::RHIDescriptorSetLayout m_DescSetLayout;
-    std::vector<RHISetLayoutEntry> m_SetLayouts; // derived from reflection (owned)
-    RHI::RHIBuffer m_VertexBuffers[2];
-    RHI::RHIDeviceMemory m_VertexMemories[2];
-    int m_MaxVertices = 0;
+    RHI::RHIPipelineLayout m_PipelineLayout;                ///< Pipeline layout.
+    RHI::RHIPipeline m_Pipeline;                            ///< Graphics pipeline.
+    RHI::RHIDescriptorSetLayout m_DescSetLayout;            ///< Descriptor set layout.
+    std::vector<RHISetLayoutEntry> m_SetLayouts;            ///< Reflection-derived layouts.
+    RHI::RHIBuffer m_VertexBuffers[2];                      ///< Vertex buffers (double buffered).
+    RHI::RHIDeviceMemory m_VertexMemories[2];               ///< Vertex memories.
+    int m_MaxVertices = 0;                                  ///< Max vertices.
 
-    std::vector<UIVertex> m_Vertices;
-    std::vector<Texture2D*> m_QuadTextures;
-    std::vector<Vector4> m_QuadClips;
-    Texture2D* m_FallbackTex = nullptr;
+    std::vector<UIVertex> m_Vertices;                       ///< Regular batch vertices.
+    std::vector<Texture2D*> m_QuadTextures;                 ///< Regular quad textures.
+    std::vector<Vector4> m_QuadClips;                       ///< Regular quad clips.
 
-    std::vector<ViewportDraw> m_ViewportDraws;
+    Texture2D* m_FallbackTex = nullptr;                     ///< Fallback white texture.
 
-    std::vector<UIVertex> m_DebugVertices;
-    std::vector<Texture2D*> m_DebugQuadTextures;
-    std::vector<Vector4> m_DebugQuadClips;
+    std::vector<ViewportDraw> m_ViewportDraws;              ///< Viewport draws.
 
-    // Active clip rect during the Render walk (nullptr = full canvas).
-    const Vector4* m_CurrentClip = nullptr;
-    Vector2 m_ScreenSize = {1280.0f, 720.0f}; // logical canvas size (px→NDC)
-    float m_ContentScale = 1.0f;
-    UIRenderStats m_LastStats;
+    std::vector<UIVertex> m_DebugVertices;                  ///< Debug overlay vertices.
+    std::vector<Texture2D*> m_DebugQuadTextures;            ///< Debug quad textures.
+    std::vector<Vector4> m_DebugQuadClips;                  ///< Debug quad clips.
+
+    const Vector4* m_CurrentClip = nullptr;                 ///< Active clip rect.
+    Vector2 m_ScreenSize = {1280.0f, 720.0f};                ///< Logical canvas size.
+    float m_ContentScale = 1.0f;                            ///< Content scale.
+    UIRenderStats m_LastStats;                              ///< Last frame stats.
 };
 
 } // namespace Leir
