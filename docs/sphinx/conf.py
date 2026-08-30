@@ -43,6 +43,7 @@ exhale_args = {
     "createTreeView": True,
     "exhaleExecutesDoxygen": False,
     "doxygenStripFromPath": os.path.abspath(os.path.join(here, "..", "..")),
+    "fullToctreeMaxDepth": 1,
     "verboseBuild": False,
 }
 
