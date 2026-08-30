@@ -17,6 +17,7 @@ extensions = [
     "exhale",
     "sphinx_design",
     "sphinx_copybutton",
+    "sphinxcontrib.jquery",
 ]
 
 # --- Markdown (MyST): escribimos las guías en .md ---
