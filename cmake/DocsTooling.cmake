@@ -46,7 +46,7 @@ endif()
 
 if(Python3_EXECUTABLE)
     add_custom_target(docs_sphinx
-        COMMAND "${Python3_EXECUTABLE}" -m sphinx -b html
+        COMMAND "${Python3_EXECUTABLE}" -m sphinx -E -b html
                 "${CMAKE_SOURCE_DIR}/docs/sphinx"
                 "${CMAKE_SOURCE_DIR}/docs/site"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

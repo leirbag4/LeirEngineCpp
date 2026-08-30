@@ -9,3 +9,8 @@ furo==2025.12.19
 sphinx-design==0.7.0
 sphinx-copybutton==0.5.2
 sphinxcontrib-jquery==4.1
+# Temas alternativos (dark) para probar: generate_docs.bat [FILTER] [THEME] [PYGMENT]
+sphinx-book-theme>=1.1.3
+pydata-sphinx-theme>=0.15
+sphinx_rtd_theme==3.1.0
+sphinx-immaterial>=0.13
