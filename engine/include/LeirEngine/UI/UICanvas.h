@@ -9,6 +9,7 @@
 #include "LeirEngine/Core/Export.h"
 #include "LeirEngine/UI/UIElement.h"
 #include "LeirEngine/Input/InputEvent.h"
+#include "LeirEngine/Input/EventQueue.h"
 
 namespace Leir {
 
@@ -36,6 +37,20 @@ public:
      * @param[in] height Screen height.
      */
     void SetScreenSize(float width, float height);
+
+    /**
+     * @brief Sets the native window this canvas receives input from.
+     * @details Multi-window: events whose `window` field does not match are
+     *  ignored. Nullptr (default) = accept all events (single-window apps).
+     * @param[in] window Native window handle (GLFWwindow*).
+     */
+    void SetInputWindow(void* window) { m_InputWindow = window; }
+
+    /**
+     * @brief Returns the native window this canvas is bound to.
+     * @return Native window handle or nullptr.
+     */
+    void* GetInputWindow() const { return m_InputWindow; }
 
     /**
      * @brief Returns screen width.
@@ -148,6 +163,8 @@ private:
     UIElement* m_FocusElement = nullptr;            ///< Focused element.
     UIElement* m_HoveredElement = nullptr;          ///< Hovered element.
     UIElement* m_CaptureElement = nullptr;          ///< Pointer capture element.
+    void* m_InputWindow = nullptr;                  ///< Native window handle for multi-window filtering.
+    EventQueue::HookId m_HookTokens[4] = {0,0,0,0};///< Hook tokens for removal.
 
     void HitTestRecursive(UIElement* element, const Vector2& pos, UIElement*& out,
                           const Vector4* clip);

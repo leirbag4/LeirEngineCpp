@@ -47,6 +47,7 @@
 #include "UI/ToolbarPanel.h"
 #include "LeirEngine/UI/UIMenuBar.h"
 #include "LeirEngine/UI/UIContextMenu.h"
+#include "LeirEngine/UI/UIWindowExternal.h"
 #include "UI/GizmoLogPanel.h"
 #include "UI/TreeViewDebugPanel.h"
 #include "UI/HierarchyPanel.h"
@@ -380,6 +381,9 @@ protected:
 
         m_Canvas = std::make_unique<Leir::UICanvas>();
         m_Canvas->SetScreenSize((float)GetWidth(), (float)GetHeight());
+        // Bind the canvas to the MAIN window: events from external windows
+        // (e.g. the Leir Test Window) must not reach the editor's UI.
+        m_Canvas->SetInputWindow(GetWindow());
         m_Canvas->ConnectToInputSystem();
 
         // ---- Gizmo log recorder: capture REAL input events ----
@@ -484,6 +488,40 @@ protected:
 
         // Load submenu arrow icon and propagate to all menus.
         ApplyMenuIcons();
+
+        // Fase D — external window test (only with the Vulkan backend for now;
+        // CreateSwapchainTarget is unimplemented for D3D12/WebGPU yet).
+        if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+            m_TestWindow = new Leir::UIWindowExternal(m_Backend.get(), "Leir Test Window");
+            m_TestWindow->Show();
+            // Give the window real content so the render path is visible.
+            if (Leir::UICanvas* c = m_TestWindow->GetCanvas()) {
+                auto* title = new Leir::UILabel();
+                title->SetName("TestWinTitle");
+                title->SetText("External Window");
+                title->SetFont(m_FontSmall.get());
+                title->SetColor({0.9f, 0.9f, 0.95f, 1.0f});
+                title->GetRect().anchor = {0.0f, 0.0f, 0.0f, 0.0f};
+                title->GetRect().offset = {10.0f, 8.0f, 210.0f, 28.0f};
+                c->AddChild(title);
+
+                auto* body = new Leir::UIPanel();
+                body->SetName("TestWinBody");
+                body->SetColor({0.20f, 0.22f, 0.28f, 1.0f});
+                body->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
+                body->GetRect().offset = {4.0f, 34.0f, -4.0f, -4.0f};
+                c->AddChild(body);
+
+                auto* label = new Leir::UILabel();
+                label->SetName("TestWinLabel");
+                label->SetText("Vulkan multi-window OK");
+                label->SetFont(m_FontSmall.get());
+                label->SetColor({0.8f, 0.8f, 0.85f, 1.0f});
+                label->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+                label->GetRect().offset = {-90.0f, -10.0f, 90.0f, 12.0f};
+                body->AddChild(label);
+            }
+        }
 
         // Transform toolbar: a NON-dockable sibling of the DockManager pinned to
         // the top (below the menu bar), spanning the full width.
@@ -1021,6 +1059,10 @@ protected:
             m_Backend->CmdExecuteGraph(cmd, m_UIGraph);
         }
         m_Backend->EndFrame();
+
+        // Fase D — render the external test window (its own swapchain/device).
+        if (m_TestWindow)
+            m_TestWindow->RenderFrame();
     }
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin
@@ -1081,6 +1123,11 @@ protected:
         // layer raise 0x87D (device-removed) at teardown (~240 accumulated crash
         // entries in crash_diagnostics.log). The earlier RenderTexture teardown
         // crash was the same class, fixed the same way. Cost: ~0-16ms once.
+        // The external window must die BEFORE the backend (it shares the device).
+        if (m_TestWindow) {
+            delete m_TestWindow;
+            m_TestWindow = nullptr;
+        }
         if (m_Backend)
             m_Backend->WaitIdle();
         auto& settings = Leir::LeirSettings::Get();
@@ -1363,6 +1410,10 @@ private:
 
     std::unique_ptr<Leir::RHI::RenderBackend> m_Backend;
     std::unique_ptr<Leir::RenderPipeline> m_RenderPipeline;
+
+    // Fase D — external window test (UIWindowExternal). A second OS window that
+    // renders through the shared Vulkan device, proving the multi-window path.
+    Leir::UIWindowExternal* m_TestWindow = nullptr;
 
     // Per-frame command graphs (see GCommandGraph): the scene graph owns the
     // RenderTexture pass; the UI graph records draws into the swapchain

@@ -17,6 +17,8 @@
 // The public header must not include Vulkan types; VulkanDevice is kept behind
 // a PIMPL.
 
+namespace Leir { class SwapchainTarget; }
+
 namespace Leir {
 namespace RHI {
 
@@ -135,6 +137,13 @@ public:
     void CmdBarrier(RHICommandBuffer cmd) override;
     void CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
         Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) override;
+
+    // ---- Multi-window (external targets) ----
+    // Creates a swapchain target for an additional GLFW window, sharing this
+    // backend's Vulkan device/queues/render passes. The returned object is
+    // self-contained for its own frame loop (BeginFrame/EndFrame).
+    // window: native GLFWwindow*.
+    Leir::SwapchainTarget* CreateSwapchainTarget(void* window) override;
 
 private:
     struct Impl;

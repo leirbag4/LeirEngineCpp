@@ -23,27 +23,43 @@ void UICanvas::ConnectToInputSystem()
 {
     auto& eq = EventQueue::Get();
 
-    eq.SetPointerHook([this](const PointerEvent& e) {
+    // Filter events by the bound window (if set). Multi-window: each canvas
+    // receives only events for its own window. Single-window (m_InputWindow==nullptr)
+    // accepts all events so the default behaviour is unchanged.
+    auto filtered = [this](const void* w) {
+        return m_InputWindow && w && w != m_InputWindow;
+    };
+
+    m_HookTokens[0] = eq.AddPointerHook([this, filtered](const PointerEvent& e) {
+        if (filtered(e.window)) return;
         ProcessPointerEvent(e);
     });
 
-    eq.SetCharHook([this](const CharEvent& e) {
+    m_HookTokens[1] = eq.AddCharHook([this, filtered](const CharEvent& e) {
+        if (filtered(e.window)) return;
         SendTextInput(e.codepoint);
     });
 
-    eq.SetKeyHook([this](const KeyEvent& e) {
+    m_HookTokens[2] = eq.AddKeyHook([this, filtered](const KeyEvent& e) {
+        if (filtered(e.window)) return;
         if (e.action == EventAction::Press || e.action == EventAction::Repeat)
             SendKeyDown(static_cast<int>(e.key));
     });
 
-    eq.SetScrollHook([this](const ScrollEvent& e) {
+    m_HookTokens[3] = eq.AddScrollHook([this, filtered](const ScrollEvent& e) {
+        if (filtered(e.window)) return;
         ProcessScrollEvent(e);
     });
 }
 
 void UICanvas::DisconnectFromInputSystem()
 {
-    EventQueue::Get().ClearHooks();
+    auto& eq = EventQueue::Get();
+    if (m_HookTokens[0]) eq.RemovePointerHook(m_HookTokens[0]);
+    if (m_HookTokens[1]) eq.RemoveCharHook(m_HookTokens[1]);
+    if (m_HookTokens[2]) eq.RemoveKeyHook(m_HookTokens[2]);
+    if (m_HookTokens[3]) eq.RemoveScrollHook(m_HookTokens[3]);
+    for (auto& t : m_HookTokens) t = 0;
 }
 
 void UICanvas::SetScreenSize(float width, float height)

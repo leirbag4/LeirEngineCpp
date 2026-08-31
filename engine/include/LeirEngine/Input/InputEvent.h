@@ -26,6 +26,7 @@ struct KeyEvent {
     int scancode = 0;
     EventAction action = EventAction::Press;
     int mods = 0;
+    void* window = nullptr; ///< GLFWwindow* origin (nullptr = single-window apps).
 };
 
 struct PointerEvent {
@@ -36,15 +37,18 @@ struct PointerEvent {
     PointerButton button = PointerButton::None;
     EventAction action = EventAction::Press;
     float pressure = 1.0f;
+    void* window = nullptr; ///< GLFWwindow* origin (nullptr = single-window apps).
 };
 
 struct CharEvent {
     uint32_t codepoint = 0;
     int mods = 0;
+    void* window = nullptr; ///< GLFWwindow* origin (nullptr = single-window apps).
 };
 
 struct ScrollEvent {
     Vector2 offset{ 0.0f, 0.0f };
+    void* window = nullptr; ///< GLFWwindow* origin (nullptr = single-window apps).
 };
 
 using InputEvent = std::variant<KeyEvent, PointerEvent, CharEvent, ScrollEvent>;

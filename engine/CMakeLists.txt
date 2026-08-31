@@ -22,6 +22,7 @@ add_library(LeirEngine SHARED
     src/Input/Touch.cpp
     src/Input/Pointer.cpp
     src/Rendering/VulkanDevice.cpp
+    src/Rendering/SwapchainTarget.cpp
     src/RHI/VulkanBackend.cpp
     src/RHI/BackendFactory.cpp
     src/Rendering/Shader.cpp
@@ -47,6 +48,8 @@ add_library(LeirEngine SHARED
     src/UI/UIButton.cpp
     src/UI/UIContextMenu.cpp
     src/UI/UIMenuBar.cpp
+    src/UI/UIWindow.cpp
+    src/UI/UIWindowExternal.cpp
     src/UI/UIPanel.cpp
     src/UI/UIRenderer.cpp
     src/UI/UITextInput.cpp

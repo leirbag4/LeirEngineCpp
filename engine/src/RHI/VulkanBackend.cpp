@@ -341,6 +341,12 @@ VulkanBackend::VulkanBackend(void* window, int width, int height, bool vsync,
 
 VulkanBackend::~VulkanBackend() = default;
 
+Leir::SwapchainTarget* VulkanBackend::CreateSwapchainTarget(void* window)
+{
+    auto target = m_Impl->device.CreateSwapchainTarget(static_cast<GLFWwindow*>(window));
+    return target.release(); // caller owns it (delete)
+}
+
 const GCaps& VulkanBackend::GetCaps() const { return m_Impl->caps; }
 
 // ---- Frame lifecycle ----

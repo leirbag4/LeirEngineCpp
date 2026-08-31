@@ -19,14 +19,8 @@ InputManager& InputManager::GetInstance()
     return instance;
 }
 
-void InputManager::Init(GLFWwindow* window)
+void InputManager::RegisterCallbacks(GLFWwindow* window)
 {
-    m_Window = window;
-
-    double x, y;
-    glfwGetCursorPos(window, &x, &y);
-    m_LastMousePos = ToLogical(x, y);
-
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetCharCallback(window, CharCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
@@ -34,9 +28,50 @@ void InputManager::Init(GLFWwindow* window)
     glfwSetScrollCallback(window, ScrollCallback);
 }
 
+void InputManager::Init(GLFWwindow* window)
+{
+    m_Window = window;
+
+    double x, y;
+    glfwGetCursorPos(window, &x, &y);
+    auto& st = GetState(window);
+    st.lastMousePos = ToLogical(window, x, y);
+    st.contentScale = m_ContentScale;
+
+    RegisterCallbacks(window);
+}
+
+void InputManager::AddWindow(GLFWwindow* window)
+{
+    if (!window || m_Window == window)
+        return;
+    // Register callbacks on the additional window (mouse state is created on demand).
+    RegisterCallbacks(window);
+}
+
 void InputManager::Shutdown()
 {
     m_Window = nullptr;
+    m_WindowStates.clear();
+}
+
+void InputManager::SetContentScaleForWindow(GLFWwindow* window, float scale)
+{
+    if (!window) {
+        m_ContentScale = scale;
+        return;
+    }
+    GetState(window).contentScale = scale;
+}
+
+InputManager::WindowState& InputManager::GetState(GLFWwindow* window)
+{
+    auto it = m_WindowStates.find(window);
+    if (it == m_WindowStates.end()) {
+        it = m_WindowStates.emplace(window, WindowState{}).first;
+        it->second.contentScale = m_ContentScale;
+    }
+    return it->second;
 }
 
 void InputManager::SetCursorStyle(CursorStyle style)
@@ -82,7 +117,6 @@ void InputManager::Update()
 
 void InputManager::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    (void)window;
     EventAction evAction = EventAction::Press;
     if (action == GLFW_RELEASE) evAction = EventAction::Release;
     else if (action == GLFW_REPEAT) evAction = EventAction::Repeat;
@@ -92,21 +126,21 @@ void InputManager::KeyCallback(GLFWwindow* window, int key, int scancode, int ac
     e.scancode = scancode;
     e.action = evAction;
     e.mods = mods;
+    e.window = window;
 
     EventQueue::Get().Push(e);
 }
 
 void InputManager::CharCallback(GLFWwindow* window, unsigned int codepoint)
 {
-    (void)window;
     CharEvent e;
     e.codepoint = codepoint;
+    e.window = window;
     EventQueue::Get().Push(e);
 }
 
 void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    (void)window;
     (void)mods;
 
     PointerButton btn = PointerButton::None;
@@ -120,18 +154,20 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
     }
 
     auto& inst = GetInstance();
+    auto& st = inst.GetState(window);
     double x, y;
-    glfwGetCursorPos(inst.m_Window, &x, &y);
-    Vector2 pos = inst.ToLogical(x, y);
+    glfwGetCursorPos(window, &x, &y);
+    Vector2 pos = inst.ToLogical(window, x, y);
 
     PointerEvent e;
     e.source = PointerSource::Mouse;
     e.pointerId = 0;
     e.position = pos;
-    e.delta = pos - inst.m_LastMousePos;
+    e.delta = pos - st.lastMousePos;
     e.button = btn;
     e.action = (action == GLFW_PRESS) ? EventAction::Press : EventAction::Release;
     e.pressure = 1.0f;
+    e.window = window;
 
     EventQueue::Get().Push(e);
 }
@@ -139,40 +175,43 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
 void InputManager::CursorPosCallback(GLFWwindow* window, double x, double y)
 {
     auto& inst = GetInstance();
-    Vector2 newPos = inst.ToLogical(x, y);
+    auto& st = inst.GetState(window);
+    Vector2 newPos = inst.ToLogical(window, x, y);
 
     PointerEvent e;
     e.source = PointerSource::Mouse;
     e.pointerId = 0;
     e.position = newPos;
-    e.delta = newPos - inst.m_LastMousePos;
+    e.delta = newPos - st.lastMousePos;
     e.button = PointerButton::None;
     e.action = EventAction::Move;
     e.pressure = 1.0f;
+    e.window = window;
 
-    inst.m_LastMousePos = newPos;
+    st.lastMousePos = newPos;
     EventQueue::Get().Push(e);
 }
 
-Vector2 InputManager::ToLogical(double x, double y) const
+Vector2 InputManager::ToLogical(GLFWwindow* window, double x, double y) const
 {
     Vector2 pos{ static_cast<float>(x), static_cast<float>(y) };
 #ifdef _WIN32
     // On Windows a DPI-aware process receives cursor positions in physical
     // pixels (like the window size). Convert to logical UI units. On
     // macOS/Linux GLFW already reports logical units, so this is a no-op.
-    if (m_ContentScale > 0.0f)
-        pos /= m_ContentScale;
+    auto it = m_WindowStates.find(window);
+    float scale = (it != m_WindowStates.end()) ? it->second.contentScale : m_ContentScale;
+    if (scale > 0.0f)
+        pos /= scale;
 #endif
     return pos;
 }
 
 void InputManager::ScrollCallback(GLFWwindow* window, double xOffset, double yOffset)
 {
-    (void)window;
-
     ScrollEvent e;
     e.offset = { static_cast<float>(xOffset), static_cast<float>(yOffset) };
+    e.window = window;
     EventQueue::Get().Push(e);
 }
 

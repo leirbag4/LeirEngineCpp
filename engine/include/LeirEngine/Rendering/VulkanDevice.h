@@ -1,12 +1,14 @@
 #pragma once
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Rendering/SwapchainTarget.h"
 
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
 #include <optional>
 #include <functional>
+#include <memory>
 
 struct GLFWwindow;
 
@@ -52,9 +54,11 @@ public:
     VkRenderPass GetOverlayRenderPass() const { return m_OverlayRenderPass; }
     VkDevice GetDevice() const { return m_Device; }
     VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
+    VkInstance GetInstance() const { return m_Instance; }
     VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
     VkQueue GetPresentQueue() const { return m_PresentQueue; }
     VkCommandPool GetCommandPool() const { return m_CommandPool; }
+    bool GetVsync() const { return m_Config.vsync; }
 
     // True when descriptor-indexing update-after-bind was enabled at device
     // creation (lets the bindless table exceed the non-update-after-bind
@@ -115,6 +119,15 @@ public:
     void ResetResized() { m_FramebufferResized = false; }
     void NotifyResized() { m_FramebufferResized = true; }
     void RecreateSwapchain();
+
+    // ---- Multi-window (external targets) ----
+    // Creates a new swapchain target for an additional OS window sharing this
+    // device/queues/command pool/render passes. The target owns its own surface,
+    // swapchain, images, views, depth, framebuffers, command buffers, semaphores
+    // and fences. Render passes are shared (assumes the same swapchain format).
+    // The returned target is independent: the caller drives its frame loop via
+    // BeginFrame/BeginOverlayRenderPass/EndFrame.
+    std::unique_ptr<SwapchainTarget> CreateSwapchainTarget(GLFWwindow* window);
 
 private:
     void CreateInstance();

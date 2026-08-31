@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <memory>
 
 // Abstract render backend interface.
 //
@@ -17,6 +18,8 @@
 // to its native API. See TODO_RHI_SLANG.md Fase 2a.
 //
 // Public engine/editor code must only depend on this interface + RHI.h types.
+
+namespace Leir { class SwapchainTarget; }
 
 namespace Leir {
 namespace RHI {
@@ -128,6 +131,13 @@ public:
     // (256) when UnrestrictedBufferTextureCopyPitchSupported is false; Vulkan
     // copies tightly-packed rows (bufferRowLength=0), so it returns 1.
     virtual uint32_t GetCopyRowPitchAlignment() const { return 1; }
+
+    // ---- Multi-window ----
+    // Creates a swapchain target for an additional OS window sharing this
+    // backend's device/queues. Returns nullptr if not implemented for this
+    // backend. The returned target is self-contained (BeginFrame/EndFrame);
+    // the caller owns it (deletes with `delete`).
+    virtual Leir::SwapchainTarget* CreateSwapchainTarget(void* window) { return nullptr; }
 
     virtual RHIRenderPass CreateRenderPass(const std::vector<Format>& colorFormats,
         Format depthFormat, bool overlay) = 0;

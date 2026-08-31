@@ -963,6 +963,17 @@ void VulkanDevice::CleanupSwapchain()
     vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
 }
 
+// ---- Multi-window (external targets) ----
+
+std::unique_ptr<SwapchainTarget> VulkanDevice::CreateSwapchainTarget(GLFWwindow* window)
+{
+    // The render passes are baked to the main window's swapchain format; the
+    // target must resolve to the same format (B8G8R8A8_SRGB) to reuse them.
+    return std::make_unique<SwapchainTarget>(
+        m_Instance, m_PhysicalDevice, m_Device, m_GraphicsQueue, m_PresentQueue,
+        m_CommandPool, window, m_RenderPass, m_OverlayRenderPass, m_Config.vsync);
+}
+
 // ---- Resource Helpers ----
 
 VkShaderModule VulkanDevice::CreateShaderModule(const std::vector<char>& code) const
