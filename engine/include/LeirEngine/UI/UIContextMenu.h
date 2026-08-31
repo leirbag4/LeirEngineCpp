@@ -7,6 +7,7 @@
  */
 
 #include "LeirEngine/UI/UIPanel.h"
+#include "LeirEngine/UI/UIImage.h"
 #include "LeirEngine/Math/Vector2.h"
 #include "LeirEngine/Math/Vector4.h"
 #include <functional>
@@ -18,6 +19,7 @@ namespace Leir {
 
 class UILabel;
 class Font;
+class Texture2D;
 
 /**
  * @brief Context menu / popup shown on demand (right-click or hierarchy "+").
@@ -36,6 +38,7 @@ public:
         std::function<void()> action;       ///< Action on click.
         bool disabled = false;              ///< Disabled flag.
         bool separator = false;             ///< Separator flag.
+        UIContextMenu* subMenu = nullptr;   ///< Submenu opened on hover/click (owned).
     };
 
     /**
@@ -65,6 +68,15 @@ public:
      * @param[in] label Label.
      */
     void AddItemDisabled(const std::string& label);
+
+    /**
+     * @brief Adds a submenu item (renders a "›" arrow, opens on hover/click).
+     * @details Takes ownership of subMenu; it is deleted with this menu. The
+     *  submenu is opened to the right of the row, clamped to the canvas.
+     * @param[in] label Row label.
+     * @param[in] subMenu Child menu to open.
+     */
+    void AddSubMenu(const std::string& label, UIContextMenu* subMenu);
 
     /**
      * @brief Sets minimum width.
@@ -114,9 +126,22 @@ public:
     Font* GetFont() const { return m_Font; }
 
     /**
+     * @brief Sets the submenu arrow icon (PNG via UITextureCache) applied to
+     * all rows with a submenu. Propagated to owned submenus too.
+     * @param[in] icon Arrow texture (shared, cached).
+     */
+    void SetSubMenuIcon(std::shared_ptr<Texture2D> icon);
+
+    /**
+     * @brief Returns the submenu arrow icon.
+     * @return Texture pointer (shared) or nullptr.
+     */
+    const std::shared_ptr<Texture2D>& GetSubMenuIcon() const { return m_SubMenuIcon; }
+
+    /**
      * @brief Returns whether the menu owns the child for subtree-delete.
      * @param[in] child Child to query.
-     * @return True if owned (rows).
+     * @return True if owned (rows or submenus).
      */
     bool OwnsChild(const UIElement* child) const override;
 
@@ -132,13 +157,30 @@ private:
     void RebuildItems();
     Vector2 GetContentSize() const override;
 
+    // Submenu management (called by MenuItem).
+    void OpenSubMenu(MenuItem* item);
+    void CloseSubMenu();
+    void CloseAllMenus();
+    UIContextMenu* GetOpenSubMenu() const { return m_OpenSubMenu; }
+
+    // Hit-test that includes this menu and any open submenu (recursively), so
+    // clicks on a submenu never close an ancestor menu.
+    bool HitTestPoint(const Vector2& p) const;
+
     std::vector<Item> m_Items;                          ///< Item descriptors.
     std::vector<UIElement*> m_Rows;                     ///< Row widgets (MenuItem* and separators).
+    std::vector<UIContextMenu*> m_SubMenus;             ///< Owned submenus (added as canvas children).
+    UIContextMenu* m_OpenSubMenu = nullptr;             ///< Currently open submenu.
+    UIContextMenu* m_OwnerMenu = nullptr;               ///< Menu that owns this submenu (for CloseAllMenus).
     Font* m_Font = nullptr;                             ///< Font (not owned).
+    std::shared_ptr<Texture2D> m_SubMenuIcon;           ///< Submenu arrow icon (shared, not owned).
     float m_MinWidth = 160.0f;                          ///< Minimum width.
     float m_MaxWidth = 320.0f;                          ///< Maximum width.
     bool m_Open = false;                                ///< Open flag.
+    bool m_IgnoreOutsideClick = false;                  ///< Ignore the next outside Press (the one that opened the menu).
     std::shared_ptr<bool> m_Alive = std::make_shared<bool>(true); ///< Alive flag for EventQueue hooks.
+
+    friend class MenuItem;
 };
 
 /**
@@ -165,6 +207,25 @@ public:
      * @param[in] font Font pointer.
      */
     void SetFont(Font* font);
+
+    /**
+     * @brief Sets the submenu opened by this row (adds the "›" arrow label).
+     * @param[in] owner The menu that owns this row.
+     * @param[in] sub Submenu to open on hover/click.
+     */
+    void SetSubMenu(UIContextMenu* owner, UIContextMenu* sub);
+
+    /**
+     * @brief Returns the submenu owned by this row.
+     * @return Submenu pointer or nullptr.
+     */
+    UIContextMenu* GetSubMenu() const { return m_SubMenu; }
+
+    /**
+     * @brief Sets the submenu arrow icon for this row (PNG via UITextureCache).
+     * @param[in] icon Arrow texture (shared, cached).
+     */
+    void SetSubMenuIcon(std::shared_ptr<Texture2D> icon);
 
     /**
      * @brief Handles pointer press.
@@ -203,10 +264,17 @@ public:
      */
     void ApplyWidthLimit(float itemWidth);
 
+protected:
+    void OnLayoutComputed() override;
+
 private:
     void UpdateColors();
 
     UILabel* m_Label = nullptr;                         ///< Label (owned).
+    UIImage* m_ArrowImage = nullptr;                    ///< Submenu arrow image (owned, only if submenu).
+    std::shared_ptr<Texture2D> m_ArrowTexture;          ///< Arrow texture (shared, keeps it alive).
+    UIContextMenu* m_Owner = nullptr;                   ///< Owning menu (for open/close).
+    UIContextMenu* m_SubMenu = nullptr;                 ///< Submenu to open (owned by menu).
     std::function<void()> m_Activate;                   ///< Activate callback.
     bool m_Disabled = false;                            ///< Disabled flag.
     bool m_Hovered = false;                             ///< Hovered flag.

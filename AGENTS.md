@@ -741,7 +741,9 @@ are gone; the `DockManager` is the full-screen root and panels are dockable tabs
 
 ```
 Canvas
-  ├── DockManager ("EditorDock", Stretch, offset 0,0–0,-30)   ← bottom 30px free
+  ├── UIMenuBar ("MenuBar", anchor 0,0–1,0, offset 0,0–0,28)   ← top 28px (File/Edit/Help)
+  ├── ToolbarPanel ("TransformToolbar", anchor 0,0–1,0, offset 0,28–0,58)  ← W/E/R + Global/Local
+  ├── DockManager ("EditorDock", Stretch, offset 0,58–0,-30)   ← bottom 30px free
   │     └── DockSplitNode H [0.17, 0.66, 0.17]
   │           ├── DockPane: [DockTabBar: Hierarchy] → content "Hierarchy"
   │           ├── DockSplitNode V [0.8, 0.2]
@@ -926,6 +928,32 @@ class UIDragFloatInput : public UIPanel {
 - `Refresh()` reads from the scene object and updates input values every frame
 - Both panels start with `"Debug"` in their name so the whole subtree routes to the debug overlay layer
 
+### UIMenuBar / UIMenuBarItem (`engine/include/LeirEngine/UI/UIMenuBar.h` + `src/UI/UIMenuBar.cpp`)
+
+Top menu bar (File / Edit / Help …) — a Row container of `UIMenuBarItem`s, sibling of the
+Toolbar at the very top of the editor (28px). Each item owns a `UIContextMenu` dropdown
+opened below it; `UIMenuBar` enforces **at most one open** at a time. Full plan in
+`TODO_UI_MENU_BAR.md`.
+
+- `UIMenuBar`: `AddItem(label)` (builder) / `AddItem(item)` / `RemoveItem` / `GetItem(s)` /
+  `CloseMenus` / `GetOpenItem` / `SetOnItemOpened(cb)` / `SetSubMenuIcon(icon)` / `OwnsChild`.
+- `UIMenuBarItem`: `SetText/GetText`, `SetFont`, `SetColors(normal,hover)`,
+  `SetTextColor`, `GetMenu()`, builder `AddMenuItem/AddMenuSeparator/AddMenuDisabled/
+  AddSubMenu`, `OpenMenu/CloseMenu/IsMenuOpen`, `SetOnToggle(cb)`. Click toggles; hover
+  highlight; open state = lighter bg + white text (refreshed in `OnLayoutComputed`).
+- **Submenu arrows are PNG 13×13** via `UITextureCache` (`assets/icons/arrow_right.png`,
+  editor loads in `ApplyMenuIcons()` + re-applies on content-scale change), rendered as a
+  `UIImage` child centered in `OnLayoutComputed`. Future: own SVG renderer for all editor
+  icons. `Font.cpp` packs ASCII 32-126 only — dialog menu items use `"..."` ASCII, never `…`.
+- `UIContextMenu` submenus (`TODO_UI_CONTEXT_MENU.md` Fase 1c): `AddSubMenu(label, sub)`
+  takes ownership; `AddSubMenu`/`OpenSubMenu` **propagate `m_Font` + `m_SubMenuIcon`**
+  (a submenu created after `SetFont` would otherwise render invisible rows). `OpenAt`
+  sets `m_IgnoreOutsideClick` so the same Press that opened the menu doesn't close it
+  (the global "click outside closes" EventQueue hook would see it as outside).
+  `CloseAllMenus()` closes this menu + all ancestors. Submenu aligns its first row to the
+  parent row via `cr.y - GetPaddingTop()`. `HitTestPoint` is recursive through open
+  submenus so clicks on a submenu never close an ancestor.
+
 ## Layout System
 
 ### Parent position propagation
@@ -1106,6 +1134,30 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
   `~/.local/share/icons` is optional, install-time work.
 
 ## Previous Changes Summary
+
+- **UIMenuBar + UIMenuBarItem + submenús en UIContextMenu** (2026-08-31, ver `TODO_UI_MENU_BAR.md`):
+  barra de menú superior estilo WPF con dropdowns y submenús anidados. **(1) `UIMenuBar`**
+  (`engine/include/LeirEngine/UI/UIMenuBar.h` + `src/UI/UIMenuBar.cpp`): Row de `UIMenuBarItem`
+  (~28px, sibling del Toolbar, arriba de todo), `AddItem(label)` builder, **uno abierto a la vez**,
+  `CloseMenus`/`GetOpenItem`/`SetOnItemOpened`/`SetSubMenuIcon`. **(2) `UIMenuBarItem`**: label +
+  dropdown `UIContextMenu` propio (add a canvas lazy, `OpenAt` debajo del item), builder
+  `AddMenuItem/AddMenuSeparator/AddMenuDisabled/AddSubMenu`, toggle on click, hover highlight,
+  estado abierto = bg más claro + texto blanco (refrescado en `OnLayoutComputed`). **(3) Submenús en
+  `UIContextMenu`** (`AddSubMenu`): `Item.subMenu`, `MenuItem::SetSubMenu(owner, sub)` agrega la
+  flecha **PNG 13×13 `arrow_right.png` vía `UITextureCache`** (reemplaza el glifo "›" que dependía de
+  glifos extra en el atlas — `Font.cpp` quedó SIN tocar, solo ASCII 32-126), `UIImage` centrado
+  verticalmente en `OnLayoutComputed` (Row layout es top-aligned). Cierres: click fuera/ESC → todo el
+  árbol (`CloseAllMenus`); hover a otro row con submenú cambia; `OpenAt` setea `m_IgnoreOutsideClick`
+  para que el mismo Press que abrió no cierre. **Font/icon propagation**: `AddSubMenu` + `OpenSubMenu`
+  propagan `m_Font` y `m_SubMenuIcon` (bug: submenú creado después de `SetFont` renderizaba filas
+  invisibles). **Alineación vertical**: `cr.y - GetPaddingTop()` (nuevo getter en `UIElement`) para
+  que la primera fila del submenú quede a la misma altura del item. **Integración editor**: `kTopMenuBarHeight`
+  =28 → menubar offset {0,0-0,28}, toolbar {0,28-0,58}, dock {0,58-0,-30}; **File** (New/Open/Save/
+  Save All/Exit→`Quit()`), **Edit → Transform Tool** (submenú que cambia gizmo/toolbar), **Help →
+  About** (loguea backend); `ApplyMenuIcons()` recarga la flecha en `OnContentScaleChanged`. Los
+  items de diálogo usan `"..."` ASCII (no `…` U+2026, no está en el atlas → renderizaría `?`).
+  Verificado: build limpio, ctest 3/3, smoke editor OK. **Futuro anotado**: SVG renderer propio para
+  todos los iconos del editor.
 
 - **Hybrid ECS — Fase 3 COMPLETA: API pública del World + docs** (2026-08-28, `TODO_HYBRID_ECS.md` §10):
   el ECS queda expuesto como API de primer nivel para power users con **nombres propios** (nada de

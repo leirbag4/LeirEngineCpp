@@ -31,6 +31,25 @@ ningún menú/popup en el codebase.
 - [x] Items: **Object3D** (crea un Cube con mesh/material a 0,0,0 — wired por el editor),
       **Object2D** (no-op por ahora), **UIElement** (disabled — pendiente `UINode`).
 
+### Fase 1c — Submenús (2026-08-31, `TODO_UI_MENU_BAR.md`)
+- [x] `UIContextMenu::AddSubMenu(label, subMenu)` — submenú anidado con flecha PNG.
+- [x] `Item.subMenu` campo; el menú es dueño de sus submenús (dtor los elimina).
+- [x] `MenuItem::SetSubMenu(owner, sub)` — agrega `UIImage` flecha `arrow_right.png` 13×13
+      (no hit-testable, `OwnsChild` lo incluye, `GetMinSize`/`ApplyWidthLimit` reservan
+      el ancho), centrado verticalmente en `OnLayoutComputed`.
+- [x] `MenuItem::OnPointerDown` con submenú → toggle del submenú (nunca acción del padre).
+- [x] `MenuItem::OnPointerEnter` con submenú → abre (hover-open, estándar de la industria).
+- [x] Submenú posicionado a la derecha del row, clamped al canvas; primera fila alineada
+      con el row (`cr.y - GetPaddingTop()`).
+- [x] Cierre: click fuera / ESC cierran el árbol completo (`CloseAllMenus`); hover a otro
+      row con submenú cambia; el row plano al salir deja el submenú abierto (se cierra
+      por fuera/ESC/cambio).
+- [x] `m_IgnoreOutsideClick` en `OpenAt`: el mismo Press que abrió el menú no lo cierra.
+- [x] Font/icon propagation: `AddSubMenu` + `OpenSubMenu` propagan `m_Font` y
+      `m_SubMenuIcon` al submenú (submenú creado después de `SetFont` renderiza bien).
+- [x] `Font.cpp` NO se tocó: la flecha es PNG vía `UITextureCache` (futuro: SVG).
+      Los strings de diálogo usan `"..."` ASCII (no `…` U+2026, que no está en el atlas).
+
 ### Fase 2 — Integración Hierarchy
 - [ ] `OnPointerDown` con botón **secundario** (derecho) sobre un item del hierarchy →
       abrir `UIContextMenu` con:

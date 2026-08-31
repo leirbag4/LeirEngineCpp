@@ -45,6 +45,8 @@
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "UI/ToolbarPanel.h"
+#include "LeirEngine/UI/UIMenuBar.h"
+#include "LeirEngine/UI/UIContextMenu.h"
 #include "UI/GizmoLogPanel.h"
 #include "UI/TreeViewDebugPanel.h"
 #include "UI/HierarchyPanel.h"
@@ -78,8 +80,9 @@
 #include "CrashDiagnostics.h"
 
 namespace {
-    const float kBottomBarHeight = 30.0f;
-    const float kTopToolbarHeight = 30.0f;
+const float kBottomBarHeight = 30.0f;
+const float kTopToolbarHeight = 30.0f;
+const float kTopMenuBarHeight = 28.0f;
 }
 
 // Forward decl (mutually recursive helpers).
@@ -408,22 +411,87 @@ protected:
 
         // ---- Editor Layout (dock system) ----
         // The dock manager is the full-screen root. It leaves the bottom 30px
-        // free for the status bar and the top 30px for the (non-dockable)
-        // transform tool toolbar.
+        // free for the status bar and the top (menu bar + toolbar) for the
+        // non-dockable top chrome.
         m_DockManager = new Leir::DockManager();
         m_DockManager->SetName("EditorDock");
         m_DockManager->SetFont(m_FontSmall.get());
         m_DockManager->GetRect().anchor = Leir::AnchorSet::Stretch();
-        m_DockManager->GetRect().offset = {0.0f, kTopToolbarHeight, 0.0f, -kBottomBarHeight};
+        m_DockManager->GetRect().offset = {0.0f, kTopMenuBarHeight + kTopToolbarHeight, 0.0f, -kBottomBarHeight};
         m_Canvas->AddChild(m_DockManager);
 
+        // Menu bar: the very top row (File / Help …), sibling of the toolbar.
+        m_MenuBar = new Leir::UIMenuBar();
+        m_MenuBar->SetName("MenuBar");
+        m_MenuBar->SetFont(m_FontSmall.get());
+        m_MenuBar->GetRect().anchor = {0.0f, 0.0f, 1.0f, 0.0f};
+        m_MenuBar->GetRect().offset = {0.0f, 0.0f, 0.0f, kTopMenuBarHeight};
+        m_Canvas->AddChild(m_MenuBar);
+
+        // File menu.
+        {
+            auto* fileItem = m_MenuBar->AddItem("File");
+            fileItem->AddMenuItem("New Scene", [this]() {
+                Leir::XConsole::Println("New Scene (pendiente TODO_FILE_SYSTEM.md)");
+            });
+            fileItem->AddMenuItem("Open Scene...", [this]() {
+                Leir::XConsole::Println("Open Scene... (pendiente TODO_FILE_SYSTEM.md)");
+            });
+            fileItem->AddMenuSeparator();
+            fileItem->AddMenuItem("Save Scene", [this]() {
+                Leir::XConsole::Println("Save Scene (pendiente TODO_FILE_SYSTEM.md)");
+            });
+            fileItem->AddMenuItem("Save All", [this]() {
+                Leir::XConsole::Println("Save All (pendiente TODO_FILE_SYSTEM.md)");
+            });
+            fileItem->AddMenuSeparator();
+            fileItem->AddMenuItem("Exit", [this]() {
+                Quit();
+            });
+        }
+
+        // Edit menu with a nested submenu (exercises the "›" arrow path).
+        {
+            auto* editItem = m_MenuBar->AddItem("Edit");
+            auto* toolsSub = new Leir::UIContextMenu();
+            toolsSub->AddItem("Transform", [this]() {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Translate);
+                if (m_Toolbar) m_Toolbar->SetTool(ToolbarPanel::Tool::Translate);
+            });
+            toolsSub->AddItem("Rotate", [this]() {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Rotate);
+                if (m_Toolbar) m_Toolbar->SetTool(ToolbarPanel::Tool::Rotate);
+            });
+            toolsSub->AddItem("Scale", [this]() {
+                m_TransformGizmo.SetTool(TransformGizmo::Tool::Scale);
+                if (m_Toolbar) m_Toolbar->SetTool(ToolbarPanel::Tool::Scale);
+            });
+            editItem->AddSubMenu("Transform Tool", toolsSub);
+            editItem->AddMenuSeparator();
+            editItem->AddMenuItem("Preferences...", [this]() {
+                Leir::XConsole::Println("Preferences... (pendiente)");
+            });
+        }
+
+        // Help menu.
+        {
+            auto* helpItem = m_MenuBar->AddItem("Help");
+            helpItem->AddMenuItem("About LeirEngine", [this]() {
+                const char* backendName = m_Backend ? m_Backend->GetBackendName() : "?";
+                Leir::XConsole::Println("LeirEngine — backend {}", backendName);
+            });
+        }
+
+        // Load submenu arrow icon and propagate to all menus.
+        ApplyMenuIcons();
+
         // Transform toolbar: a NON-dockable sibling of the DockManager pinned to
-        // the top, spanning the full width (Unity/Godot-style tool menu).
+        // the top (below the menu bar), spanning the full width.
         m_Toolbar = new ToolbarPanel();
         m_Toolbar->SetName("TransformToolbar");
         m_Toolbar->SetFont(m_FontSmall.get());
         m_Toolbar->GetRect().anchor = {0.0f, 0.0f, 1.0f, 0.0f};
-        m_Toolbar->GetRect().offset = {0.0f, 0.0f, 0.0f, kTopToolbarHeight};
+        m_Toolbar->GetRect().offset = {0.0f, kTopMenuBarHeight, 0.0f, kTopMenuBarHeight + kTopToolbarHeight};
         m_Toolbar->SetOnToolChanged([this](ToolbarPanel::Tool t) {
             m_TransformGizmo.SetTool(static_cast<TransformGizmo::Tool>(t));
             m_Toolbar->SetScaleMode(m_TransformGizmo.IsScaleTool());
@@ -1069,6 +1137,8 @@ protected:
         m_TreeViewDebugPanel = nullptr;
         DeleteUiSubtree(m_Toolbar);
         m_Toolbar = nullptr;
+        DeleteUiSubtree(m_MenuBar);
+        m_MenuBar = nullptr;
         m_InspectorTransformPanel = nullptr; // freed via m_InspectorPanel above
         Leir::XConsole::Debug("[Timing] UI subtrees freed: {:.1f} ms", elapsedMs());
         // Destroy the ground grid and gizmos before the viewport RT they target.
@@ -1108,6 +1178,8 @@ protected:
         if (m_FontSmall) m_FontSmall->SetContentScale(GetContentScale());
         // Re-load tree icons at the new DPI (cache keys on the scale) so they stay crisp.
         ApplyTreeIcons();
+        // Re-load the menu submenu arrow at the new DPI.
+        ApplyMenuIcons();
         if (m_HierarchyPanel)
             m_HierarchyPanel->SetContentScale(GetContentScale()); // reloads its icons + rebuilds
     }
@@ -1317,6 +1389,7 @@ private:
     HierarchyPanel* m_HierarchyPanel = nullptr;
     Leir::UIPanel* m_InspectorPanel = nullptr;
     ToolbarPanel* m_Toolbar = nullptr;
+    Leir::UIMenuBar* m_MenuBar = nullptr;
 
     // Transform gizmo system (toolbar + gizmos + selection)
     TransformGizmo m_TransformGizmo;
@@ -1370,6 +1443,16 @@ private:
             };
             for (auto* r : tv->GetRoots()) color(r, 0);
         }
+    }
+
+    // Submenu arrow icon for the UIMenuBar dropdowns (assets/icons/arrow_right.png,
+    // 13x13, cached by UITextureCache). Re-applied on content-scale change.
+    void ApplyMenuIcons()
+    {
+        if (!m_MenuBar) return;
+        const float scale = GetContentScale();
+        auto arrowRight = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/arrow_right.png", scale);
+        m_MenuBar->SetSubMenuIcon(arrowRight);
     }
 
     uint32_t m_ViewportW = 800;

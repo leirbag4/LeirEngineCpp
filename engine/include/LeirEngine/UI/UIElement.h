@@ -109,6 +109,12 @@ public:
     void SetSpacing(float spacing) { m_Spacing = spacing; }
 
     /**
+     * @brief Returns the top padding (for Row/Column layouts).
+     * @return Top padding in logical pixels.
+     */
+    float GetPaddingTop() const { return m_Padding[1]; }
+
+    /**
      * @brief Sets the pivot (anchor origin) of the rect.
      * @param[in] pivot Pivot in [0,1]×[0,1].
      */
