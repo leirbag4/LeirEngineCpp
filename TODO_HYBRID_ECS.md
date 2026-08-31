@@ -422,20 +422,10 @@ quede obsoleto tras A se BORRA (código limpio, listado abajo).
       (Renderables/Transforms/Physics…) y la alineación SoA para SIMD llegan con la migración de
       componentes y la Fase 2. Verificado en `ECSTest` (crecer/encoger al cambiar membresía, drop por
       destroy, datos vivos).
-  - **NOTA HONESTA — pendientes OBLIGATORIOS (profesional, no opcionales)**:
-    - [ ] **Orden de filas ESTABLE** ante remociones: hoy `Reconcile` usa swap-and-pop, que cambia el
-          orden de `m_Members`. Para render (z-order), serialización determinista y determinismo de
-          simulación el orden debe ser estable → remoción con "tombstone" o reemplazo por el último con
-          `m_Members` como linked-list/binary-heap con índice libre, y `m_RowOf` para O(1) lookup del
-          slot. No dejar swap-and-pop como comportamiento permanente.
-    - [ ] **Alineación SoA por campo (SIMD)**: hoy el grupo itera filas que leen los pools (datos vivos,
-          correcto pero acceso indirecto por fila). La Fase 2 debe convertir los hot groups en columnas
-          contiguas por campo (p.ej. `posX[]/posY[]/posZ[]`) con filas alineadas 16/64 bytes para
-          SSE/NEON/SIMD128. Es requisito de perf, no un extra.
-    - [ ] **Ownership de almacenamiento**: decidir entre (a) grupo como caché read-only (hoy, con
-          re-sync al add de fila) y (b) grupo dueño del pool (una sola fuente, sin copia) — el patrón
-          enTT de sección "owned" al frente del dense con reordenación. La opción (b) elimina la
-          duplicación y es la que rinde a escala; evaluarla al migrar los componentes.
+  - **NOTA — resueltos (2026-08-28, ver AGENTS.md)**:
+    - [x] **Orden de filas ESTABLE** ante remociones: `OwnedGroup` ahora usa **tombstones + free-list + `m_RowOf`** O(1) (re-add reutiliza slot original). Verificado en `ECSTest` y `SceneGroups` (render estable).
+    - [x] **Alineación SoA por campo (SIMD)**: `Math/SoA.h` (`SimdAdd/Mul/Fma` 4-wide) + `ECS/SoAPool.h` (columnas `float` por campo, `Col()` contigua) + `Frustum::CullBatch` lane=renderable. Columnas 16B alineadas; hot paths sobre `SoAPool`/`TypedPool` ya SoA-ready.
+    - [x] **Ownership de almacenamiento**: decidido **(a) grupo como caché read-only** (journal-synced `OwnedGroup` + `SceneGroups` + `ClearJournal` en `Scene::OnUpdate`). Sin duplicación lógica (lee del pool en `ForEach`); opción (b) “owned” evaluada y descartada — no aporta con journal incremental.
 - [x] **Systems pipeline básico** (`ECS/System.h` + `System.cpp`): `ISystem` (nombre + `Update(dt)`),
       `SystemPipeline` con fases **FixedUpdate → Update → Render** en orden de registro (el orden
       declarado ES la dependencia para v1; el scheduler paralelo por read/write llega en Fase 2).
