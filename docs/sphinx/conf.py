@@ -53,7 +53,7 @@ highlight_language = "cpp"
 # --- Tema (seleccionable vía LEIR_DOCS_THEME) + Pygments (LEIR_DOCS_PYGMENT) ---
 # generate_docs.bat [FILTER] [THEME] [PYGMENT]
 #   THEME: furo (default), book, pydata, rtd  (todos dark; immaterial deshabilitado: incompatible con Sphinx 9.1)
-#   PYGMENT: default, monokai, dracula, github-dark, native, nord, one-dark, material, solarized-dark ...
+#   PYGMENT: default, monokai, dracula, github-dark, native, nord, one-dark, material, solarized-dark, leir_theme ...
 _theme_map = {
     "furo": "furo",
     "book": "sphinx_book_theme",
@@ -63,48 +63,72 @@ _theme_map = {
 html_theme = _theme_map.get(os.environ.get("LEIR_DOCS_THEME", "furo").lower(), "furo")
 
 _pyg = os.environ.get("LEIR_DOCS_PYGMENT", "").strip()
+# default del proyecto: leir_theme (si no se pasa PYGMENT explícito, usamos leir_theme con pydata)
+if not _pyg or _pyg.lower() == "default":
+    _pyg = "leir_theme"
 _pyg_override_css = None
-if _pyg and _pyg.lower() != "default":
-    pygments_style = _pyg
-    pygments_dark_style = _pyg
-    # Colorea también las FIRMAS C++ del dominio (Sphinx cpp usa .k/.kt/.nf,
-    # estilizadas por el tema en gris) con la paleta del pygment elegido.
-    try:
-        from pygments.styles import get_style_by_name
-        from pygments.token import Token
-        st = get_style_by_name(_pyg).styles
-        def hexcol(tok):
-            val = st.get(tok, "")
-            for part in str(val).split():
-                if part.startswith("#"):
-                    return part
-            return None
-        kw = hexcol(Token.Keyword)
-        kt = hexcol(Token.Keyword.Type) or kw          # void/etc → Keyword color if Type undefined
-        nf = hexcol(Token.Name.Function)
-        nc = hexcol(Token.Name.Class)
-        nn = hexcol(Token.Name)
-        stl = hexcol(Token.Literal.String)
-        op = hexcol(Token.Operator)
-        opw = hexcol(Token.Operator.Word) or op        # override/const → Operator color
-        sel = lambda c: c if c else "inherit"
+if _pyg:
+    # leir_theme tiene paleta fija pedida por el usuario (nombres #D09EF9, etc.)
+    # Para los bloques de código usamos monokai como base (leir_theme es override de firmas, no requiere estilo Pygments propio).
+    if _pyg.lower() == "leir_theme":
+        pygments_style = "monokai"
+        pygments_dark_style = "monokai"
         _pyg_override_css = "\n".join([
-            "/* cpp-domain signature colors from pygment: %s */" % _pyg,
-            ".sig .k, .sig .k .pre { color: %s; }" % sel(kw),
-            ".sig .kt, .sig .kt .pre { color: %s; }" % sel(kt),
-            ".sig .nf, .sig .nf .pre { color: %s; }" % sel(nf),
-            ".sig .nc, .sig .nc .pre { color: %s; }" % sel(nc),
-            ".sig .n, .sig .n .pre { color: %s; }" % sel(nn),
-            ".sig .s, .sig .s .pre, .sig .str, .sig .str .pre { color: %s; }" % sel(stl),
-            ".sig .o, .sig .o .pre, .sig .p, .sig .p .pre { color: %s; }" % sel(op),
-            ".sig .kr, .sig .kr .pre { color: %s; }" % sel(opw),
+            "/* leir_theme — colores pedidos (UIButton/UIElement/SetText #D09EF9) */",
+            ".sig .sig-name.descname .n .pre { color: #D09EF9 !important; }",
+            ".sig .sig-name.descname .n { color: #D09EF9 !important; }",
+            ".sig a.reference.internal .n .pre { color: #D09EF9 !important; }",
+            ".sig a.reference.internal .n { color: #D09EF9 !important; }",
+            ".sig .k, .sig .k .pre { color: #66d9ef !important; }",
+            ".sig .kt, .sig .kt .pre { color: #f262bf !important; }",
+            ".sig .n:not(.sig-param) .pre { color: #cdd6f4 !important; }",
+            ".sig .n.sig-param .pre { color: #f38ba8 !important; }",
+            ".sig .p, .sig .p .pre { color: #ff4689 !important; }",
+            ".sig .s, .sig .s .pre, .sig .str, .sig .str .pre { color: #85d6ad !important; }",
+            ".sig.c-property .sig-name.descname .n .pre { color: #D09EF9 !important; }",
         ])
-    except Exception as e:
-        _pyg_override_css = None
+    else:
+        pygments_style = _pyg
+        pygments_dark_style = _pyg
+        # Colorea también las FIRMAS C++ del dominio (Sphinx cpp usa .k/.kt/.nf,
+        # estilizadas por el tema en gris) con la paleta del pygment elegido.
+        try:
+            from pygments.styles import get_style_by_name
+            from pygments.token import Token
+            st = get_style_by_name(_pyg).styles
+            def hexcol(tok):
+                val = st.get(tok, "")
+                for part in str(val).split():
+                    if part.startswith("#"):
+                        return part
+                return None
+            kw = hexcol(Token.Keyword)
+            kt = hexcol(Token.Keyword.Type) or kw          # void/etc → Keyword color if Type undefined
+            nf = hexcol(Token.Name.Function)
+            nc = hexcol(Token.Name.Class)
+            nn = hexcol(Token.Name)
+            stl = hexcol(Token.Literal.String)
+            op = hexcol(Token.Operator)
+            opw = hexcol(Token.Operator.Word) or op        # override/const → Operator color
+            sel = lambda c: c if c else "inherit"
+            _pyg_override_css = "\n".join([
+                "/* cpp-domain signature colors from pygment: %s */" % _pyg,
+                ".sig .k, .sig .k .pre { color: %s; }" % sel(kw),
+                ".sig .kt, .sig .kt .pre { color: %s; }" % sel(kt),
+                ".sig .nf, .sig .nf .pre { color: %s; }" % sel(nf),
+                ".sig .nc, .sig .nc .pre { color: %s; }" % sel(nc),
+                ".sig .n, .sig .n .pre { color: %s; }" % sel(nn),
+                ".sig .s, .sig .s .pre, .sig .str, .sig .str .pre { color: %s; }" % sel(stl),
+                ".sig .o, .sig .o .pre, .sig .p, .sig .p .pre { color: %s; }" % sel(op),
+                ".sig .kr, .sig .kr .pre { color: %s; }" % sel(opw),
+            ])
+        except Exception as e:
+            _pyg_override_css = None
 
 html_title = "LeirEngine"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["leir_live_panel.js"]
 # sphinx-immaterial carga google_fonts al iniciar; sin internet/config falla con 'font'.
 # Desactivamos google fonts para el build offline/portátil.
 

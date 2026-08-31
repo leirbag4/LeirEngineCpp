@@ -1,9 +1,12 @@
-/* cpp-domain signature colors from pygment: monokai */
-.sig .k, .sig .k .pre { color: #66d9ef; }
-.sig .kt, .sig .kt .pre { color: #66d9ef; }
-.sig .nf, .sig .nf .pre { color: #a6e22e; }
-.sig .nc, .sig .nc .pre { color: #a6e22e; }
-.sig .n, .sig .n .pre { color: #f8f8f2; }
-.sig .s, .sig .s .pre, .sig .str, .sig .str .pre { color: #e6db74; }
-.sig .o, .sig .o .pre, .sig .p, .sig .p .pre { color: #ff4689; }
-.sig .kr, .sig .kr .pre { color: #ff4689; }
+/* leir_theme — colores pedidos (UIButton/UIElement/SetText #D09EF9) */
+.sig .sig-name.descname .n .pre { color: #D09EF9 !important; }
+.sig .sig-name.descname .n { color: #D09EF9 !important; }
+.sig a.reference.internal .n .pre { color: #D09EF9 !important; }
+.sig a.reference.internal .n { color: #D09EF9 !important; }
+.sig .k, .sig .k .pre { color: #66d9ef !important; }
+.sig .kt, .sig .kt .pre { color: #f262bf !important; }
+.sig .n:not(.sig-param) .pre { color: #cdd6f4 !important; }
+.sig .n.sig-param .pre { color: #f38ba8 !important; }
+.sig .p, .sig .p .pre { color: #ff4689 !important; }
+.sig .s, .sig .s .pre, .sig .str, .sig .str .pre { color: #85d6ad !important; }
+.sig.c-property .sig-name.descname .n .pre { color: #D09EF9 !important; }

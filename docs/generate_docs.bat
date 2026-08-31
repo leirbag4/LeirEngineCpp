@@ -2,9 +2,10 @@
 REM generate_docs.bat — genera el sitio de documentación (TODO_DOCS.md §3.5).
 REM Uso: generate_docs.bat [FILTER] [THEME] [PYGMENT]
 REM   FILTER:  ALL (default) | UI | ECS | Math | RHI   — filtra Doxygen INPUT para iterar rápido
-REM   THEME:   furo (default) | book | pydata | rtd | immaterial  — tema Sphinx (dark)
-REM   PYGMENT: default | monokai | dracula | github-dark | native | nord | one-dark | material | solarized-dark ...
-REM Ej: generate_docs.bat UI              — solo UI, furo dark, rápido
+REM   THEME:   furo | book | pydata (default) | rtd  — tema Sphinx (dark)
+REM   PYGMENT: default (=leir_theme) | leir_theme (default) | monokai | dracula | github-dark | native | nord | one-dark | material | solarized-dark ...
+REM Ej: generate_docs.bat                 — ALL pydata leir_theme (default del proyecto)
+REM     generate_docs.bat UI              — UI pydata leir_theme
 REM     generate_docs.bat UI book dracula — solo UI, tema book, estilo dracula
 REM     generate_docs.bat ALL furo monokai
 REM
@@ -29,9 +30,9 @@ REM --- args ---
 set "FILTER=%~1"
 if "%FILTER%"=="" set "FILTER=ALL"
 set "THEME=%~2"
-if "%THEME%"=="" set "THEME=furo"
+if "%THEME%"=="" set "THEME=pydata"
 set "PYGMENT=%~3"
-if "%PYGMENT%"=="" set "PYGMENT=default"
+if "%PYGMENT%"=="" set "PYGMENT=leir_theme"
 
 REM --- mapear FILTER a Doxygen INPUT (incluye DocsGroups.h primero para que @ingroup exista) ---
 set "DOXY_INPUT=engine/include/LeirEngine editor/src"
@@ -110,9 +111,10 @@ goto :eof
 :help
 echo Uso: generate_docs.bat [FILTER] [THEME] [PYGMENT]
 echo   FILTER:  ALL ^(default^) ^| UI ^| ECS ^| Math ^| RHI
-echo   THEME:   furo ^(default^) ^| book ^| pydata ^| rtd ^| immaterial
-echo   PYGMENT: default ^| monokai ^| dracula ^| github-dark ^| native ^| nord ^| one-dark ^| material ^| solarized-dark
-echo Ej: generate_docs.bat UI
+echo   THEME:   furo ^| book ^| pydata ^(default^) ^| rtd
+echo   PYGMENT: default ^(=leir_theme^) ^| leir_theme ^(default^) ^| monokai ^| dracula ^| github-dark ^| native ^| nord ^| one-dark ^| material ^| solarized-dark
+echo Ej: generate_docs.bat                 -- ALL pydata leir_theme ^(default^)
+echo     generate_docs.bat UI              -- UI pydata leir_theme
 echo     generate_docs.bat UI book dracula
 echo     generate_docs.bat ALL furo monokai
 exit /b 0
