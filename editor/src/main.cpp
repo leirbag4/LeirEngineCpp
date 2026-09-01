@@ -1580,6 +1580,11 @@ private:
             auto maxIcon = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/window_maximize.png", scale);
             m_InternalWindow->SetWindowButtonIcons(closeIcon, minIcon, maxIcon);
 
+            // Visible 1px border (Plan A: decorative, drawn on top of the content;
+            // the resize/cursor events come from the transparent hit ring).
+            m_InternalWindow->SetVisualBorderSize(1.0f);
+            m_InternalWindow->SetBorderColor({0.55f, 0.58f, 0.68f, 1.0f});
+
             // Add some content: a label + a close button (the title bar × closes too).
             auto* body = new Leir::UIPanel();
             body->SetName("IntWinBody");

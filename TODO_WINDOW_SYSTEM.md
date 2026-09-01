@@ -440,15 +440,17 @@ comportamiento profesional de Windows. **Implementado y verificado por el usuari
 - **Fix clamp de posición en resize**: al resizear desde izquierda/arriba hasta el
   mínimo, **compensa la posición** (`newPos += newSize - clamped`) para que el borde
   opuesto NO se mueva (antes la ventana se desplazaba en X/Y).
-- **Contenido centrado / margen invisible**: el content se inseta por
-  `m_ResizeBorderSize` (6px) en los 4 lados, y `SetContent()` copia el color del
-  body (`UIPanel::GetColor()`) al fondo del window → el borde de hit queda **invisible**
-  (el window es hovereable ahí: cursor + resize en TODOS los lados/esquinas sin margen
-  visible). Ver "Bugs encontrados" abajo — el `parentOffset` estaba duplicando el inset.
+- **Contenido edge-to-edge (margen 0) + anillo de resize FUERA del rect visual (Plan A,
+  §13)**: el content llena el rect visual bajo la title bar (sin margen). El área de
+  resize/cursor es un anillo transparente de `m_ResizeBorderSize` (6px) POR FUERA del
+  rect visual vía `UIWindow::GetHitRect()` (override) + `UICanvas::HitTestRecursive`
+  usa `GetHitRect()`. Ver "Bugs encontrados" abajo — el `parentOffset` estaba
+  duplicando el inset (pre-Plan A el content se insetaba 6px y copiaba el color del body).
 - **Título centrado verticalmente**: label con altura completa de la barra (`barH`),
   sin padding top (antes el texto tocaba arriba del bbox).
 - **Borde visual de 1px** (configurable, apagable): `m_VisualBorderSize` (default 0 =
-  sin borde, o 1px) + `SetVisualBorderSize()`. **API lista, render pendiente** (Plan A).
+  sin borde, o 1px) + `SetVisualBorderSize()` + `SetBorderColor()`. **Render = Opción 3
+  (4 quads vía `BuildBatch`)** — implementado en el Plan A (§13.4 paso 6).
 - **Sombra** (`CreateShadow`/`DestroyShadow`/`UpdateShadowLayout`): **3 capas de
   `UIImage`** (alpha 0.28 / 0.12 / 0.05, extensión 0 / 4 / 8px sobre `m_ShadowSize`
   default 14px) insertadas en el canvas como hermanos **antes** del window, con
@@ -563,12 +565,15 @@ Vector4 UIWindow::GetHitRect() const override {
 rect (que incluye el anillo exterior) para que los bordes/esquinas se detecten fuera
 del rect visual.
 
-**Paso 6 — Borde visible** (independiente del hit):
-- 4 `UIImage` hijos (top/bottom/left/right) del window, creados lazy en `OnCreateChrome`,
-  `SetHitTestable(false)`, agregados a `OwnsChild`.
-- Posicionados en `OnLayoutChrome` sobre los bordes del **visual rect** con grosor
-  `m_VisualBorderSize` (0 = apagado; 1/2/4px configurable via `SetVisualBorderSize`).
-- El render los dibuja después del content (orden de hijos) → encima del borde.
+**Paso 6 — Borde visible** (independiente del hit). **Decisión: Opción 3 — 4 quads via
+`BuildBatch`** (el mismo patrón que los outlines de debug, UIRenderer.cpp:861-869), NO
+`UIImage` hijos:
+- `UIRenderer::RenderElement`: al final, `dynamic_cast<UIWindow*>` → 4 llamadas a
+  `Batch(nullptr, {x0,y0,x1-x0,bs}, ...)` (top/bottom/left/right) sobre los bordes del
+  **visual rect**, con grosor `m_VisualBorderSize` (0 = apagado; 1/2/4px configurable
+  via `SetVisualBorderSize`). Dibujadas DESPUÉS del loop de hijos → encima del content.
+- Sin UIElement, sin `OwnsChild`, sin teardown, sin textura: 4 floats en el vertex buffer.
+- `SetBorderColor`/`GetBorderColor` + miembro `m_BorderColor` (default `{0.42,0.46,0.55,1}`).
 
 **Comportamiento resultante:**
 - Contenido **edge-to-edge** (margen 0).
@@ -579,14 +584,18 @@ del rect visual.
 
 ### 13.5 Checkboxes — Plan A
 
-- [ ] `UIElement::GetHitRect()` virtual (default = `m_ComputedRect`).
-- [ ] `UICanvas::HitTestRecursive` usa `GetHitRect()` (clip + inside).
-- [ ] `UIWindow::GetHitRect()` override (expande `m_ResizeBorderSize`, no si maximized).
-- [ ] Content a margen 0 en `OnLayoutChrome` + quitar la copia de color en `SetContent`.
-- [ ] `HitTestZone` opera sobre `GetHitRect()` (anillo exterior en la grilla 3×3).
-- [ ] Borde visible: 4 `UIImage` hijos + `OwnsChild` + posicionado por `m_VisualBorderSize`.
-- [ ] Build limpio + smoke + verificación con el usuario (resize desde el anillo exterior,
-      cursor en todos lados/esquinas, borde 1/2/4px on/off, content edge-to-edge).
+- [x] `UIElement::GetHitRect()` virtual (default = `m_ComputedRect`).
+- [x] `UICanvas::HitTestRecursive` usa `GetHitRect()` (clip + inside).
+- [x] `UIWindow::GetHitRect()` override (expande `m_ResizeBorderSize`, no si maximized).
+- [x] Content a margen 0 en `OnLayoutChrome` + quitar la copia de color en `SetContent`.
+- [x] `HitTestZone` opera sobre `GetHitRect()` (anillo exterior en la grilla 3×3); la title
+      bar sigue usando el rect visual.
+- [x] Borde visible: **Opción 3 — 4 quads via `BuildBatch`** en `RenderElement` (sin
+      UIElement/`OwnsChild`), posicionado por `m_VisualBorderSize` + `m_BorderColor`.
+- [x] Build limpio + smoke (hover del anillo exterior verificado en el log: `HitTest:
+      UIWindowInternal (prev hover: IntWinBody)`) + verificación con el usuario pendiente
+      (resize desde el anillo exterior, cursor en todos lados/esquinas, borde 1/2/4px on/off,
+      content edge-to-edge).
 
 ---
 

@@ -9,6 +9,7 @@
 #include "LeirEngine/UI/UITextInput.h"
 #include "LeirEngine/UI/UITextArea.h"
 #include "LeirEngine/UI/UIViewportPanel.h"
+#include "LeirEngine/UI/UIWindow.h"
 #include "LeirEngine/UI/Dock/DockTabBar.h"
 #include "LeirEngine/UI/Font.h"
 #include "LeirEngine/Rendering/RenderTexture.h"
@@ -873,6 +874,23 @@ void UIRenderer::RenderElement(UIElement* elem, const Vector4* clip, bool isDebu
     m_CurrentClip = clip;
     for (auto* child : elem->GetChildren())
         RenderElement(child, effClip, isDebug);
+
+    // Window visible border: 4 thin quads drawn on top of the window's content
+    // (after the children loop). m_VisualBorderSize = 0 disables it. The border
+    // is purely decorative — the resize/cursor events come from the expanded
+    // hit ring (UIWindow::GetHitRect), not from these quads.
+    if (auto* window = dynamic_cast<UIWindow*>(elem)) {
+        const float bs = window->GetVisualBorderSize();
+        if (bs > 0.0f) {
+            const Vector4& bc = window->GetBorderColor();
+            const auto& cr2 = elem->GetComputedRect();
+            const float x0 = cr2.x, y0 = cr2.y, x1 = cr2.x + cr2.z, y1 = cr2.y + cr2.w;
+            Batch(nullptr, {x0, y0, x1 - x0, bs}, {0, 0, 1, 1}, bc);       // top
+            Batch(nullptr, {x0, y1 - bs, x1 - x0, bs}, {0, 0, 1, 1}, bc);  // bottom
+            Batch(nullptr, {x0, y0, bs, y1 - y0}, {0, 0, 1, 1}, bc);       // left
+            Batch(nullptr, {x1 - bs, y0, bs, y1 - y0}, {0, 0, 1, 1}, bc);  // right
+        }
+    }
 }
 
 void UIRenderer::ApplyScissor(RHI::GCommandGraph& graph, const Vector4& logicalClip, RHI::RHIRect2D& last, bool& valid)

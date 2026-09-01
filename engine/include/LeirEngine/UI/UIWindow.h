@@ -291,6 +291,18 @@ public:
     float GetVisualBorderSize() const { return m_VisualBorderSize; }
 
     /**
+     * @brief Sets the visible border color.
+     * @param[in] color RGBA color for the border lines.
+     */
+    void SetBorderColor(const Vector4& color) { m_BorderColor = color; }
+
+    /**
+     * @brief Returns the visible border color.
+     * @return Border color.
+     */
+    const Vector4& GetBorderColor() const { return m_BorderColor; }
+
+    /**
      * @brief Enables/disables the drop shadow behind the window.
      * @param[in] enabled True to show the shadow.
      */
@@ -426,6 +438,15 @@ public:
      */
     bool OwnsChild(const UIElement* child) const override;
 
+    /**
+     * @brief Returns the hit-test rect, expanded by m_ResizeBorderSize.
+     * @details The window draws at its visual rect (content fills it edge-to-edge)
+     *  but receives pointer events in a transparent ring around it (the resize
+     *  border). No expansion when maximized or not resizable.
+     * @return Hit rect (x,y,w,h) in logical pixels.
+     */
+    Vector4 GetHitRect() const override;
+
 protected:
     /**
      * @brief Called after Show()/ShowModal() opens the window.
@@ -499,6 +520,7 @@ protected:
     Vector2 m_WindowSize = {320.0f, 240.0f};  ///< Window size (logical).
     float m_ResizeBorderSize = 6.0f;          ///< Invisible resize border (cursor/hit).
     float m_VisualBorderSize = 0.0f;          ///< Visible border thickness (0 = none).
+    Vector4 m_BorderColor = {0.42f, 0.46f, 0.55f, 1.0f}; ///< Visible border color.
     float m_ShadowSize = 14.0f;               ///< Shadow extension (logical).
     bool m_ShadowEnabled = true;              ///< Drop shadow toggle.
 

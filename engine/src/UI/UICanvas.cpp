@@ -86,7 +86,7 @@ void UICanvas::HitTestRecursive(UIElement* element, const Vector2& pos, UIElemen
     if (!element->IsActive() || !element->IsHitTestable() || out)
         return;
 
-    const auto& r = element->GetComputedRect();
+    const auto& r = element->GetHitRect();
 
     // Effective clip: intersect this element's rect with the active clip when
     // clipping is enabled, mirroring UIRenderer::RenderElement so hit-testing

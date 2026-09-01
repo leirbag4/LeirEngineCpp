@@ -273,11 +273,6 @@ void UIWindow::SetContent(UIElement* content)
     if (m_Content) {
         AddChild(m_Content);
         m_Content->SetSizePolicy(SizePolicy::Fixed);
-        // Match the window background to the content body so the invisible
-        // resize-border inset (m_ResizeBorderSize) blends seamlessly.
-        if (auto* panel = dynamic_cast<UIPanel*>(m_Content)) {
-            SetColor(panel->GetColor());
-        }
     }
     OnLayoutChrome();
 }
@@ -393,21 +388,16 @@ void UIWindow::OnLayoutChrome()
         m_MinButton->ComputeLayout({ kButtonSize, kButtonSize }, { cr.x, cr.y });
     }
 
-    // Content below the title bar. The content is inset by m_ResizeBorderSize
-    // so the window itself remains hoverable at the edges (cursor feedback for
-    // resize). The window's background is set to match the content body color,
-    // making the inset invisible. The visual border is a separate feature.
+    // Content fills the visual rect edge-to-edge below the title bar (margin 0).
+    // The resize border is a TRANSPARENT RING OUTSIDE the visual rect (see
+    // GetHitRect): the content covers the full visual area, so the window
+    // itself is never hovered inside — the ring beyond the edges catches the
+    // resize/cursor events.
     if (m_Content) {
         const float top = m_HasTitleBar ? barH : 0.0f;
-        const float b = (m_Resizable && !m_Maximized) ? m_ResizeBorderSize : 0.0f;
         m_Content->GetRect().anchor = AnchorSet::TopLeft();
-        // Content offset is relative to the WINDOW (its parent), so the
-        // parentOffset passed to ComputeLayout is only the window's absolute
-        // origin {cr.x, cr.y} — NOT {cr.x + b, cr.y + top} (that double-adds
-        // the inset and misplaces the content: 2b on the left, 2×titlebar on
-        // top, and the right/bottom edges get covered by the content).
-        m_Content->GetRect().offset = { b, top, cr.z - b, cr.w - b };
-        m_Content->ComputeLayout({ cr.z - 2.0f * b, cr.w - top - b }, { cr.x, cr.y });
+        m_Content->GetRect().offset = { 0.0f, top, cr.z, cr.w - top };
+        m_Content->ComputeLayout({ cr.z, cr.w - top }, { cr.x, cr.y });
     }
 
     UpdateShadowLayout();
@@ -495,9 +485,19 @@ void UIWindow::UpdateShadowLayout()
 
 // ---- Resize border / hit-test / cursor ----
 
+Vector4 UIWindow::GetHitRect() const
+{
+    const auto& cr = GetComputedRect();
+    if (!m_Resizable || m_Maximized)
+        return cr;
+    const float b = m_ResizeBorderSize;
+    return {cr.x - b, cr.y - b, cr.z + 2.0f * b, cr.w + 2.0f * b};
+}
+
 int UIWindow::HitTestZone(const Vector2& pos, bool& onTitleBar) const
 {
     const auto& cr = GetComputedRect();
+    const auto& hr = GetHitRect();
     const float barH = m_HasTitleBar ? kTitleBarHeight : 0.0f;
     onTitleBar = false;
 
@@ -507,13 +507,14 @@ int UIWindow::HitTestZone(const Vector2& pos, bool& onTitleBar) const
         return 0; // HTCLIENT
     }
 
+    // The 3×3 grid operates on the HIT rect (which includes the transparent
+    // resize ring outside the visual rect), so the edge zones cover the ring.
     const float b = m_ResizeBorderSize;
-    // Grid 3×3: 0=top, 1=middle, 2=bottom; 0=left, 1=center, 2=right
     int row = 1, col = 1;
-    if (pos.y >= cr.y && pos.y < cr.y + b) row = 0;
-    else if (pos.y >= cr.y + cr.w - b && pos.y < cr.y + cr.w) row = 2;
-    if (pos.x >= cr.x && pos.x < cr.x + b) col = 0;
-    else if (pos.x >= cr.x + cr.z - b && pos.x < cr.x + cr.z) col = 2;
+    if (pos.y >= hr.y && pos.y < hr.y + b) row = 0;
+    else if (pos.y >= hr.y + hr.w - b && pos.y < hr.y + hr.w) row = 2;
+    if (pos.x >= hr.x && pos.x < hr.x + b) col = 0;
+    else if (pos.x >= hr.x + hr.z - b && pos.x < hr.x + hr.z) col = 2;
 
     // HT* codes mapped by (row,col):
     //   HTTOPLEFT=13  HTTOP=12  HTTOPRIGHT=14
@@ -527,6 +528,8 @@ int UIWindow::HitTestZone(const Vector2& pos, bool& onTitleBar) const
     int zone = kHT[row][col];
 
     // If it's HTCLIENT but on the title bar → mark as caption (draggable).
+    // The title bar check uses the VISUAL rect (the bar is inside the window,
+    // not in the outer ring).
     if (zone == 0 && m_HasTitleBar && pos.y >= cr.y && pos.y <= cr.y + barH)
         onTitleBar = true;
 

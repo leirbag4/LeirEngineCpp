@@ -194,6 +194,16 @@ public:
     const Vector4& GetComputedRect() const { return m_ComputedRect; }
 
     /**
+     * @brief Returns the rectangle used for pointer hit-testing.
+     * @details Defaults to the computed rect. Elements may override this to
+     *  expand (or shrink) the region that receives pointer events without
+     *  changing what is drawn — e.g. UIWindow uses it to make a transparent
+     *  ring outside its visual rect capture resize/cursor events.
+     * @return Hit rect (x,y,w,h) in logical pixels.
+     */
+    virtual Vector4 GetHitRect() const { return m_ComputedRect; }
+
+    /**
      * @brief Sets the tint color (modulates background/text).
      * @param[in] color RGBA color.
      */
