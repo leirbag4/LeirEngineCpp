@@ -82,11 +82,13 @@ void InputManager::SetCursorStyle(CursorStyle style)
 
     int shape = GLFW_ARROW_CURSOR;
     switch (style) {
-        case CursorStyle::Arrow:    shape = GLFW_ARROW_CURSOR; break;
-        case CursorStyle::Hand:     shape = GLFW_HAND_CURSOR; break;
-        case CursorStyle::IBeam:    shape = GLFW_IBEAM_CURSOR; break;
-        case CursorStyle::ResizeEW: shape = GLFW_RESIZE_EW_CURSOR; break;
-        case CursorStyle::ResizeNS: shape = GLFW_RESIZE_NS_CURSOR; break;
+        case CursorStyle::Arrow:     shape = GLFW_ARROW_CURSOR; break;
+        case CursorStyle::Hand:      shape = GLFW_HAND_CURSOR; break;
+        case CursorStyle::IBeam:     shape = GLFW_IBEAM_CURSOR; break;
+        case CursorStyle::ResizeEW:  shape = GLFW_RESIZE_EW_CURSOR; break;
+        case CursorStyle::ResizeNS:  shape = GLFW_RESIZE_NS_CURSOR; break;
+        case CursorStyle::ResizeNWSE: shape = GLFW_RESIZE_NWSE_CURSOR; break;
+        case CursorStyle::ResizeNESW: shape = GLFW_RESIZE_NESW_CURSOR; break;
     }
 
     GLFWcursor* cursor = nullptr;

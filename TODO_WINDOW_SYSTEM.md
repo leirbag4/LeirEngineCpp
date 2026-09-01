@@ -382,6 +382,214 @@ Al cerrar la ventana:
 
 ---
 
+---
+
+## 12. Chrome profesional — bordes de resize, cursor y sombra (análisis 2026-08-31)
+
+### 12.1 Cómo funciona en los sistemas operativos (investigado)
+
+**Windows — resize borders (WM_NCHITTEST):**
+- El OS envía `WM_NCHITTEST` (0x0084) al `WindowProc` para saber en qué zona de la
+  ventana está el cursor. Según el valor devuelto (HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT,
+  HTBOTTOMRIGHT, …) el sistema **cambia el cursor automáticamente** y maneja el resize.
+- El borde tiene DOS capas:
+  - **Borde visible** (~1px) dibujado por DWM.
+  - **Borde invisible** (área "non-client", ~7px extra) = zona donde el cursor cambia
+    y el resize funciona aunque no haya línea visible. Grosor total ≈
+    `GetSystemMetrics(SM_CXSIZEFRAME) + SM_CXPADDEDBORDER` (~8px).
+- Apps con chrome propio implementan `HitTestNCA`: dividen la ventana en una **grilla
+  3×3** y mapean el cursor a HT* según la distancia a cada borde (Microsoft docs,
+  "Custom Window Frame Using DWM", Appendix C). Constantes típicas: LEFT/RIGHT = 8,
+  BOTTOM = 20, TOP = 27.
+
+**Windows — sombras:**
+- DWM dibuja la sombra **automáticamente** solo para ventanas con chrome OS
+  (WS_THICKFRAME/WS_CAPTION). En borderless (`WS_POPUP` sin frame), DWM no dibuja
+  sombra → hay que usar `DwmExtendFrameIntoClientArea` con márgenes para que DWM
+  extienda el frame (y la sombra) al área del cliente. Apps como Qt/Chromium/Electron
+  hacen esto + `SetWindowRgn` con región más grande y dibujan su contenido en el área
+  extendida. Alternativas modernas: `DWMWA_SYSTEMBACKDROP_TYPE`,
+  `DWMWA_USE_HOSTBACKDROP_BRUSH`, `DWMWA_WINDOW_CORNER_PREFERENCE`.
+
+**Linux:**
+- X11: el window manager (KWin/Mutter/Compiz) dibuja bordes y sombras. Con CSD
+  (client-side decorations, GTK/GNOME) la sombra la dibuja el cliente vía Cairo
+  (drop-shadow filter). Wayland: SSD (KDE) o CSD (GNOME/GTK) según el compositor.
+
+**macOS:**
+- `NSWindow.shadow = true` → WindowServer dibuja la sombra automáticamente, incluso
+  en borderless windows.
+
+### 12.2 Nuestra implementación (ventanas internas en el canvas) — ESTADO REAL 2026-08-31
+
+No hay OS window por ventana interna → dibujamos todo nosotros, replicando el
+comportamiento profesional de Windows. **Implementado y verificado por el usuario**:
+
+- **`HitTestZone(pos, onTitleBar)`** → grilla 3×3 (patrón HitTestNCA de Microsoft).
+  Devuelve códigos HT* (`HTLEFT=10, HTRIGHT=11, HTTOP=12, HTTOPLEFT=13, HTTOPRIGHT=14,
+  HTBOTTOM=15, HTBOTTOMLEFT=16, HTBOTTOMRIGHT=17, HTCLIENT=0`) según
+  `m_ResizeBorderSize` (6px default, configurable). Incluye la barra de título
+  (zona drag / doble-click maximiza).
+- **`OnPointerMove`**: `HitTestZone` → cursor correcto (Arrow dentro; EW/NS/NWSE/NESW
+  en bordes/esquinas; Arrow en barra de título). Hover de botones (close/min/max)
+  aclara su color.
+- **`OnPointerDown`**: botones primero (hit-test propio), luego `HitTestZone` →
+  resize si es borde/esquina (con `CapturePointer`), drag si es barra de título
+  (con doble-click → maximize/restore), sino `false` (el content lo maneja).
+- **`OnPointerUp`/`OnPointerExit`**: termina operación + resetea cursor y hovers.
+- **Fix clamp de posición en resize**: al resizear desde izquierda/arriba hasta el
+  mínimo, **compensa la posición** (`newPos += newSize - clamped`) para que el borde
+  opuesto NO se mueva (antes la ventana se desplazaba en X/Y).
+- **Contenido centrado / margen invisible**: el content se inseta por
+  `m_ResizeBorderSize` (6px) en los 4 lados, y `SetContent()` copia el color del
+  body (`UIPanel::GetColor()`) al fondo del window → el borde de hit queda **invisible**
+  (el window es hovereable ahí: cursor + resize en TODOS los lados/esquinas sin margen
+  visible). Ver "Bugs encontrados" abajo — el `parentOffset` estaba duplicando el inset.
+- **Título centrado verticalmente**: label con altura completa de la barra (`barH`),
+  sin padding top (antes el texto tocaba arriba del bbox).
+- **Borde visual de 1px** (configurable, apagable): `m_VisualBorderSize` (default 0 =
+  sin borde, o 1px) + `SetVisualBorderSize()`. **API lista, render pendiente** (Plan A).
+- **Sombra** (`CreateShadow`/`DestroyShadow`/`UpdateShadowLayout`): **3 capas de
+  `UIImage`** (alpha 0.28 / 0.12 / 0.05, extensión 0 / 4 / 8px sobre `m_ShadowSize`
+  default 14px) insertadas en el canvas como hermanos **antes** del window, con
+  `SetOverlayLayer(true)` (misma batch que el window, dibujadas primero → detrás).
+  Sin textura (sin coste de render). Toggleable via `settings.json` →
+  `"window.window_shadow": true/false` (default true, leído en el ctor) +
+  `SetShadowEnabled()`/`SetShadowSize()`. Creada en `Activate()`, destruida en
+  `Close()`/`Hide()`/dtor, reposicionada en `OnLayoutChrome` y `BringToFront`
+  (reordena sombra → window). Ver "Bugs encontrados" abajo — el `parentOffset`
+  duplicaba la posición de la ventana (sombra al 2× del movimiento).
+
+### 12.3 Checkboxes — chrome profesional
+
+- [x] `UIWindow::HitTestZone(pos)` → grilla 3×3 con `m_ResizeBorderSize` (6px default).
+- [x] `OnPointerMove`: `HitTestZone` → cursor (Arrow/EW/NS/NWSE/NESW/Hand) + hover botones.
+- [x] `OnPointerDown`: `HitTestZone` → resize | drag | botón.
+- [x] `OnPointerUp`: terminar op + reset cursor.
+- [x] Fix clamp de posición en resize (izquierda/arriba no desplazan la ventana).
+- [x] `m_ResizeBorderSize` configurable (`SetResizeBorderSize`).
+- [x] Borde visual 1px configurable/apagable (`m_VisualBorderSize` + `SetVisualBorderSize`)
+      → **API lista, render pendiente (Plan A)**.
+- [x] Sombra: 3 capas de `UIImage` detrás del window, `m_ShadowSize`, toggle
+      `m_ShadowEnabled` (`SetShadowEnabled`/`SetShadowSize`) + `settings.json`.
+- [x] Quitar el cursor Hand de prueba (OnInit) del editor.
+- [x] BUILD + smoke + **verificado por el usuario**: content centrado, cursor en TODOS
+      los lados/esquinas, resize sin desplazamiento al mínimo, sombra sigue a la ventana,
+      sombra on/off via settings.
+
+### 12.4 Bugs encontrados y corregidos (2026-08-31) — parentOffset duplicado
+
+`UIElement::ComputeLayout(availableSize, parentOffset)` **SUMA** `parentOffset` al
+rect computado (`m_ComputedRect = m_Rect.GetRect(...) + parentOffset`). Dos call sites
+en `UIWindow.cpp` pasaban la posición ABSOLUTA (window/inset) como `parentOffset`,
+duplicando el desplazamiento:
+
+| Bug | Línea | Código malo | Síntoma | Fix |
+|---|---|---|---|---|
+| 1. Content mal ubicado | `OnLayoutChrome` | `ComputeLayout(..., {cr.x + b, cr.y + top})` | Content con 2×b a la izquierda (columna vertical de window bg), 2×titlebar de gap abajo de la barra, y right/bottom **tapados por IntWinBody** → cursor resize no funcionaba en right/bottom/abajo-derecha | `parentOffset = {cr.x, cr.y}` (el content es hijo del window; su offset ya tiene `{b, top}`) |
+| 2. Sombra al 2× | `UpdateShadowLayout` | `ComputeLayout(..., {cr.x - inset, cr.y - inset})` | La sombra se movía el DOBLE que la ventana y "derivaba" a la derecha/abajo al moverla | `parentOffset = {0.0f, 0.0f}` (las capas son hijas del **canvas**; su offset ya es absoluto) |
+
+**Regla aprendida**: el `parentOffset` de `ComputeLayout` es **solo la posición del
+PADRE del elemento** (window/canvas), nunca la posición absoluta del elemento ni la
+del padre + inset. Hijos de un window → `{cr.x, cr.y}`; hijos del canvas → `{0,0}`.
+
+---
+
+## 13. PLAN A — hit-rect expandido (margen de contenido = 0 + resize fuera del rect visual)
+
+### 13.1 Contexto / motivación
+
+El diseño actual (12.2) logra resize en todos los bordes con **inset de 6px invisible**
+(el window copia el color del body y la franja queda del mismo color). Pero el usuario
+quiere poder setear el **margen del contenido en 0** (content edge-to-edge) y que el
+área de resize siga funcionando **por fuera del rect visual**: un anillo transparente
+que solo captura eventos de mouse, más grande que el borde visible (1px opcional
+dibujado encima, apagable).
+
+### 13.2 Análisis del hit-testing actual (base del diseño)
+
+`UICanvas::HitTestRecursive` (UICanvas.cpp:83-135):
+- Recorre el árbol DFS, **hijos en orden inverso** (los de arriba primero).
+- `inside = pos dentro de element->GetComputedRect()` (línea 124). Si ningún hijo lo
+  captura, el elemento es el target.
+- **Conclusión clave**: el target se decide exclusivamente por el **rect computado**
+  y el orden de hijos. Un hijo que cubre el rect del padre **roba** el hit al padre.
+- Por eso el inset actual funciona: `m_Content` NO cubre el borde → el window recibe
+  el hit en la franja interior → cursor + resize.
+
+### 13.3 Diseño (Opción A — recomendada) vs Opción B (contenedor transparente)
+
+| Criterio | **A) Hit-rect expandido** | B) Contenedor transparente |
+|---|---|---|
+| Concepto | El window tiene 2 rects: visual (`m_ComputedRect`, para dibujar) y hit (`GetHitRect()`, expandido, para eventos) | Un `UIPanel` alpha 0 hermano del window, rect = visual + borde, que envuelve la zona de resize |
+| Eventos | Van directo al window (es el elemento hit-testado) | Van **al contenedor**, NO al window → hay que enrutar manualmente cada `OnPointerDown/Move/Up` (o duplicar la lógica de resize) |
+| Geometría | Un solo lugar (override de `GetHitRect()`) | Doble fuente de verdad: contenedor + window, sincronizar en cada `OnLayoutChrome` y `BringToFront` |
+| Render | Sin cambio (`RenderElement` usa el rect visual) | Quad transparente por frame (batch inútil) |
+| Toques al core | `HitTestRecursive` usa `GetHitRect()` en vez de `GetComputedRect()` (default idéntico) | Ninguno |
+| Riesgo | Bajo (solo `UIWindow` lo override; default = rect visual) | Bajo para el resto, alto para el window (enrutamiento frágil) |
+| **Veredicto** | **Ganadora** | Más código y más frágil para el mismo resultado |
+
+**Decisión: Opción A.**
+
+### 13.4 Implementación detallada — Opción A
+
+**Paso 1 — `UIElement::GetHitRect()` virtual** (`engine/include/LeirEngine/UI/UIElement.h`):
+```cpp
+virtual Vector4 GetHitRect() const { return m_ComputedRect; }
+```
+
+**Paso 2 — `HitTestRecursive` usa `GetHitRect()`** (`engine/src/UI/UICanvas.cpp`):
+- Línea 89: `const auto& r = element->GetHitRect();` (en vez de `GetComputedRect()`)
+- Las comprobaciones de clip (97-122) y `inside` (124) usan `r` (el hit rect).
+- El render NO cambia (`RenderElement` sigue usando `GetComputedRect()`).
+
+**Paso 3 — `UIWindow::GetHitRect()` override** (`UIWindow.h/.cpp`):
+```cpp
+Vector4 UIWindow::GetHitRect() const override {
+    const auto& cr = GetComputedRect();
+    if (!m_Resizable || m_Maximized) return cr;
+    const float b = m_ResizeBorderSize; // 6px default, configurable
+    return {cr.x - b, cr.y - b, cr.z + 2.0f * b, cr.w + 2.0f * b};
+}
+```
+
+**Paso 4 — Content a margen 0** (`OnLayoutChrome`):
+- `m_Content->GetRect().offset = { 0.0f, top, cr.z, cr.w - top };`
+- `m_Content->ComputeLayout({cr.z, cr.w - top}, {cr.x, cr.y});`
+- Eliminar el `SetColor` de copia del body en `SetContent()` (ya no hace falta el inset
+  invisible — el content llena el rect visual y el anillo está FUERA).
+
+**Paso 5 — `HitTestZone` usa `GetHitRect()`**: la grilla 3×3 debe operar sobre el hit
+rect (que incluye el anillo exterior) para que los bordes/esquinas se detecten fuera
+del rect visual.
+
+**Paso 6 — Borde visible** (independiente del hit):
+- 4 `UIImage` hijos (top/bottom/left/right) del window, creados lazy en `OnCreateChrome`,
+  `SetHitTestable(false)`, agregados a `OwnsChild`.
+- Posicionados en `OnLayoutChrome` sobre los bordes del **visual rect** con grosor
+  `m_VisualBorderSize` (0 = apagado; 1/2/4px configurable via `SetVisualBorderSize`).
+- El render los dibuja después del content (orden de hijos) → encima del borde.
+
+**Comportamiento resultante:**
+- Contenido **edge-to-edge** (margen 0).
+- El anillo exterior (6-8px, más grande que cualquier borde visible) captura el mouse:
+  cursor de resize en todos los lados/esquinas + resize con `CapturePointer`.
+- El contenido NO roba el hit en el anillo (no lo cubre) → el window lo recibe.
+- El borde visible (1/2/4px) es puramente decorativo, apagable.
+
+### 13.5 Checkboxes — Plan A
+
+- [ ] `UIElement::GetHitRect()` virtual (default = `m_ComputedRect`).
+- [ ] `UICanvas::HitTestRecursive` usa `GetHitRect()` (clip + inside).
+- [ ] `UIWindow::GetHitRect()` override (expande `m_ResizeBorderSize`, no si maximized).
+- [ ] Content a margen 0 en `OnLayoutChrome` + quitar la copia de color en `SetContent`.
+- [ ] `HitTestZone` opera sobre `GetHitRect()` (anillo exterior en la grilla 3×3).
+- [ ] Borde visible: 4 `UIImage` hijos + `OwnsChild` + posicionado por `m_VisualBorderSize`.
+- [ ] Build limpio + smoke + verificación con el usuario (resize desde el anillo exterior,
+      cursor en todos lados/esquinas, borde 1/2/4px on/off, content edge-to-edge).
+
+---
+
 ## 11. Notas / Referencias
 
 - El plan de `TODO_DOCKING.md` Fase 2 ya mencionaba: `SwapchainTarget` por ventana,

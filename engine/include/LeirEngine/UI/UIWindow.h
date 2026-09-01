@@ -28,6 +28,7 @@
 namespace Leir {
 
 class Font;
+class Texture2D;
 
 /**
  * @brief Result of a modal window interaction.
@@ -141,6 +142,18 @@ public:
     virtual void SetTitle(const std::string& title);
 
     /**
+     * @brief Sets icons for the chrome min/max/close buttons (PNG via UITextureCache).
+     * @details Applied to the internal title-bar buttons. If chrome is not built yet
+     *  (SetFont-before-Show style), the icons are stored and applied in OnCreateChrome.
+     * @param[in] closeIcon Close button texture.
+     * @param[in] minIcon Minimize button texture.
+     * @param[in] maxIcon Maximize button texture.
+     */
+    void SetWindowButtonIcons(std::shared_ptr<Texture2D> closeIcon,
+                              std::shared_ptr<Texture2D> minIcon,
+                              std::shared_ptr<Texture2D> maxIcon);
+
+    /**
      * @brief Returns the window title.
      * @return Title string.
      */
@@ -251,6 +264,57 @@ public:
     bool IsResizable() const { return m_Resizable; }
 
     /**
+     * @brief Sets the invisible resize border thickness (hit area for resize + cursor).
+     * @details The cursor changes and resize starts when the pointer is within this
+     *  distance of any edge (Windows non-client border). Default 6px.
+     * @param[in] size Border thickness in logical pixels (clamped >= 1).
+     */
+    void SetResizeBorderSize(float size) { m_ResizeBorderSize = std::max(1.0f, size); }
+
+    /**
+     * @brief Returns the resize border thickness.
+     * @return Border size in logical pixels.
+     */
+    float GetResizeBorderSize() const { return m_ResizeBorderSize; }
+
+    /**
+     * @brief Sets the visible border thickness drawn around the content.
+     * @details 0 = no visible border (default). 1 = thin line (Windows-style).
+     * @param[in] size Border size in logical pixels (>= 0).
+     */
+    void SetVisualBorderSize(float size) { m_VisualBorderSize = std::max(0.0f, size); }
+
+    /**
+     * @brief Returns the visible border size.
+     * @return Border size.
+     */
+    float GetVisualBorderSize() const { return m_VisualBorderSize; }
+
+    /**
+     * @brief Enables/disables the drop shadow behind the window.
+     * @param[in] enabled True to show the shadow.
+     */
+    void SetShadowEnabled(bool enabled) { m_ShadowEnabled = enabled; }
+
+    /**
+     * @brief Whether the shadow is enabled.
+     * @return True if shadow enabled.
+     */
+    bool IsShadowEnabled() const { return m_ShadowEnabled; }
+
+    /**
+     * @brief Sets the shadow extension (in logical pixels).
+     * @param[in] size Shadow size (clamped >= 0).
+     */
+    void SetShadowSize(float size) { m_ShadowSize = std::max(0.0f, size); }
+
+    /**
+     * @brief Returns the shadow size.
+     * @return Shadow size.
+     */
+    float GetShadowSize() const { return m_ShadowSize; }
+
+    /**
      * @brief Shows/hides the title bar.
      * @param[in] hasTitleBar True to show.
      */
@@ -338,6 +402,11 @@ public:
     void OnPointerMove(const Vector2& pos) override;
 
     /**
+     * @brief Called when pointer leaves (resets hover + cursor).
+     */
+    void OnPointerExit() override;
+
+    /**
      * @brief Called on pointer release (ends drag/resize).
      * @param[in] pos Pointer position.
      * @return True if consumed.
@@ -385,6 +454,22 @@ protected:
      */
     virtual void OnLayoutChrome();
 
+    /**
+     * @brief Re-applies the chrome layout after every canvas layout pass.
+     * @details The canvas calls OnLayoutComputed after each UpdateLayout; the
+     *  internal chrome (title bar, buttons, content) must follow the window's
+     *  computed rect (which moves during drag/resize). External mode has no
+     *  internal chrome, so this is a cheap no-op there.
+     */
+    void OnLayoutComputed() override;
+
+    /**
+     * @brief Activates the window: creates chrome, sets active, lays out,
+     *  brings to front, calls OnShow. Shared by Show/ShowModal and the
+     *  internal subclass (UIWindowInternal::ShowIn/ShowModalIn).
+     */
+    void Activate();
+
     // Chrome elements (internal mode)
     UILabel* m_TitleLabel = nullptr;          ///< Title text (owned).
     UIImage* m_CloseButton = nullptr;         ///< Close button image (owned).
@@ -410,6 +495,12 @@ protected:
     Font* m_Font = nullptr;                   ///< Font (not owned).
     Vector2 m_MinSize = {160.0f, 80.0f};      ///< Minimum size.
     Vector2 m_MaxSize = {FLT_MAX, FLT_MAX};   ///< Maximum size.
+    Vector2 m_WindowPos = {100.0f, 100.0f};   ///< Window position (logical).
+    Vector2 m_WindowSize = {320.0f, 240.0f};  ///< Window size (logical).
+    float m_ResizeBorderSize = 6.0f;          ///< Invisible resize border (cursor/hit).
+    float m_VisualBorderSize = 0.0f;          ///< Visible border thickness (0 = none).
+    float m_ShadowSize = 14.0f;               ///< Shadow extension (logical).
+    bool m_ShadowEnabled = true;              ///< Drop shadow toggle.
 
     // Drag and resize state
     bool m_Dragging = false;                  ///< Dragging window.
@@ -420,6 +511,10 @@ protected:
     Vector2 m_ResizeStartPos;                 ///< Resize start position.
     Vector4 m_RestoredRect;                   ///< Normal rect before maximize (for Restore).
 
+    // Double-click detection (title bar → maximize/restore, Windows-style).
+    double m_LastClickTime = -1000.0;         ///< Time of the previous pointer press.
+    Vector2 m_LastClickPos = {-1.0f, -1.0f};  ///< Position of the previous pointer press.
+
     // Callbacks
     std::function<void(WindowResult)> m_OnResult;
     std::function<void()> m_OnClosed;
@@ -429,6 +524,23 @@ protected:
     static constexpr float kTitleBarHeight = 28.0f;
     static constexpr float kButtonSize = 16.0f;
     static constexpr float kBorderSize = 4.0f;
+
+    // Button textures (PNG icons from UITextureCache, shared_ptr keeps them alive).
+    std::shared_ptr<Texture2D> m_CloseIcon;
+    std::shared_ptr<Texture2D> m_MinIcon;
+    std::shared_ptr<Texture2D> m_MaxIcon;
+    // Shadow layers (UIImages behind the window, one quad per layer).
+    std::vector<UIImage*> m_ShadowLayers;
+
+    // Shadow helpers
+    void CreateShadow();
+    void DestroyShadow();
+    void UpdateShadowLayout();
+
+    // Returns the hit-test zone for a screen position (like Windows WM_NCHITTEST).
+    // 0 = HTCLIENT (inside), 1=left, 2=right, 4=top, 8=bottom, plus combos.
+    // Also returns whether the cursor is on the title bar.
+    int HitTestZone(const Vector2& pos, bool& onTitleBar) const;
 };
 
 } // namespace Leir

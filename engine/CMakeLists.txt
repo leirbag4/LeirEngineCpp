@@ -50,6 +50,7 @@ add_library(LeirEngine SHARED
     src/UI/UIMenuBar.cpp
     src/UI/UIWindow.cpp
     src/UI/UIWindowExternal.cpp
+    src/UI/UIWindowInternal.cpp
     src/UI/UIPanel.cpp
     src/UI/UIRenderer.cpp
     src/UI/UITextInput.cpp

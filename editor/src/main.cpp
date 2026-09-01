@@ -26,6 +26,7 @@
 #include <LeirEngine/UI/UIPanel.h>
 #include <LeirEngine/UI/UILabel.h>
 #include <LeirEngine/UI/UIButton.h>
+#include <LeirEngine/UI/UIWindowInternal.h>
 #include <LeirEngine/UI/UISlider.h>
 #include <LeirEngine/UI/UITextInput.h>
 #include <LeirEngine/UI/ScrollView.h>
@@ -67,6 +68,7 @@
 
 #include <LeirEngine/Input/Keyboard.h>
 #include <LeirEngine/Input/Mouse.h>
+#include <LeirEngine/Input/InputManager.h>
 #include <LeirEngine/Input/EventQueue.h>
 
 #include "LeirEngine/Core/Log.h"
@@ -472,6 +474,10 @@ protected:
                 if (m_Toolbar) m_Toolbar->SetTool(ToolbarPanel::Tool::Scale);
             });
             editItem->AddSubMenu("Transform Tool", toolsSub);
+            editItem->AddMenuSeparator();
+            editItem->AddMenuItem("Test Internal Window", [this]() {
+                ShowInternalTestWindow();
+            });
             editItem->AddMenuSeparator();
             editItem->AddMenuItem("Preferences...", [this]() {
                 Leir::XConsole::Println("Preferences... (pendiente)");
@@ -1459,6 +1465,9 @@ private:
     Leir::UIWindowExternal* m_TestWindow = nullptr;
     // About dialog (external window, Fase D).
     AboutWindow* m_AboutWindow = nullptr;
+    // Fase F — internal floating window test (UIWindowInternal). Floating inside
+    // the main canvas with chrome (title bar, buttons, drag, resize, modal).
+    Leir::UIWindowInternal* m_InternalWindow = nullptr;
 
     // Per-frame command graphs (see GCommandGraph): the scene graph owns the
     // RenderTexture pass; the UI graph records draws into the swapchain
@@ -1549,6 +1558,66 @@ private:
         const float scale = GetContentScale();
         auto arrowRight = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/arrow_right.png", scale);
         m_MenuBar->SetSubMenuIcon(arrowRight);
+    }
+
+    // Opens a floating internal window with chrome (title bar, close, drag,
+    // resize, modal). This tests the UIWindowInternal + Fase C chrome path.
+    void ShowInternalTestWindow()
+    {
+        // Persistent window: create once, reuse with Show/Hide. Never delete
+        // inside a UI callback (use-after-free) — Close() detaches from the
+        // canvas and OnUpdate frees it next frame.
+        if (!m_InternalWindow) {
+            m_InternalWindow = new Leir::UIWindowInternal("Internal Test");
+            m_InternalWindow->SetSize({300.0f, 200.0f});
+            m_InternalWindow->SetPosition({100.0f, 100.0f});
+            m_InternalWindow->SetFont(m_FontSmall.get()); // title bar text
+
+            // Chrome icons (14x14 PNGs via UITextureCache).
+            const float scale = GetContentScale();
+            auto closeIcon = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/window_close.png", scale);
+            auto minIcon = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/window_minimize.png", scale);
+            auto maxIcon = Leir::UITextureCache::Load(m_Backend.get(), "assets/icons/window_maximize.png", scale);
+            m_InternalWindow->SetWindowButtonIcons(closeIcon, minIcon, maxIcon);
+
+            // Add some content: a label + a close button (the title bar × closes too).
+            auto* body = new Leir::UIPanel();
+            body->SetName("IntWinBody");
+            body->SetColor({0.18f, 0.20f, 0.25f, 1.0f});
+            body->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
+            body->GetRect().offset = {0.0f, 0.0f, 0.0f, 0.0f};
+            m_InternalWindow->SetContent(body);
+
+            auto* label = new Leir::UILabel();
+            label->SetName("IntWinLabel");
+            label->SetText("Floating internal window");
+            label->SetFont(m_FontSmall.get());
+            label->SetColor({0.85f, 0.85f, 0.9f, 1.0f});
+            label->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+            label->GetRect().offset = {-90.0f, -10.0f, 90.0f, 14.0f};
+            body->AddChild(label);
+
+            auto* btn = new Leir::UIButton();
+            btn->SetName("IntWinCloseBtn");
+            btn->SetText("Close");
+            btn->SetFont(m_FontSmall.get());
+            btn->SetColors({0.35f, 0.45f, 0.65f, 1.0f},
+                           {0.45f, 0.55f, 0.75f, 1.0f},
+                           {0.25f, 0.35f, 0.55f, 1.0f});
+            btn->SetTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+            btn->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+            btn->GetRect().offset = {-50.0f, 20.0f, 50.0f, 50.0f};
+            // Only Close() — do NOT delete here (the window is being processed).
+            btn->SetOnClick([this]() {
+                if (m_InternalWindow) m_InternalWindow->Close();
+            });
+            body->AddChild(btn);
+        }
+
+        if (!m_InternalWindow->IsVisible())
+            m_InternalWindow->ShowIn(m_Canvas.get());
+        else
+            m_InternalWindow->BringToFront();
     }
 
     uint32_t m_ViewportW = 800;

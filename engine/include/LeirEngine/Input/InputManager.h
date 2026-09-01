@@ -17,6 +17,8 @@ enum class LEIR_API CursorStyle {
     IBeam = 2,
     ResizeEW = 3,
     ResizeNS = 4,
+    ResizeNWSE = 5,
+    ResizeNESW = 6,
 };
 
 class LEIR_API InputManager {

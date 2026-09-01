@@ -22,6 +22,7 @@ public:
         bool maximized = false;
         bool vsync = true;
         bool hidpi = true;  // use system DPI scale (false = fixed/1x UI)
+        bool window_shadow = true;  // drop shadow behind internal/external windows
     } window;
 
     struct {
