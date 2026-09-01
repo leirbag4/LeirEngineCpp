@@ -323,7 +323,18 @@ Al cerrar la ventana:
 - [x] Input conectado: `SetInputWindow(nativeWindow)` + `ConnectToInputSystem` +
       `InputManager::AddWindow` + content scale per-window (Fase B). (2026-08-31)
 - [ ] Modal externo: dim del padre + bloqueo de eventos del padre.
-- [ ] **AboutWindow** — info del engine/desarrollador, botón OK, desde Help → About.
+- [x] **AboutWindow** — info del engine/desarrollador, botón OK, desde Help → About.
+      `editor/src/UI/AboutWindow.{h,cpp}` (extiende UIWindowExternal): título, versión,
+      backend, developer, botón OK que cierra con `WindowResult::Ok`. Deferred-delete
+      en OnUpdate (evita use-after-free del callback del botón). **Bug corregido**: `SetFont`
+      se llamaba antes de `Show()` → `GetCanvas()` era nullptr → crash en `ApplyFont`
+      (`0xC0000005`). Fix: `SetFont` solo aplica la fuente si el canvas existe; la fuente se
+      aplica igual al final de `Show()` vía `OnShow → ApplyFont`. Verificada por el usuario:
+      Help→About abre, OK cierra sin crash. (2026-08-31)
+- [x] **Botón de prueba en la ventana externa** (verifica input de widgets en la externa):
+      `UIButton` "Click me" en la ventana de test que alterna el label; log confirma
+      `Press/Release target: TestWinButton` ruteados a la ventana externa, sin tocar el
+      editor principal. (2026-08-31)
 - [x] Integración de prueba: editor crea `UIWindowExternal("Leir Test Window")` en OnInit
       (solo backend Vulkan), la renderiza en OnRender, la destruye en OnShutdown. Verificada
       por el usuario (2026-08-31): se ve, se mueve, redimensiona y cierra sin crash.

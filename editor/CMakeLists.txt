@@ -20,6 +20,7 @@ src/Gizmos/GizmoRenderer.cpp
     src/UI/TreeViewDebugPanel.cpp
     src/UI/HierarchyPanel.cpp
     src/UI/ToolbarPanel.cpp
+    src/UI/AboutWindow.cpp
 )
 
 # ---- Shader tooling (Plan A, TODO_RHI_SLANG.md §5) ----

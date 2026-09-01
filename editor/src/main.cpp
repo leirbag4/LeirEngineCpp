@@ -45,6 +45,7 @@
 #include "UI/DebugPanel.h"
 #include "UI/InspectorTransformPanel.h"
 #include "UI/ToolbarPanel.h"
+#include "UI/AboutWindow.h"
 #include "LeirEngine/UI/UIMenuBar.h"
 #include "LeirEngine/UI/UIContextMenu.h"
 #include "LeirEngine/UI/UIWindowExternal.h"
@@ -481,8 +482,15 @@ protected:
         {
             auto* helpItem = m_MenuBar->AddItem("Help");
             helpItem->AddMenuItem("About LeirEngine", [this]() {
-                const char* backendName = m_Backend ? m_Backend->GetBackendName() : "?";
-                Leir::XConsole::Println("LeirEngine — backend {}", backendName);
+                // Create the About window (external, Vulkan-only for now).
+                if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+                    m_AboutWindow = new AboutWindow(m_Backend.get(), "1.0.0");
+                    m_AboutWindow->SetFont(m_FontSmall.get());
+                    m_AboutWindow->Show();
+                } else {
+                    Leir::XConsole::Println("AboutWindow requires Vulkan backend (got {})",
+                        m_Backend ? m_Backend->GetBackendName() : "?");
+                }
             });
         }
 
@@ -520,6 +528,26 @@ protected:
                 label->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
                 label->GetRect().offset = {-90.0f, -10.0f, 90.0f, 12.0f};
                 body->AddChild(label);
+
+                // Test button: verifies that widgets in the EXTERNAL window
+                // receive input independently of the main editor (Fase B input
+                // routing). Click toggles the label text.
+                auto* button = new Leir::UIButton();
+                button->SetName("TestWinButton");
+                button->SetText("Click me");
+                button->SetFont(m_FontSmall.get());
+                button->SetColors({0.35f, 0.45f, 0.65f, 1.0f},
+                                  {0.45f, 0.55f, 0.75f, 1.0f},
+                                  {0.25f, 0.35f, 0.55f, 1.0f});
+                button->SetTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+                button->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+                button->GetRect().offset = {-60.0f, 16.0f, 60.0f, 40.0f};
+                button->SetOnClick([label]() {
+                    label->SetText(label->GetText() == "Vulkan multi-window OK"
+                                       ? "Button clicked in EXTERNAL window"
+                                       : "Vulkan multi-window OK");
+                });
+                body->AddChild(button);
             }
         }
 
@@ -801,6 +829,15 @@ protected:
 
     void OnUpdate(float deltaTime) override
     {
+        // Deferred delete for the About window: when it closes (OK button),
+        // UIWindowExternal::Close() destroys the native window but the C++ object
+        // is editor-owned. Delete it next frame to avoid a use-after-free inside
+        // the button's own click callback.
+        if (m_AboutWindow && !m_AboutWindow->IsVisible()) {
+            delete m_AboutWindow;
+            m_AboutWindow = nullptr;
+        }
+
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 
@@ -1063,6 +1100,8 @@ protected:
         // Fase D — render the external test window (its own swapchain/device).
         if (m_TestWindow)
             m_TestWindow->RenderFrame();
+        if (m_AboutWindow)
+            m_AboutWindow->RenderFrame();
     }
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin
@@ -1127,6 +1166,10 @@ protected:
         if (m_TestWindow) {
             delete m_TestWindow;
             m_TestWindow = nullptr;
+        }
+        if (m_AboutWindow) {
+            delete m_AboutWindow;
+            m_AboutWindow = nullptr;
         }
         if (m_Backend)
             m_Backend->WaitIdle();
@@ -1414,6 +1457,8 @@ private:
     // Fase D — external window test (UIWindowExternal). A second OS window that
     // renders through the shared Vulkan device, proving the multi-window path.
     Leir::UIWindowExternal* m_TestWindow = nullptr;
+    // About dialog (external window, Fase D).
+    AboutWindow* m_AboutWindow = nullptr;
 
     // Per-frame command graphs (see GCommandGraph): the scene graph owns the
     // RenderTexture pass; the UI graph records draws into the swapchain
