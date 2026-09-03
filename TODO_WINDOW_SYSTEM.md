@@ -869,11 +869,29 @@ menú, se limpia (`ClearHoverAndFocus`). Mismo patrón que `DockManager`/
 **Verificado**: build limpio + smoke (crashLog delta=0, stderr vacío). Confirmado por
 el usuario ("funciona perfecto"). Commits `…`/`…`.
 
-### 14.10 Pendiente: minimizar una ventana externa congela el editor
+### 14.10 Fix: minimizar una ventana externa congelaba el editor
 
 **Síntoma (2026-09-03)**: al minimizar cualquiera de las ventanas externas, el editor
-(programa principal) deja de actualizarse y de recibir eventos. Solo pasa con las
-externas minimizadas. **Estado**: a investigar (build mode).
+(programa principal) dejaba de actualizarse y de recibir eventos.
+
+**Causa raíz**: al minimizar, GLFW dispara el framebuffer-size callback con 0×0 →
+`SwapchainTarget::MarkResized()` → `m_NeedsResize = true`. En el siguiente frame,
+`RenderFrame()` → `BeginFrame()` → `RecreateSwapchain()` → `glfwGetFramebufferSize`
+devuelve **0×0** → el `while (w==0||h==0) glfwWaitEvents();` **bloquea esperando
+eventos que nunca llegan** (la ventana minimizada no genera eventos) → hilo principal
+congelado. Aun sin resize, `vkAcquireNextImageKHR(..., UINT64_MAX)` sobre una
+swapchain minimizada también bloquearía (sin imágenes presentables).
+
+**Fix (patrón de industria: skip render cuando está iconified)**:
+- `SwapchainTarget::BeginFrame()`: `if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+  return false;` — no se adquiere ni se presenta mientras la ventana está minimizada;
+  el callback de resize se vuelve a disparar al restaurar.
+- `SwapchainTarget::RecreateSwapchain()`: guard defensivo — si la ventana está
+  iconified con tamaño 0×0, se mantiene `m_NeedsResize` y se retorna sin el `while`
+  bloqueante.
+
+**Verificado**: build limpio + smoke (crashLog delta=0, sin entradas nuevas). El test
+real de minimizar/restaurar lo hace el usuario.
 
 ---
 

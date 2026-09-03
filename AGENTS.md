@@ -1153,8 +1153,11 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
   `GetName()` de memoria reciclada (`strlen` crash). Fix: `ClearCanvasRefs()` +
   `Contains()` (recursivo con submenús) antes de liberar filas. **(5) Guard**: Help→About
   con el About visible hace `BringToFront()` (evita leak). Verificado por el usuario
-  ("funciona perfecto"). **Pendiente §14.10**: minimizar una ventana externa congela el
-  editor principal (a investigar).
+  ("funciona perfecto"). **(6) Bug de minimización (§14.10)**: minimizar una externa
+  congelaba el editor — al minimizar, el framebuffer callback marcaba resize con 0×0 y
+  `RecreateSwapchain` entraba en `while(w==0) glfwWaitEvents()` (bloqueo infinito;
+  la ventana minimizada no genera eventos). Fix: `BeginFrame` skip si
+  `GLFW_ICONIFIED` + guard defensivo en `RecreateSwapchain`.
 
 - **Fase 3 — Opción A (FrameRing de industria formalizado) + `RHIFence` en el RHI** (2026-09-02, ver `TODO_WINDOW_SYSTEM.md` §14.5-14.7): decidido con el usuario que el fix de orden + `MAX_FRAMES_IN_FLIGHT=3` **YA es el patrón FrameRing de la industria** (un fence por slot de frame, esperado al inicio y señalizado en el submit del frame lógico, que cubre TODAS las ventanas porque el queue es FIFO: la externa hace submit ANTES del principal, así `fence[N]` del principal implica que las externas del frame N también terminaron). **NO se crea un FrameRing duplicado en el editor** (Opción B descartada: redundante, arriesgado, no es lo que hace la industria — Unity/Unreal/Forge/Granite formalizan el ring en la capa de backend, no lo re-implementan arriba). **(1) `RHIFence`** expuesto en el RHI (`RHI.h` struct + `RenderBackend.h` API `CreateFence/DestroyFence/WaitFence/ResetFence`), implementado en Vulkan (`VulkanBackend.cpp`, `VkFence` con `VK_FENCE_CREATE_SIGNALED_BIT`) y stubs inline D3D12/WebGPU (`CreateFence` devuelve `{}`, resto no-op) — listo para `ID3D12Fence` cuando se retome D3D12. **(2) Verificación 3.6.2 COMPLETA**: se agregó una **segunda ventana externa** (`m_TestWindow2`, `UIWindowExternal` con UI verde) en `main.cpp`, renderizada ANTES de `EndFrame()`, con teardown en `OnShutdown`. **Confirmado por el usuario (2026-09-02): "anda todo perfecto"** — el frame lógico único escala con 2 ventanas externas sin glitch del grid. **(3) Pendiente 3.6.3**: medir FPS con 2 ventanas. **(4) Pendiente futuro §14.7**: desacople del frame rate de las externas (vsync por ventana / mailbox) para que una monitor lenta no frene la principal — es ajuste del `present mode`, no de sincronización de recursos.
 

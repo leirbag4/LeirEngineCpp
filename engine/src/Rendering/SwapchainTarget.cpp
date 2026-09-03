@@ -406,6 +406,13 @@ void SwapchainTarget::CreateSyncObjects()
 
 bool SwapchainTarget::BeginFrame(uint32_t& outImageIndex)
 {
+    // Minimized windows have no presentable surface: the swapchain is 0×0 and
+    // vkAcquireNextImageKHR(UINT64_MAX) would block forever, freezing the whole
+    // main loop (the editor renders ALL windows on the main thread). Skip the
+    // frame while iconified; the resize callback fires again on restore.
+    if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+        return false;
+
     if (m_NeedsResize) {
         RecreateSwapchain();
         return false;
@@ -599,6 +606,11 @@ void SwapchainTarget::RecreateSwapchain()
 {
     int w = 0, h = 0;
     glfwGetFramebufferSize(m_Window, &w, &h);
+    // Defensive: a minimized window reports 0×0 and never fires more events —
+    // the wait loop below would spin forever. Keep the swapchain marked dirty
+    // and bail; BeginFrame() skips iconified windows and will rebuild on restore.
+    if ((w == 0 || h == 0) && glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+        return;
     int waits = 0;
     while (w == 0 || h == 0) {
         glfwGetFramebufferSize(m_Window, &w, &h);
