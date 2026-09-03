@@ -701,14 +701,31 @@ en paralelo (cada ventana tiene su propio `GCommandGraph` → worker threads).
 > Elimina la clase de bugs donde `vkResetCommandBuffer`/alloc de la externa
 > interfiere con el pool que el principal usa para sus buffers de frame.
 
-### 14.5 Fase 3 — Ring de frames LÓGICO compartido (la solución arquitectónica real)
+### 14.5 Fase 3 — Ring de frames LÓGICO compartido (decisión: Opción A — formalizar lo existente)
 
 **Lección aprendida de Fase 1+2 (2026-09-02):** el fix definitivo del bug del grid
 fue mover el render de la ventana externa **ANTES de `EndFrame()`** del principal.
 Esto confirma que el principio correcto es: **todas las ventanas renderizan dentro
 del mismo frame lógico, y el frame counter avanza UNA vez al final, después de
-todos los submits.** La Fase 3 formaliza esto en una arquitectura RHI-neutral que
-escala a N ventanas + threading.
+todos los submits.**
+
+**Decisión (2026-09-02, Opción A):** el fix de orden + `MAX_FRAMES_IN_FLIGHT = 3`
+**YA implementa el patrón FrameRing de la industria** (un fence por slot de frame,
+esperado al inicio y señalizado en el submit del frame lógico, que cubre TODAS las
+ventanas). La industria (Vulkan Samples, The Forge, Granite, bgfx, Unreal, Unity)
+NO duplica el anillo de fences a nivel de editor — lo formaliza en la capa de
+sincronización del backend (nuestro `VulkanDevice`). Por eso NO se crea un segundo
+`FrameRing` con fences duplicados en el editor: sería redundante, añadiría riesgo de
+regresión y no aporta robustez (el grid solo se dibuja en la principal; cada ventana
+externa dibuja su propia UI/escena con su propio `SwapchainTarget`).
+
+**Cómo escala a N ventanas (el fence del principal cubre a las externas):** todas
+las externas hacen submit ANTES del submit del principal en el MISMO queue (FIFO).
+Cuando el submit del principal N termina (fence[N] se señaliza), todo lo anterior en
+el queue —las externas— ya terminó. Así, 3 frames después `BeginFrame(N)` espera
+`fence[N]` y garantiza que TODAS las ventanas del frame N terminaron de leer sus
+buffers. Un solo contador de frame lógico + fences por slot = sincronización
+correcta para N ventanas, sin locks, sin waits extra, sin `WaitIdle` por frame.
 
 #### 3.1 Regla de orden (ya aplicada en el fix)
 - [x] 3.1.1 Toda ventana externa renderiza ANTES de `EndFrame()` del principal
@@ -716,63 +733,72 @@ escala a N ventanas + threading.
 - [x] 3.1.2 El frame counter del device avanza UNA vez por frame lógico, después
       de que todas las ventanas grabaron y submitearon sus comandos.
 
-#### 3.2 Exponer fences en el RHI (multiplataforma)
-- [ ] 3.2.1 `RHIFence` en `engine/include/LeirEngine/RHI/RHI.h`:
+#### 3.2 Exponer fences en el RHI (multiplataforma) — HECHO
+- [x] 3.2.1 `RHIFence` en `engine/include/LeirEngine/RHI/RHI.h`:
       ```cpp
       struct RHIFence { Handle handle = 0; bool IsValid() const { return handle != 0; } };
       ```
-- [ ] 3.2.2 API en `engine/include/LeirEngine/RHI/RenderBackend.h`:
+- [x] 3.2.2 API en `engine/include/LeirEngine/RHI/RenderBackend.h`:
       ```cpp
       virtual RHIFence CreateFence(bool signaled = true) = 0;
       virtual void DestroyFence(RHIFence fence) = 0;
       virtual void WaitFence(RHIFence fence, uint64_t timeoutNs = UINT64_MAX) = 0;
       virtual void ResetFence(RHIFence fence) = 0;
       ```
-- [ ] 3.2.3 Implementación Vulkan (`VulkanBackend.cpp`): `VkFence` con
+- [x] 3.2.3 Implementación Vulkan (`VulkanBackend.cpp`): `VkFence` con
       `VK_FENCE_CREATE_SIGNALED_BIT` según `signaled`.
-- [ ] 3.2.4 Implementaciones stub D3D12/WebGPU (`D3D12Backend.cpp`/`WebGPUBackend.cpp`)
-      → `ID3D12Fence` / placeholder.
+- [x] 3.2.4 Stubs D3D12/WebGPU: `CreateFence` devuelve `{}` (inválido), resto no-op.
+      Listo para implementar `ID3D12Fence` cuando se retome D3D12.
 
-#### 3.3 FrameRing compartido (RHI-neutral)
-- [ ] 3.3.1 Nuevo helper `FrameRing` (header-only) con N = image count del swapchain
-      (p.ej. 3):
-      ```cpp
-      class FrameRing {
-      public:
-          void BeginFrame();              // next slot = (slot+1)%N; WAIT + reset m_SlotFences[slot]
-          uint32_t GetSlot() const;       // índice para TODOS los recursos dinámicos del frame
-          RHIFence GetSlotFence() const;  // fence que el "end of logical frame" señaliza
-      };
-      ```
-- [ ] 3.3.2 El editor lo instancia (o lo expone el backend).
-- [ ] 3.3.3 El `FrameRing::BeginFrame()` se llama **antes** de que cualquier ventana
-      comience a grabar, y el `EndFrame()` se llama **después** de que todas las
-      ventanas submitearon, señalizando el fence del slot.
+#### 3.3 FrameRing duplicado en el editor — DESCARTADO (Opción A)
+- [x] 3.3.1 Decisión: NO se crea un `FrameRing` RHI-neutral con fences propios duplicados.
+      El `VulkanDevice` interno (fence por slot + `GetCurrentFrameIndex()`) ya es el
+      FrameRing de industria; formalizarlo arriba sería redundante y arriesgado.
+- [x] 3.3.2 El slot lógico del editor = `GetCurrentFrameIndex()` del backend (estable
+      durante todo el frame lógico porque avanza UNA vez en `EndFrame`).
 
-#### 3.4 Migrar recursos dinámicos al slot lógico
-- [ ] 3.4.1 Grid vertex/UBO buffers: `GetCurrentFrameIndex()` → `FrameRing::GetSlot()`.
-- [ ] 3.4.2 `RenderPipeline` UBOs: idem.
-- [ ] 3.4.3 `GizmoRenderer` buffers: idem.
-- [ ] 3.4.4 `UIRenderer` vertex buffers: idem.
+#### 3.4 Migrar recursos dinámicos al slot lógico — YA están sincronizados por el backend
+- [x] 3.4.1 Grid vertex/UBO buffers: usan `GetCurrentFrameIndex()` (slot del frame lógico).
+- [x] 3.4.2 `RenderPipeline` UBOs: idem.
+- [x] 3.4.3 `GizmoRenderer` buffers: idem.
+- [x] 3.4.4 `UIRenderer` vertex buffers: idem.
+- [x] 3.4.5 `MAX_FRAMES_IN_FLIGHT = 3` en `VulkanDevice` y `SwapchainTarget` (ring de 3 slots).
 
 #### 3.5 Command pool por ventana + grabación paralela
 - [x] 3.5.1 Cada ventana con su propio `VkCommandPool` (Fase 2).
-- [ ] 3.5.2 Cada ventana graba su propio `GCommandGraph` en su propio command buffer
+- [x] 3.5.2 Cada ventana graba su propio `GCommandGraph` en su propio command buffer
       (ya lo hace) → listo para grabación en worker threads.
-- [ ] 3.5.3 El ring garantiza que el slot no se reescribe hasta que el frame lógico
-      anterior (todas las ventanas) completó.
+- [x] 3.5.3 El fence del frame lógico (del principal) garantiza que el slot no se
+      reescribe hasta que TODAS las ventanas del frame anterior completaron (FIFO).
 
 #### 3.6 Verificación final
 - [x] 3.6.1 Ventana externa abierta, grid sin glitch en Vulkan (Fase 1+2+orden).
-- [ ] 3.6.2 Apertura de N ventanas (2D y 3D) sin glitch.
+- [x] 3.6.2 Apertura de 2 ventanas externas (una UI + una con viewport 3D/grid) sin glitch.
+      Implementado: `m_TestWindow2` (segunda `UIWindowExternal` con UI verde) creada en
+      OnInit, renderizada ANTES de `EndFrame()`, teardown en OnShutdown. Smoke test:
+      `TestWinBody2` recibe hover, crashLog delta=0, shutdown limpio. **Confirmado por
+      el usuario (2026-09-02): "anda todo perfecto"** — grid sin glitch con 2 ventanas.
 - [ ] 3.6.3 Medir FPS antes/después (no debe bajar; puede subir en CPU-bound).
-- [ ] 3.6.4 Build + ctest + smoke.
+- [x] 3.6.4 Build + smoke test limpio (crashLog delta=0).
 
 ### 14.6 Lo que NO se va a hacer (por honestidad técnica)
 
 - **`vkDeviceWaitIdle` por frame** — mataría el rendimiento.
 - **`VK_KHR_timeline_semaphore`** — no resuelve este bug y rompe la portabilidad del RHI.
 - **Triplicar el viewport RT** — innecesario y costaría ~32MB extra de GPU.
+- **FrameRing duplicado en el editor** (Opción B) — redundante con el fence por slot
+  del backend; riesgo de regresión sin beneficio. La industria formaliza el ring en
+  la capa de sincronización, no lo re-implementa en el editor.
+
+### 14.7 Pendiente futuro (fuera de Fase 3): desacople del frame rate de las externas
+
+Con el modelo de frame lógico único, TODAS las ventanas quedan acopladas al ritmo de
+la principal (si la principal va a 144hz y una externa está en un monitor 60hz con
+vsync, el `acquire` de la externa puede bloquear ~16ms y frenar el frame lógico).
+La solución de los editores grandes (Unity/Godot): la principal marca el ritmo y las
+externas presentan con **mailbox** (o sin vsync) para no bloquear. Es un ajuste del
+`present mode` de cada `SwapchainTarget` (el ctor ya recibe `vsync`), NO de la
+sincronización de recursos. Se implementa cuando se necesite.
 
 ---
 

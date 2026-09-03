@@ -34,6 +34,17 @@ public:
     virtual void EndFrame() = 0;
     virtual void WaitIdle() = 0;
 
+    // ---- Fences (Fase 3, multi-window sync) ----
+    // Binary GPU fence for synchronizing dynamic per-frame resources. Each
+    // backend implements it natively (Vulkan VkFence, D3D12 ID3D12Fence,
+    // WebGPU GPUFence-equivalent). Used by the shared FrameRing so a slot is
+    // only rewritten after the GPU finished every submission of the logical
+    // frame that used it.
+    virtual RHIFence CreateFence(bool signaled = true) = 0;
+    virtual void DestroyFence(RHIFence fence) = 0;
+    virtual void WaitFence(RHIFence fence, uint64_t timeoutNs = UINT64_MAX) = 0;
+    virtual void ResetFence(RHIFence fence) = 0;
+
     // Backend capabilities (TODO_RHI_SLANG.md §3.6). Filled once at creation.
     virtual const GCaps& GetCaps() const = 0;
 

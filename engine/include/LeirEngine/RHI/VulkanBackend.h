@@ -35,6 +35,11 @@ public:
     void EndFrame() override;
     void WaitIdle() override;
 
+    RHIFence CreateFence(bool signaled = true) override;
+    void DestroyFence(RHIFence fence) override;
+    void WaitFence(RHIFence fence, uint64_t timeoutNs = UINT64_MAX) override;
+    void ResetFence(RHIFence fence) override;
+
     const GCaps& GetCaps() const override;
     const char* GetBackendName() const override { return "vulkan"; }
 

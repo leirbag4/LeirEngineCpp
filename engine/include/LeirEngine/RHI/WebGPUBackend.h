@@ -60,6 +60,11 @@ public:
     void EndFrame() override;
     void WaitIdle() override;
 
+    RHIFence CreateFence(bool signaled = true) override { (void)signaled; return {}; }
+    void DestroyFence(RHIFence) override {}
+    void WaitFence(RHIFence, uint64_t) override {}
+    void ResetFence(RHIFence) override {}
+
     const GCaps& GetCaps() const override;
 
     RHICommandBuffer GetCurrentCommandBuffer() const override;

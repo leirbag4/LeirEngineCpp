@@ -576,8 +576,32 @@ protected:
             }
         }
 
-        // Transform toolbar: a NON-dockable sibling of the DockManager pinned to
-        // the top (below the menu bar), spanning the full width.
+        // Fase 3 (2026-09-02) — segunda ventana externa (verificación 3.6.2):
+        // confirma que el frame lógico único escala con 2 ventanas externas
+        // (una UI + otra UI). Cada ventana tiene su propio SwapchainTarget, su
+        // propio command pool y su propio canvas; todas renderizan ANTES de
+        // EndFrame() del principal (regla 3.1).
+        if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+            m_TestWindow2 = new Leir::UIWindowExternal(m_Backend.get(), "Leir Test Window 2");
+            m_TestWindow2->Show();
+            if (Leir::UICanvas* c2 = m_TestWindow2->GetCanvas()) {
+                auto* body2 = new Leir::UIPanel();
+                body2->SetName("TestWinBody2");
+                body2->SetColor({0.12f, 0.30f, 0.22f, 1.0f});
+                body2->GetRect().anchor = {0.0f, 0.0f, 1.0f, 1.0f};
+                body2->GetRect().offset = {0.0f, 0.0f, 0.0f, 0.0f};
+                c2->AddChild(body2);
+
+                auto* label2 = new Leir::UILabel();
+                label2->SetName("TestWinLabel2");
+                label2->SetText("External window #2 — multi-window OK");
+                label2->SetFont(m_FontSmall.get());
+                label2->SetColor({0.85f, 0.95f, 0.9f, 1.0f});
+                label2->GetRect().anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+                label2->GetRect().offset = {-140.0f, -10.0f, 140.0f, 12.0f};
+                body2->AddChild(label2);
+            }
+        }
         m_Toolbar = new ToolbarPanel();
         m_Toolbar->SetName("TransformToolbar");
         m_Toolbar->SetFont(m_FontSmall.get());
@@ -1143,6 +1167,8 @@ protected:
         // grid (líneas chunk en posiciones random). Verificado por el usuario.
         if (m_TestWindow)
             m_TestWindow->RenderFrame();
+        if (m_TestWindow2)
+            m_TestWindow2->RenderFrame();
         if (m_AboutWindow)
             m_AboutWindow->RenderFrame();
 
@@ -1211,6 +1237,10 @@ protected:
         if (m_TestWindow) {
             delete m_TestWindow;
             m_TestWindow = nullptr;
+        }
+        if (m_TestWindow2) {
+            delete m_TestWindow2;
+            m_TestWindow2 = nullptr;
         }
         if (m_AboutWindow) {
             delete m_AboutWindow;
@@ -1502,6 +1532,8 @@ private:
     // Fase D — external window test (UIWindowExternal). A second OS window that
     // renders through the shared Vulkan device, proving the multi-window path.
     Leir::UIWindowExternal* m_TestWindow = nullptr;
+    // Fase 3 — segunda ventana externa (verificación 3.6.2: frame lógico con 2 ventanas).
+    Leir::UIWindowExternal* m_TestWindow2 = nullptr;
     // About dialog (external window, Fase D).
     AboutWindow* m_AboutWindow = nullptr;
     // Fase F — internal floating window test (UIWindowInternal). Floating inside

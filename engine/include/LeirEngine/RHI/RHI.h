@@ -177,6 +177,7 @@ struct RHIDescriptorPool  { Handle handle = 0; bool IsValid() const { return han
 struct RHIDescriptorSet   { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHIRenderPass      { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHIFramebuffer     { Handle handle = 0; bool IsValid() const { return handle != 0; } };
+struct RHIFence           { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHICommandBuffer   { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 struct RHIPassTemplate    { Handle handle = 0; bool IsValid() const { return handle != 0; } };
 

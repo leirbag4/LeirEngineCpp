@@ -367,6 +367,33 @@ void VulkanBackend::BeginSwapchainOverlay() { m_Impl->device.BeginSwapchainOverl
 void VulkanBackend::EndFrame() { m_Impl->device.EndFrame(); }
 void VulkanBackend::WaitIdle() { vkDeviceWaitIdle(m_Impl->device.GetDevice()); }
 
+RHIFence VulkanBackend::CreateFence(bool signaled) {
+    RHIFence fence;
+    VkFenceCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    if (signaled) info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkFence f = VK_NULL_HANDLE;
+    if (vkCreateFence(m_Impl->device.GetDevice(), &info, nullptr, &f) == VK_SUCCESS)
+        fence.handle = reinterpret_cast<uint64_t>(f);
+    return fence;
+}
+void VulkanBackend::DestroyFence(RHIFence fence) {
+    if (fence.IsValid())
+        vkDestroyFence(m_Impl->device.GetDevice(), reinterpret_cast<VkFence>(fence.handle), nullptr);
+}
+void VulkanBackend::WaitFence(RHIFence fence, uint64_t timeoutNs) {
+    if (fence.IsValid()) {
+        VkFence f = reinterpret_cast<VkFence>(fence.handle);
+        vkWaitForFences(m_Impl->device.GetDevice(), 1, &f, VK_TRUE, timeoutNs);
+    }
+}
+void VulkanBackend::ResetFence(RHIFence fence) {
+    if (fence.IsValid()) {
+        VkFence f = reinterpret_cast<VkFence>(fence.handle);
+        vkResetFences(m_Impl->device.GetDevice(), 1, &f);
+    }
+}
+
 RHICommandBuffer VulkanBackend::GetCurrentCommandBuffer() const {
     RHICommandBuffer cb;
     cb.handle = reinterpret_cast<uint64_t>(m_Impl->device.GetCurrentCommandBuffer());
