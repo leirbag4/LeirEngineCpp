@@ -116,8 +116,37 @@ Vector2 UIContextMenu::GetContentSize() const
     return UIPanel::GetContentSize();
 }
 
+void UIContextMenu::ClearCanvasRefs()
+{
+    UICanvas* canvas = nullptr;
+    for (UIElement* e = this; e; e = e->GetParent()) {
+        if (auto* c = dynamic_cast<UICanvas*>(e)) { canvas = c; break; }
+    }
+    if (!canvas) return;
+    if (Contains(canvas->GetFocus()) || Contains(canvas->GetHoveredElement()))
+        canvas->ClearHoverAndFocus();
+}
+
+bool UIContextMenu::Contains(const UIElement* e) const
+{
+    if (!e) return false;
+    if (e == this) return true;
+    for (const UIElement* p = e->GetParent(); p; p = p->GetParent()) {
+        if (p == this) return true;
+    }
+    // Owned submenus live on the canvas (not as children of this menu), so a
+    // focused/hovered element inside a submenu must be matched recursively.
+    for (auto* sub : m_SubMenus) {
+        if (sub && sub->Contains(e)) return true;
+    }
+    return false;
+}
+
 void UIContextMenu::RebuildItems()
 {
+    // The rows below are freed; make sure the canvas doesn't keep pointing at
+    // them (focus/hover would dangle → crash on the next SetFocus/HitTest).
+    ClearCanvasRefs();
     for (auto* row : m_Rows) {
         RemoveChild(row);
         delete row;

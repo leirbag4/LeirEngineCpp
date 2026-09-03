@@ -38,24 +38,35 @@ void EventQueue::Process()
         events.swap(m_Queue);
     }
 
+    // Iterate SNAPSHOTS of the hook lists, not the live vectors. A hook's body
+    // may register/remove hooks (e.g. creating or closing an external window
+    // inside a UI callback — the About window, a detached dock panel), which
+    // would reallocate/erase the vector while this range-for is iterating it →
+    // iterator invalidation → use-after-free → 0xC0000005. Copying the (tiny)
+    // lists makes adds/removes during dispatch take effect next frame, which is
+    // the standard observer-pattern behavior.
     for (const auto& event : events) {
         std::visit([this](const auto& e) {
             using T = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<T, KeyEvent>) {
                 if (IsPrimaryWindow(e.window)) Keyboard::ProcessEvent(e);
-                for (auto& [id, h] : m_KeyHooks) (void)id, h(e);
+                auto hooks = m_KeyHooks;
+                for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, PointerEvent>) {
                 if (IsPrimaryWindow(e.window)) {
                     Mouse::ProcessEvent(e);
                     Touch::ProcessEvent(e);
                     Pointer::ProcessEvent(e);
                 }
-                for (auto& [id, h] : m_PointerHooks) (void)id, h(e);
+                auto hooks = m_PointerHooks;
+                for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, CharEvent>) {
-                for (auto& [id, h] : m_CharHooks) (void)id, h(e);
+                auto hooks = m_CharHooks;
+                for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, ScrollEvent>) {
                 if (IsPrimaryWindow(e.window)) Mouse::ProcessScroll(e);
-                for (auto& [id, h] : m_ScrollHooks) (void)id, h(e);
+                auto hooks = m_ScrollHooks;
+                for (auto& [id, h] : hooks) (void)id, h(e);
             }
         }, event);
     }

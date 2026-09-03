@@ -97,6 +97,14 @@ public:
     // ---- Getters ----
 
     /**
+     * @brief Requests the native window to close (OS title-bar X, Alt+F4).
+     * @details Called from the GLFW close callback. The actual Close() runs in
+     *  the next RenderFrame() — never inside the GLFW callback — so the native
+     *  window is destroyed outside GLFW's event dispatch (no reentrancy).
+     */
+    void RequestClose() { m_CloseRequested = true; }
+
+    /**
      * @brief Returns the native GLFW window handle (for input routing).
      */
     GLFWwindow* GetNativeWindow() const { return m_NativeWindow; }
@@ -126,6 +134,7 @@ private:
     UIRenderer* m_WindowRenderer = nullptr;
     UIPanel* m_Background = nullptr;   // opaque full-window background (covers swapchain garbage).
     RHI::GCommandGraph m_WindowGraph;
+    bool m_CloseRequested = false;     ///< Close requested by the OS (X button); processed in RenderFrame.
 };
 
 } // namespace Leir

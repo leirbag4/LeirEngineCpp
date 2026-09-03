@@ -507,6 +507,12 @@ protected:
             helpItem->AddMenuItem("About LeirEngine", [this]() {
                 // Create the About window (external, Vulkan-only for now).
                 if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+                    // If already open, just focus it (a second click with the
+                    // About visible would otherwise leak the previous window).
+                    if (m_AboutWindow && m_AboutWindow->IsVisible()) {
+                        m_AboutWindow->BringToFront();
+                        return;
+                    }
                     m_AboutWindow = new AboutWindow(m_Backend.get(), "1.0.0");
                     m_AboutWindow->SetFont(m_FontSmall.get());
                     m_AboutWindow->Show();

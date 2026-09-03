@@ -1135,6 +1135,27 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Fix ventanas externas + crash del menú Help (2026-09-03, ver `TODO_WINDOW_SYSTEM.md` §14.8-14.9)**:
+  **(1) iterator invalidation**: `EventQueue::Process()` itera **snapshots** de los hooks
+  (`auto hooks = m_PointerHooks;`) en vez del vector vivo — crear el About dentro del
+  callback del menú (`Show()` → `AddPointerHook()` → realloc durante el dispatch)
+  invalidaba el iterador → `0xC0000005`. Registrar/remover hooks durante el dispatch
+  toma efecto el próximo frame (observer estándar). **(2) Layout del About**: la ventana
+  externa se creaba a **320×240 físico FIJO** ignorando `SetSize({360,280})` → con
+  scale 1.25 el canvas lógico era 256×192 y el botón OK (y=210..240) quedaba fuera.
+  `Show()` ahora crea a `m_WindowSize × scale` del monitor primario (patrón HiDPI de
+  `CoreApplication`). **(3) X del OS**: `UIWindowExternal` nunca registraba
+  `glfwSetWindowCloseCallback` → el close flag no se polleaba → la X no cerraba ninguna
+  externa. Fix: callback → `RequestClose()` (flag) → `RenderFrame()` procesa y llama
+  `Close()` fuera del callback GLFW (sin reentrancia). **(4) Crash al re-clickear Help**:
+  `UIContextMenu::RebuildItems()` borraba las filas sin limpiar el foco/hover del canvas
+  → `m_FocusElement` apuntaba a una `CtxItem` liberada → `SetFocus` traceaba
+  `GetName()` de memoria reciclada (`strlen` crash). Fix: `ClearCanvasRefs()` +
+  `Contains()` (recursivo con submenús) antes de liberar filas. **(5) Guard**: Help→About
+  con el About visible hace `BringToFront()` (evita leak). Verificado por el usuario
+  ("funciona perfecto"). **Pendiente §14.10**: minimizar una ventana externa congela el
+  editor principal (a investigar).
+
 - **Fase 3 — Opción A (FrameRing de industria formalizado) + `RHIFence` en el RHI** (2026-09-02, ver `TODO_WINDOW_SYSTEM.md` §14.5-14.7): decidido con el usuario que el fix de orden + `MAX_FRAMES_IN_FLIGHT=3` **YA es el patrón FrameRing de la industria** (un fence por slot de frame, esperado al inicio y señalizado en el submit del frame lógico, que cubre TODAS las ventanas porque el queue es FIFO: la externa hace submit ANTES del principal, así `fence[N]` del principal implica que las externas del frame N también terminaron). **NO se crea un FrameRing duplicado en el editor** (Opción B descartada: redundante, arriesgado, no es lo que hace la industria — Unity/Unreal/Forge/Granite formalizan el ring en la capa de backend, no lo re-implementan arriba). **(1) `RHIFence`** expuesto en el RHI (`RHI.h` struct + `RenderBackend.h` API `CreateFence/DestroyFence/WaitFence/ResetFence`), implementado en Vulkan (`VulkanBackend.cpp`, `VkFence` con `VK_FENCE_CREATE_SIGNALED_BIT`) y stubs inline D3D12/WebGPU (`CreateFence` devuelve `{}`, resto no-op) — listo para `ID3D12Fence` cuando se retome D3D12. **(2) Verificación 3.6.2 COMPLETA**: se agregó una **segunda ventana externa** (`m_TestWindow2`, `UIWindowExternal` con UI verde) en `main.cpp`, renderizada ANTES de `EndFrame()`, con teardown en `OnShutdown`. **Confirmado por el usuario (2026-09-02): "anda todo perfecto"** — el frame lógico único escala con 2 ventanas externas sin glitch del grid. **(3) Pendiente 3.6.3**: medir FPS con 2 ventanas. **(4) Pendiente futuro §14.7**: desacople del frame rate de las externas (vsync por ventana / mailbox) para que una monitor lenta no frene la principal — es ajuste del `present mode`, no de sincronización de recursos.
 
 - **Bug del grid (líneas chunk random) RESUELTO — causa raíz: orden de render multi-ventana** (2026-09-02, ver `TODO_WINDOW_SYSTEM.md` §14): con la ventana externa activa en Vulkan, el grid del viewport mostraba líneas chunk (10u/100u, las gruesas) en posiciones random, una a la vez, clipeadas al scissor. **(1) Causa raíz**: la externa renderizaba **DESPUÉS de `EndFrame()`** del principal en el mismo queue → su submit desincronizaba el fence del device → write-after-read hazard en el buffer del grid (el CPU reescribía un slot que el GPU aún leía). **(2) Fix definitivo**: mover `m_TestWindow->RenderFrame()` **ANTES de `m_Backend->EndFrame()`** en `OnRender` (todas las ventanas renderizan dentro del mismo frame lógico; el frame counter avanza UNA vez al final). **(3) Fixes de soporte**: `MAX_FRAMES_IN_FLIGHT = 2 → 3` en `VulkanDevice` y `SwapchainTarget` (alineado con image count 3); arrays por-frame a 3 (fix crash `MapMemory` out-of-bounds): `UIRenderer` vertex buffers, `GizmoRenderer::kFrames`, `RenderPipeline::RENDER_FRAMES_IN_FLIGHT`; cada `SwapchainTarget` con **su propio `VkCommandPool`** (ya no comparte el del main). **(4) Diagnóstico**: desactivar la externa eliminaba el glitch; 3 frames y pool propio NO (confirmó que no eran la causa); el orden sí. **(5) Verificado por el usuario**: grid limpio a todas las alturas con la externa abierta. **Fase 3 pendiente**: FrameRing con fences por slot (RHIFence en el RHI) para escalar a N ventanas + threading. Herramientas de debug en GridPanel: toggles Chunk Only/Disable Clip/Thin Chunks + level mask 1u/10u/100u/1000u + diag nan/segs/quads.

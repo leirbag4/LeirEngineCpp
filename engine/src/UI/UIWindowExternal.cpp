@@ -18,6 +18,17 @@ void ExternalFramebufferSizeCallback(GLFWwindow* window, int /*width*/, int /*he
     if (self && self->GetSwapchainTarget())
         self->GetSwapchainTarget()->MarkResized();
 }
+
+void ExternalCloseCallback(GLFWwindow* window)
+{
+    // The OS close button (X) / Alt+F4 pressed. GLFW would only set the close
+    // flag; without a handler nothing ever polls it for external windows, so
+    // the window stayed open. Just request the close: the actual Close() runs
+    // in RenderFrame() next frame, OUTSIDE this GLFW callback (destroying the
+    // native window/swapchain inside the callback would be reentrant).
+    auto* self = static_cast<UIWindowExternal*>(glfwGetWindowUserPointer(window));
+    if (self) self->RequestClose();
+}
 } // namespace
 
 UIWindowExternal::UIWindowExternal(RHI::RenderBackend* backend, const std::string& title)
@@ -64,16 +75,33 @@ void UIWindowExternal::Show(UIWindow* parent)
         return;
 
     // Create the native GLFW window (no API context needed for Vulkan).
+    // Size it from the logical m_WindowSize × monitor content scale (same
+    // HiDPI rule as CoreApplication), NOT a hardcoded 320×240. Otherwise the
+    // canvas logical size (= physical extent ÷ scale) is smaller than the
+    // requested size and content near the bottom — e.g. the About window's
+    // OK button — is laid out OUTSIDE the visible area and never shows.
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, m_Resizable ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE); // OS chrome title bar (default)
-    m_NativeWindow = glfwCreateWindow(320, 240, m_Title.c_str(), nullptr, nullptr);
+    float primaryScale = 1.0f;
+    if (GLFWmonitor* primary = glfwGetPrimaryMonitor()) {
+        float sx, sy;
+        glfwGetMonitorContentScale(primary, &sx, &sy);
+        primaryScale = std::max(sx, sy);
+    }
+    const int createW = std::max((int)std::lround(m_WindowSize.x * primaryScale), 1);
+    const int createH = std::max((int)std::lround(m_WindowSize.y * primaryScale), 1);
+    m_NativeWindow = glfwCreateWindow(createW, createH, m_Title.c_str(), nullptr, nullptr);
     if (!m_NativeWindow) {
         XConsole::PrintError("UIWindowExternal: failed to create GLFW window");
         return;
     }
     glfwSetWindowUserPointer(m_NativeWindow, this);
     glfwSetFramebufferSizeCallback(m_NativeWindow, ExternalFramebufferSizeCallback);
+    // Without this callback the OS close button (X) only set the close flag and
+    // nothing polled it — external windows could not be closed. The callback
+    // defers the real Close() to the next RenderFrame (see RequestClose()).
+    glfwSetWindowCloseCallback(m_NativeWindow, ExternalCloseCallback);
 
     // Create the swapchain target sharing the main device.
     if (m_Backend) {
@@ -160,6 +188,15 @@ void UIWindowExternal::SetTitle(const std::string& title)
 
 bool UIWindowExternal::RenderFrame()
 {
+    // A close was requested by the OS (X button / Alt+F4) while GLFW was
+    // polling. Run the real Close() here — outside the GLFW close callback —
+    // so the native window/swapchain/canvas are destroyed cleanly.
+    if (m_CloseRequested) {
+        m_CloseRequested = false;
+        Close();
+        return false;
+    }
+
     if (!m_SwapchainTarget || !m_SwapchainTarget->IsValid())
         return false;
 

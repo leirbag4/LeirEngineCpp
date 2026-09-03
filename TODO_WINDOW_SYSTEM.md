@@ -800,6 +800,81 @@ externas presentan con **mailbox** (o sin vsync) para no bloquear. Es un ajuste 
 `present mode` de cada `SwapchainTarget` (el ctor ya recibe `vsync`), NO de la
 sincronización de recursos. Se implementa cuando se necesite.
 
+### 14.8 Fix crash AboutWindow (Help → About) — iterator invalidation en EventQueue
+
+**Síntoma (2026-09-03)**: al hacer Help → About LeirEngine, la app crasheaba con
+`0xC0000005`. Crash log:
+```
+EventQueue::Process → dispatch PointerEvent → _Func_class<void,PointerEvent const&>::operator() → 0xC0000005
+```
+
+**Causa raíz**: `EventQueue::Process()` iteraba los vectores de hooks
+(`m_PointerHooks`, etc.) **directamente** (`for (auto& [id,h] : m_PointerHooks)`).
+El About se crea DENTRO del callback del menú (un PointerEvent): `new AboutWindow` →
+`Show()` → `ConnectToInputSystem()` → `AddPointerHook()` → `emplace_back` → el vector
+se reasigna MIENTRAS `Process()` lo itera → iterador inválido → use-after-free al
+invocar el siguiente hook. Las otras ventanas externas se crean en `OnInit` (fuera del
+dispatch), por eso no crasheaban.
+
+**Fix (raíz)**: `EventQueue::Process()` itera **snapshots** de los hooks
+(`auto hooks = m_PointerHooks;`). Registrar/remover hooks durante el dispatch toma
+efecto el próximo frame (comportamiento estándar de observer). Costo negligible
+(copiar 3-5 `std::function` por frame). Aplica a Key/Pointer/Char/Scroll.
+
+**Bug de layout descubierto durante la verificación**: el OK del About no se veía.
+`UIWindowExternal::Show()` creaba la ventana nativa a **320×240 físico FIJO**,
+ignorando `m_WindowSize` — el `SetSize({360,280})` del About nunca llegaba al GLFW
+window, así que con contentScale 1.25 el canvas lógico quedaba 256×192 y el contenido
+bajo y≈200 (el OK en y=210..240) quedaba fuera del área visible. **Fix**: `Show()`
+crea la ventana a `m_WindowSize × scale` del monitor primario (mismo patrón HiDPI de
+`CoreApplication`); el default 320×240 se conserva para las ventanas que no llaman
+`SetSize`. `Close()` en el callback del OK queda como estaba (es correcto).
+
+**Verificado**: build limpio + smoke (crashLog delta=0). `About LeirEngine created
+(450x350)`, `HitTest: AboutOK`, click OK → cierra sin crash, eventos vuelven al
+canvas del editor. Confirmado por el usuario.
+
+### 14.9 Fix post-verificación (2026-09-03): X de ventanas externas + crash al re-abrir Help
+
+El usuario confirmó 14.8 pero reportó dos bugs nuevos:
+
+**(1) La X (botón de cerrar del OS) no cerraba las ventanas externas** (About + las
+2 test windows). **Causa raíz**: `UIWindowExternal::Show()` nunca registraba
+`glfwSetWindowCloseCallback` — GLFW solo seteaba el close flag y, como las ventanas
+externas no se pollean (`CoreApplication` solo chequea el del main window), el X no
+hacía nada. **Fix**: `glfwSetWindowCloseCallback` → `RequestClose()` (solo setea
+`m_CloseRequested`) → `RenderFrame()` lo procesa y llama `Close()` **fuera del
+callback de GLFW** (destruir el native window/swapchain/canvas dentro del callback
+sería reentrante). La destrucción real ocurre en el frame siguiente.
+
+**(2) Crash al re-clickear "Help" tras cerrar el About por OK**:
+```
+UICanvas::SetFocus → XConsole::Trace → FormatArg → std::basic_string ctor → strlen → 0xC0000005
+```
+**Causa raíz**: `UIContextMenu::RebuildItems()` borra las filas del menú
+(`RemoveChild(row); delete row;`) sin limpiar el foco/hover del canvas. Al abrir el
+About, el click en "About LeirEngine" deja `m_FocusElement` = esa `CtxItem`. Al
+re-abrir Help, `OpenMenu` → `OpenAt` → `RebuildItems` libera la fila enfocada, y el
+siguiente `SetFocus(target)` tracea `m_FocusElement->GetName()` → **dangling pointer
+→ strlen sobre memoria reciclada** → crash. (El "click en cualquier otro lado primero"
+lo enmascaraba porque `ClearFocus()` de área vacía nulleaba el foco antes del rebuild.)
+**Fix**: `UIContextMenu::ClearCanvasRefs()` + `Contains()` (recursivo, incluye
+submenús) — antes de liberar filas, si el foco/hover del canvas pertenece al árbol del
+menú, se limpia (`ClearHoverAndFocus`). Mismo patrón que `DockManager`/
+`UITreeView::ClearHoverAndFocus` ya usaban; `UIContextMenu` era el hueco.
+
+**(3) Guard de About duplicado**: con el About ya visible, Help → About ahora hace
+`BringToFront()` en vez de crear otra ventana (evita leak del window anterior).
+
+**Verificado**: build limpio + smoke (crashLog delta=0, stderr vacío). Confirmado por
+el usuario ("funciona perfecto"). Commits `…`/`…`.
+
+### 14.10 Pendiente: minimizar una ventana externa congela el editor
+
+**Síntoma (2026-09-03)**: al minimizar cualquiera de las ventanas externas, el editor
+(programa principal) deja de actualizarse y de recibir eventos. Solo pasa con las
+externas minimizadas. **Estado**: a investigar (build mode).
+
 ---
 
 ## 11. Notas / Referencias

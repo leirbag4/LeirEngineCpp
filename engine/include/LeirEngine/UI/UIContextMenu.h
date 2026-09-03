@@ -157,6 +157,17 @@ private:
     void RebuildItems();
     Vector2 GetContentSize() const override;
 
+    // Clears the owning canvas's hover/focus if either references an element
+    // inside this menu tree (rows/submenus). Called BEFORE RebuildItems frees
+    // the rows — otherwise the canvas would keep a dangling focus/hover pointer
+    // to a freed row and the next SetFocus/HitTest would crash (0xC0000005 in
+    // SetFocus tracing the freed element's name after re-opening Help).
+    void ClearCanvasRefs();
+
+    // Whether the element belongs to this menu (this, a row, or an owned
+    // submenu, recursively).
+    bool Contains(const UIElement* e) const;
+
     // Submenu management (called by MenuItem).
     void OpenSubMenu(MenuItem* item);
     void CloseSubMenu();
