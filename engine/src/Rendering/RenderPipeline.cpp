@@ -21,7 +21,7 @@
 
 namespace Leir {
 
-static const int RENDER_FRAMES_IN_FLIGHT = 2;
+static const int RENDER_FRAMES_IN_FLIGHT = 3;
 static const size_t UBO_SIZE = sizeof(Matrix4x4);
 
 // ---- SpriteVertex ----

@@ -223,6 +223,12 @@ void EditorGrid::GenerateLines(const Leir::Vector3& cameraPos,
 // and reused by every line of that level — never from the per-point density
 // (see ComputeLevelRole). Inactive levels (below the draw threshold) are
 // skipped entirely, so the debug alphas are filled once per frame too.
+void EditorGrid::SetLevelEnabled(int li, bool on)
+{
+    if (on) m_LevelMask |= (1u << li);
+    else    m_LevelMask &= ~(1u << li);
+}
+
 void EditorGrid::EmitAllLevels(float refDensity, float densityOverride,
                                const Leir::Matrix4x4& viewProjection,
                                float viewportHeightPx,
@@ -230,6 +236,12 @@ void EditorGrid::EmitAllLevels(float refDensity, float densityOverride,
 {
     for (int li = 0; li < 4; ++li) {
         const float spacing = kLevelSpacings[li];
+        // Chunk-only mode: skip the finest level (1u) so only chunk lines
+        // (10x10, 100x100, 1000x1000) are drawn — isolates the bug.
+        if (m_ChunkOnly && spacing < 10.0f)
+            continue;
+        if ((m_LevelMask & (1u << li)) == 0)
+            continue; // per-level visibility mask (diagnostic)
         const LevelRole role = ComputeLevelRole(spacing, refDensity);
         m_DebugLevelAlphas[li] = role.alpha;
         if (!role.active)
@@ -275,7 +287,12 @@ EditorGrid::LevelRole EditorGrid::ComputeLevelRole(float spacing, float refDensi
     LevelRole role;
     role.alpha = kMinorMaxAlpha * minorVis + kMajorMaxAlpha * chunkVis;
     role.active = role.alpha >= 0.02f;
-    role.width = kMinorWidth + (m_ChunkWidth - kMinorWidth) * chunkVis;
+    // ThinChunks (diagnostic): force the chunk width down to the fine width so
+    // we can test whether the chunk glitch is caused by the wide quad expansion
+    // in the vertex shader (halfQuad = width/2 pixels of perpendicular offset).
+    role.width = (m_ThinChunks)
+        ? kMinorWidth
+        : kMinorWidth + (m_ChunkWidth - kMinorWidth) * chunkVis;
     role.color = Leir::Vector4::Lerp(kMinorColor, kMajorColor, chunkVis);
     return role;
 }
@@ -375,6 +392,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
         return;
 
     const uint32_t frame = m_Device->GetCurrentFrameIndex();
+    m_NanSkippedCount = 0;
 
     // Procedural grid, regenerated every frame and recentered on the camera.
     BeginFrame();
@@ -414,14 +432,28 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
         const glm::vec4 clipE = vp * glm::vec4(e, 1.0f);
         glm::vec3 sClipped = s;
         glm::vec3 eClipped = e;
-        if (clipS.w <= kNearClip && clipE.w <= kNearClip)
-            continue;
-        if (clipS.w <= kNearClip) {
-            const float t = (kNearClip - clipS.w) / (clipE.w - clipS.w);
-            sClipped = glm::mix(s, e, t);
-        } else if (clipE.w <= kNearClip) {
-            const float t = (kNearClip - clipS.w) / (clipE.w - clipS.w);
-            eClipped = glm::mix(s, e, t);
+
+        if (!m_DisableClip) {
+            // Definite guard: any NaN/Inf in the CLIP coordinates means the
+            // vertex would project to a garbage screen position.
+            if (!std::isfinite(clipS.x) || !std::isfinite(clipS.y) || !std::isfinite(clipS.z) || !std::isfinite(clipS.w) ||
+                !std::isfinite(clipE.x) || !std::isfinite(clipE.y) || !std::isfinite(clipE.z) || !std::isfinite(clipE.w)) {
+                ++m_NanSkippedCount;
+                continue;
+            }
+            if (clipS.w <= kNearClip && clipE.w <= kNearClip)
+                continue;
+            // Only clip when exactly ONE endpoint is behind the near plane.
+            if ((clipS.w <= kNearClip) != (clipE.w <= kNearClip)) {
+                const float denom = clipE.w - clipS.w;
+                const float t = (kNearClip - clipS.w) / denom;
+                if (!std::isfinite(t) || t < 0.0f || t > 1.0f)
+                    continue;
+                if (clipS.w <= kNearClip)
+                    sClipped = glm::mix(s, e, t);
+                else
+                    eClipped = glm::mix(s, e, t);
+            }
         }
         DrawnSeg seg;
         seg.s = sClipped;
@@ -438,6 +470,7 @@ void EditorGrid::Render(Leir::RHI::GCommandGraph& graph,
             : std::min(clipS.w, clipE.w); // w = -view z: smaller = nearer
         segs.push_back(seg);
     }
+    m_SegCount = (uint32_t)segs.size();
     std::sort(segs.begin(), segs.end(),
         [](const DrawnSeg& a, const DrawnSeg& b) { return a.key < b.key; });
 

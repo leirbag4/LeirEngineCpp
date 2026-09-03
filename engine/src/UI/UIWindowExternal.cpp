@@ -34,18 +34,23 @@ UIWindowExternal::~UIWindowExternal()
 
 void UIWindowExternal::DestroyNative()
 {
+    // Teardown order matters: the SwapchainTarget's destructor calls
+    // vkDeviceWaitIdle, so it MUST be destroyed first — that guarantees the GPU
+    // has finished reading the command buffers that reference the UIRenderer's
+    // pipeline/vertex buffers. Destroying the UIRenderer before the idle wait
+    // triggered "vkDestroyPipeline/Buffer: in use by VkCommandBuffer" VUIDs.
+    if (m_SwapchainTarget) {
+        delete m_SwapchainTarget;  // vkDeviceWaitIdle + CleanupSwapchain
+        m_SwapchainTarget = nullptr;
+    }
+    if (m_WindowRenderer) {
+        delete m_WindowRenderer;   // now safe: GPU is idle
+        m_WindowRenderer = nullptr;
+    }
     if (m_WindowCanvas) {
         m_WindowCanvas->DisconnectFromInputSystem();
         delete m_WindowCanvas;
         m_WindowCanvas = nullptr;
-    }
-    if (m_WindowRenderer) {
-        delete m_WindowRenderer;
-        m_WindowRenderer = nullptr;
-    }
-    if (m_SwapchainTarget) {
-        delete m_SwapchainTarget;
-        m_SwapchainTarget = nullptr;
     }
     if (m_NativeWindow) {
         glfwDestroyWindow(m_NativeWindow);

@@ -87,6 +87,13 @@ namespace {
 const float kBottomBarHeight = 30.0f;
 const float kTopToolbarHeight = 30.0f;
 const float kTopMenuBarHeight = 28.0f;
+// Editor-wide background. The canvas paints it first (bottom layer) so every
+// physical pixel is covered every frame — the overlay render pass uses
+// LOAD_OP_LOAD (it shares the swapchain with the 3D demos), so any pixel the
+// UI never draws keeps stale/garbage content (the 1px seam between the toolbar
+// and the dock at fractional DPI, plus the colored pixels left behind by
+// floating windows moving over that seam).
+const Leir::Vector4 kEditorBackgroundColor = {0.12f, 0.12f, 0.15f, 1.0f};
 }
 
 // Forward decl (mutually recursive helpers).
@@ -389,6 +396,16 @@ protected:
         m_Canvas->SetInputWindow(GetWindow());
         m_Canvas->ConnectToInputSystem();
 
+        // Full-screen background: covers every pixel so the overlay render pass
+        // (LOAD_OP_LOAD, shared with the 3D demos) never shows garbage in the
+        // 1px seam between the toolbar and the dock at fractional DPI, or the
+        // colored pixels left behind by floating windows moving over that seam.
+        auto* editorBg = new Leir::UIPanel();
+        editorBg->SetName("EditorBackground");
+        editorBg->SetColor(kEditorBackgroundColor);
+        editorBg->GetRect().anchor = Leir::AnchorSet::Stretch();
+        m_Canvas->AddChild(editorBg);
+
         // ---- Gizmo log recorder: capture REAL input events ----
         // Only records when a user input event actually happens (mouse move /
         // click / wheel / key), like the console: no event -> no log line. The
@@ -505,6 +522,8 @@ protected:
 
         // Fase D — external window test (only with the Vulkan backend for now;
         // CreateSwapchainTarget is unimplemented for D3D12/WebGPU yet).
+        // Fase 1 (2026-09-02): re-activado tras el diagnóstico del bug del grid
+        // (los recursos dinámicos ahora tienen un ring de 3 frames, MAX_FRAMES_IN_FLIGHT=3).
         if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
             m_TestWindow = new Leir::UIWindowExternal(m_Backend.get(), "Leir Test Window");
             m_TestWindow->Show();
@@ -919,6 +938,20 @@ protected:
                     m_GridPanel->SetAutoValues(15.0f, 30.0f, 0.9f, -1.0f, hs, he);
                 }
             }
+
+            // Diagnostic knobs (always applied; the toggles are read-only in auto).
+            if (m_GridPanel) {
+                m_Grid->SetChunkOnly(m_GridPanel->IsChunkOnly());
+                m_Grid->SetDisableClip(m_GridPanel->IsDisableClip());
+                m_Grid->SetThinChunks(m_GridPanel->IsThinChunks());
+                for (int li = 0; li < 4; ++li)
+                    m_Grid->SetLevelEnabled(li, (m_GridPanel->GetLevelMask() & (1u << li)) != 0);
+                m_GridPanel->SetDiagnostics(
+                    m_Grid->GetNanSkippedCount(),
+                    m_Grid->GetQuadCount(),
+                    EditorGrid::kMaxQuads,
+                    m_Grid->GetSegCount());
+            }
             m_GridLodLabel->GetRect().anchor = {1.0f, 0.0f, 1.0f, 0.0f};
             m_GridLodLabel->GetRect().offset = {-280.0f, 8.0f, -8.0f, 100.0f};
             char buf[220];
@@ -1101,13 +1134,19 @@ protected:
             m_UIRenderer->Render(m_UIGraph, m_Canvas.get());
             m_Backend->CmdExecuteGraph(cmd, m_UIGraph);
         }
-        m_Backend->EndFrame();
 
         // Fase D — render the external test window (its own swapchain/device).
+        // Fase 1+2 (2026-09-02): la externa debe renderizar ANTES de EndFrame()
+        // del principal. Renderizar DESPUÉS de EndFrame() causaba que el submit
+        // de la externa en el mismo queue desincronizara el fence del device
+        // principal, produciendo un write-after-read hazard en el buffer del
+        // grid (líneas chunk en posiciones random). Verificado por el usuario.
         if (m_TestWindow)
             m_TestWindow->RenderFrame();
         if (m_AboutWindow)
             m_AboutWindow->RenderFrame();
+
+        m_Backend->EndFrame();
     }
 
     // Sample gizmos to exercise the gizmo renderer (removable): origin

@@ -121,6 +121,21 @@ public:
     // is STABLE under yaw/pitch and only changes as the camera zooms.
     float GetDebugLevelAlpha(int index) const { return m_DebugLevelAlphas[index]; }
 
+    // Diagnostic knobs (controlled from the GridPanel).
+    void SetChunkOnly(bool on) { m_ChunkOnly = on; }
+    bool IsChunkOnly() const { return m_ChunkOnly; }
+    void SetDisableClip(bool on) { m_DisableClip = on; }
+    bool IsDisableClip() const { return m_DisableClip; }
+    void SetThinChunks(bool on) { m_ThinChunks = on; }
+    bool IsThinChunks() const { return m_ThinChunks; }
+    // Per-level visibility mask (bit li = level index 0..3: 1u,10u,100u,1000u).
+    void SetLevelEnabled(int li, bool on);
+    bool IsLevelEnabled(int li) const { return (m_LevelMask & (1u << li)) != 0; }
+    uint32_t GetNanSkippedCount() const { return m_NanSkippedCount; }
+    uint32_t GetQuadCount() const { return (uint32_t)m_Quads.size(); }
+    uint32_t GetSegCount() const { return (uint32_t)m_SegCount; }
+    static constexpr uint32_t kMaxQuads = 16384 * 6; // kMaxLines * 6
+
 private:
     struct Line {
         Leir::Vector3 start;
@@ -178,7 +193,8 @@ private:
         float overrideDensity = -1.0f; // >=0: manual mode (uniform density)
     };
 
-    static const int kFrames = 2;
+    static const int kFrames = 3;     // independent frame counter (not tied to the swapchain)
+    int m_WriteFrame = 0;             // own frame counter, advances every Render() call
     // The grid is ~300-600 lines/frame (1 quad per line; the fade is per-pixel
     // in the shader, no CPU subdivision); the cap is generous for far/zoomed-out
     // windows. Each line = 4 strip corners + up to 2 degenerate closers.
@@ -228,6 +244,14 @@ private:
     // from start to end, so nothing reaches the camera far plane (2000) bright.
     float m_HorizonFadeStart = 1000.0f;
     float m_HorizonFadeEnd = 1800.0f;
+
+    // Diagnostic flags and counters (controlled from GridPanel).
+    bool m_ChunkOnly = false;
+    bool m_DisableClip = false;
+    bool m_ThinChunks = false; // diagnostic: force chunk width = fine width
+    uint32_t m_NanSkippedCount = 0;
+    uint32_t m_LevelMask = 0xFu; // all levels on by default
+    uint32_t m_SegCount = 0;
 
     Leir::RHI::RHIPipeline m_Pipeline;
     Leir::RHI::RHIPipelineLayout m_PipelineLayout;

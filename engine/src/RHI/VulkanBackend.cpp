@@ -287,6 +287,17 @@ struct VulkanBackend::Impl {
         }
         if (bindlessCount == 0) return;
 
+        // Cap to a practical size. The iGPU reports 1M+ descriptors with
+        // update-after-bind, which reserves ~700MB of GPU VA in the descriptor
+        // pool. 4096 matches D3D12's shader-visible heap and is more than
+        // enough for any real-world scene (< 100 textures today).
+        constexpr uint32_t kMaxBindless = 4096;
+        if (bindlessCount > kMaxBindless) {
+            XConsole::Debug("Vulkan bindless: capping {} -> {} (VA reservation)",
+                bindlessCount, kMaxBindless);
+            bindlessCount = kMaxBindless;
+        }
+
         XConsole::Println("Vulkan bindless table: {} textures ({})",
             bindlessCount, uab ? "update-after-bind" : "static limits");
 

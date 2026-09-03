@@ -969,9 +969,11 @@ std::unique_ptr<SwapchainTarget> VulkanDevice::CreateSwapchainTarget(GLFWwindow*
 {
     // The render passes are baked to the main window's swapchain format; the
     // target must resolve to the same format (B8G8R8A8_SRGB) to reuse them.
+    // Fase 2: the SwapchainTarget creates its own command pool (no longer takes
+    // the main device's pool as a parameter).
     return std::make_unique<SwapchainTarget>(
         m_Instance, m_PhysicalDevice, m_Device, m_GraphicsQueue, m_PresentQueue,
-        m_CommandPool, window, m_RenderPass, m_OverlayRenderPass, m_Config.vsync);
+        window, m_RenderPass, m_OverlayRenderPass, m_Config.vsync);
 }
 
 // ---- Resource Helpers ----

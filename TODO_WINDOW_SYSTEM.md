@@ -599,6 +599,183 @@ del rect visual.
 
 ---
 
+## 14. Bug del grid (líneas chunk random) + Fijar sincronización multi-ventana (2026-09-02)
+
+### 14.1 Diagnóstico confirmado (análisis 2026-09-02)
+
+**Síntoma**: con la ventana externa (`Leir Test Window`) activa y el backend Vulkan,
+el grid del viewport 3D muestra líneas **chunk** (10u, 100u — las gruesas que denotan
+los grupos 10×) apareciendo en posiciones random, una a la vez, muy rápido, clipeadas
+a rectángulos de pantalla. Las líneas finas (1u) nunca glitchean. Al subir la cámara
+el glitch pasa de las 10u a las 100u (es el **nivel chunk activo** el que glitchea).
+`NaN` del guard del grid = 0, y desactivar el near-plane clip no lo arregla.
+
+**Causa raíz**: **write-after-read hazard de recursos dinámicos**. Todos los recursos
+dinámicos del editor que se reescriben cada frame (grid vertex/UBO buffers,
+`RenderPipeline` UBOs, `GizmoRenderer` buffers) se indexan con
+`GetCurrentFrameIndex()` del `VulkanDevice` principal y confían en el fence del
+principal (`MAX_FRAMES_IN_FLIGHT = 2`). Pero la ventana externa renderiza
+**después** de `EndFrame()` del principal en el **mismo queue**, con su **propio**
+ring de frames y compartiendo el **mismo command pool**. Con 2 rings de frames
+independientes inyectando submits al mismo queue, el ring del principal ya no es el
+único árbitro del progreso del GPU → el CPU escribe un slot de buffer que el GPU aún
+lee → un vértice con coordenadas basura → una línea chunk desplazada a posición
+random, clipeada al scissor del viewport.
+
+**Confirmación empírica**: desactivar la creación y el render de la ventana externa
+(`if (false)` en main.cpp) elimina el glitch por completo.
+
+**CAUSA RAÍZ CONFIRMADA (verificado por el usuario, 2026-09-02)**: el **orden de
+render** era el problema. La ventana externa se renderizaba **DESPUÉS de
+`EndFrame()`** del principal, haciendo `vkQueueSubmit` en el **mismo queue** después
+del submit del principal. Eso desincronizaba la relación entre el frame index del
+device (que ya avanzó en `EndFrame`) y la disponibilidad real del buffer del grid:
+el CPU reescribía un slot que el GPU aún leía del submit del principal anterior. Al
+mover `m_TestWindow->RenderFrame()` **ANTES de `m_Backend->EndFrame()`** (dentro del
+mismo frame lógico), el bug desaparece por completo. Las Fases 1 (3 frames) y 2
+(command pool propio) ayudan pero NO eran la causa raíz — el fix definitivo es el
+orden correcto: **todas las ventanas renderizan ANTES de presentar el principal**.
+
+**Por qué solo las chunk**: son las líneas MÁS LARGAS (span = ventana×2, hasta 8000
+unidades para 100u) → más vértices en el buffer → mayor probabilidad de que un
+vértice caiga en la zona del race.
+
+**Timeline semaphore (`VK_KHR_timeline_semaphore`) — NO aplica**: es core en Vulkan
+1.2 y coordina múltiples queues/ventanas con un contador global, pero NO resuelve el
+write-after-read de un buffer HostCoherent (el fence binario clásico ya lo protege;
+el problema es que el grid esperaba el fence equivocado). Además rompe la
+portabilidad del RHI (D3D12 usa `ID3D12Fence`, WebGPU/Metal otro modelo). Un fence
+binario por slot existe en TODOS los backends → es la elección multiplataforma.
+
+**Rendimiento**: el fix NO agrega sincronización costosa; hace que la existente sea
+correcta (dedicada por slot, cubriendo todas las ventanas). Subir de 2→3 frames en
+vuelo no reduce FPS (permite que el CPU corra 1 frame adelantado → menos stalling en
+CPU-bound). El viewport RT NO se triplica (sigue siendo UN RT, escrito+leído dentro
+del mismo submit, protegido por el fence del ring). NADA de `vkDeviceWaitIdle` por
+frame. El costo es el mismo número de esperas de fence — solo que ahora esperan el
+fence correcto.
+
+### 14.2 Arquitectura objetivo (Fase 3 — patrón de la industria)
+
+Motores profesionales (The Forge, Granite, bgfx, Unreal) usan un **único ring de
+frames LÓGICO compartido**:
+
+- **Un solo contador de frame lógico** que avanza UNA vez por frame del editor (no
+  por ventana).
+- Cada ventana tiene su propio command buffer / swapchain target / **command pool**
+  propio, y graba dentro del frame lógico actual.
+- Todos los recursos dinámicos CPU-escritos (grid, gizmos, UBOs per-frame) viven en
+  el ring y se indexan por el frame lógico.
+- Cada slot del ring tiene un **fence dedicado** que se señaliza cuando TODOS los
+  submits de ese frame lógico (todas las ventanas que consumieron ese slot) terminan.
+
+Esto escala a cualquier número de ventanas (2D/3D) y habilita grabación de comandos
+en paralelo (cada ventana tiene su propio `GCommandGraph` → worker threads).
+
+### 14.3 Fase 1 — Diagnóstico de confirmación (N=3 + re-activar la ventana externa)
+
+- [x] 1.1 `MAX_FRAMES_IN_FLIGHT = 2 → 3` en `engine/include/LeirEngine/Rendering/VulkanDevice.h` (línea 199). El swapchain ya crea `minImageCount+1 = 3` imágenes → alinear N con el image count (estándar).
+- [x] 1.2 `MAX_FRAMES_IN_FLIGHT = 2 → 3` en `engine/include/LeirEngine/Rendering/SwapchainTarget.h` (línea 155).
+- [x] 1.3 Re-activar la ventana externa: `if (false)` → `if (vulkan)` en la creación (`main.cpp` OnInit) y `if (false && m_TestWindow)` → `if (m_TestWindow)` en OnRender.
+- [x] 1.4 Build limpio + smoke test.
+- [x] 1.5 Verificar con el usuario: grid sin glitch con la ventana externa abierta, a varias alturas de cámara (LOD 1/10 y 10/100).
+- [x] 1.6 Fix crash Fase 1: arrays de recursos por-frame fijados a 2 actualizados a 3.
+- [x] 1.7 **CAUSA RAÍZ CONFIRMADA (verificado por el usuario)**: el orden de render
+      era el problema. La ventana externa DEBE renderizar ANTES de `EndFrame()` del
+      principal. Renderizar DESPUÉS de `EndFrame()` hacía que el submit de la
+      externa en el mismo queue desincronizara el fence del device principal,
+      produciendo un write-after-read hazard en el buffer del grid (líneas chunk
+      en posiciones random, clipeadas al scissor del viewport). Mover
+      `m_TestWindow->RenderFrame()` ANTES de `m_Backend->EndFrame()` en `OnRender`
+      elimina el glitch por completo.
+
+> **Nota honesta**: esto probablemente lo mitiga (más margen en el ring) pero es un
+> parche, no la causa raíz. La causa raíz estructural se resuelve en Fase 3.
+
+### 14.4 Fase 2 — Desacoplar ventanas del pool/estado compartido
+
+- [x] 2.1 Cada `SwapchainTarget` crea **su propio `VkCommandPool`** en vez de recibir el del main (hoy el ctor recibe `m_CommandPool` del device).
+- [x] 2.2 El main device conserva su pool para sí. Ningún reset/alloc de una ventana puede afectar a otra.
+- [x] 2.3 Verificar con el usuario: grid sin glitch con la ventana externa abierta (Fase 1 + 2 + orden de render corregido). **Confirmado por el usuario: "ahi anda bien".**
+
+> Elimina la clase de bugs donde `vkResetCommandBuffer`/alloc de la externa
+> interfiere con el pool que el principal usa para sus buffers de frame.
+
+### 14.5 Fase 3 — Ring de frames LÓGICO compartido (la solución arquitectónica real)
+
+**Lección aprendida de Fase 1+2 (2026-09-02):** el fix definitivo del bug del grid
+fue mover el render de la ventana externa **ANTES de `EndFrame()`** del principal.
+Esto confirma que el principio correcto es: **todas las ventanas renderizan dentro
+del mismo frame lógico, y el frame counter avanza UNA vez al final, después de
+todos los submits.** La Fase 3 formaliza esto en una arquitectura RHI-neutral que
+escala a N ventanas + threading.
+
+#### 3.1 Regla de orden (ya aplicada en el fix)
+- [x] 3.1.1 Toda ventana externa renderiza ANTES de `EndFrame()` del principal
+      (dentro del mismo `BeginFrame`/`EndFrame`).
+- [x] 3.1.2 El frame counter del device avanza UNA vez por frame lógico, después
+      de que todas las ventanas grabaron y submitearon sus comandos.
+
+#### 3.2 Exponer fences en el RHI (multiplataforma)
+- [ ] 3.2.1 `RHIFence` en `engine/include/LeirEngine/RHI/RHI.h`:
+      ```cpp
+      struct RHIFence { Handle handle = 0; bool IsValid() const { return handle != 0; } };
+      ```
+- [ ] 3.2.2 API en `engine/include/LeirEngine/RHI/RenderBackend.h`:
+      ```cpp
+      virtual RHIFence CreateFence(bool signaled = true) = 0;
+      virtual void DestroyFence(RHIFence fence) = 0;
+      virtual void WaitFence(RHIFence fence, uint64_t timeoutNs = UINT64_MAX) = 0;
+      virtual void ResetFence(RHIFence fence) = 0;
+      ```
+- [ ] 3.2.3 Implementación Vulkan (`VulkanBackend.cpp`): `VkFence` con
+      `VK_FENCE_CREATE_SIGNALED_BIT` según `signaled`.
+- [ ] 3.2.4 Implementaciones stub D3D12/WebGPU (`D3D12Backend.cpp`/`WebGPUBackend.cpp`)
+      → `ID3D12Fence` / placeholder.
+
+#### 3.3 FrameRing compartido (RHI-neutral)
+- [ ] 3.3.1 Nuevo helper `FrameRing` (header-only) con N = image count del swapchain
+      (p.ej. 3):
+      ```cpp
+      class FrameRing {
+      public:
+          void BeginFrame();              // next slot = (slot+1)%N; WAIT + reset m_SlotFences[slot]
+          uint32_t GetSlot() const;       // índice para TODOS los recursos dinámicos del frame
+          RHIFence GetSlotFence() const;  // fence que el "end of logical frame" señaliza
+      };
+      ```
+- [ ] 3.3.2 El editor lo instancia (o lo expone el backend).
+- [ ] 3.3.3 El `FrameRing::BeginFrame()` se llama **antes** de que cualquier ventana
+      comience a grabar, y el `EndFrame()` se llama **después** de que todas las
+      ventanas submitearon, señalizando el fence del slot.
+
+#### 3.4 Migrar recursos dinámicos al slot lógico
+- [ ] 3.4.1 Grid vertex/UBO buffers: `GetCurrentFrameIndex()` → `FrameRing::GetSlot()`.
+- [ ] 3.4.2 `RenderPipeline` UBOs: idem.
+- [ ] 3.4.3 `GizmoRenderer` buffers: idem.
+- [ ] 3.4.4 `UIRenderer` vertex buffers: idem.
+
+#### 3.5 Command pool por ventana + grabación paralela
+- [x] 3.5.1 Cada ventana con su propio `VkCommandPool` (Fase 2).
+- [ ] 3.5.2 Cada ventana graba su propio `GCommandGraph` en su propio command buffer
+      (ya lo hace) → listo para grabación en worker threads.
+- [ ] 3.5.3 El ring garantiza que el slot no se reescribe hasta que el frame lógico
+      anterior (todas las ventanas) completó.
+
+#### 3.6 Verificación final
+- [x] 3.6.1 Ventana externa abierta, grid sin glitch en Vulkan (Fase 1+2+orden).
+- [ ] 3.6.2 Apertura de N ventanas (2D y 3D) sin glitch.
+- [ ] 3.6.3 Medir FPS antes/después (no debe bajar; puede subir en CPU-bound).
+- [ ] 3.6.4 Build + ctest + smoke.
+
+### 14.6 Lo que NO se va a hacer (por honestidad técnica)
+
+- **`vkDeviceWaitIdle` por frame** — mataría el rendimiento.
+- **`VK_KHR_timeline_semaphore`** — no resuelve este bug y rompe la portabilidad del RHI.
+- **Triplicar el viewport RT** — innecesario y costaría ~32MB extra de GPU.
+
+---
+
 ## 11. Notas / Referencias
 
 - El plan de `TODO_DOCKING.md` Fase 2 ya mencionaba: `SwapchainTarget` por ventana,

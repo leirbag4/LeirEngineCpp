@@ -26,6 +26,14 @@ public:
     bool IsManual() const { return m_Manual; }
     void SetManual(bool manual);
 
+    // Diagnostic controls.
+    bool IsChunkOnly() const { return m_ChunkOnly; }
+    bool IsDisableClip() const { return m_DisableClip; }
+    bool IsThinChunks() const { return m_ThinChunks; }
+    uint32_t GetLevelMask() const { return m_LevelMask; }
+    void SetDiagnostics(uint32_t nanSkipped, uint32_t quadCount, uint32_t quadMax,
+                        uint32_t segCount);
+
     // Stored manual values (read by main.cpp when manual).
     float GetGridDensityOverride() const { return m_DensityVal; }
     float GetGridFadeStartPx() const { return m_FadeStartVal; }
@@ -57,6 +65,11 @@ private:
     void UpdateEnabledVisuals();
 
     Leir::UIButton* m_ManualButton = nullptr;
+    Leir::UIButton* m_ChunkOnlyBtn = nullptr;
+    Leir::UIButton* m_DisableClipBtn = nullptr;
+    Leir::UIButton* m_ThinChunksBtn = nullptr;
+    Leir::UIButton* m_LevelBtns[4] = {};
+    Leir::UILabel* m_DiagLabel = nullptr;
 
     UIDragFloatInput* m_Density = nullptr;
     UIDragFloatInput* m_FadeStart = nullptr;
@@ -74,4 +87,10 @@ private:
     float m_HorizonEndVal = 1800.0f;
 
     bool m_Manual = false; // auto by default: inputs greyed out, horizon auto
+
+    // Diagnostic state.
+    bool m_ChunkOnly = false;
+    bool m_DisableClip = false;
+    bool m_ThinChunks = false;
+    uint32_t m_LevelMask = 0xFu; // all 4 levels on by default
 };

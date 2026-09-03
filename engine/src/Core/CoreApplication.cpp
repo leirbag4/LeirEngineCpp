@@ -319,7 +319,12 @@ void CoreApplication::WindowContentScaleCallback(GLFWwindow* window, float xscal
     if (!app)
         return;
     app->m_ContentScale = std::max(xscale, yscale);
-    InputManager::GetInstance().SetContentScale(app->GetContentScale());
+    // Per-window state: InputManager::ToLogical() prefers the per-window scale
+    // (m_WindowStates[window].contentScale), NOT the legacy m_ContentScale.
+    // Calling SetContentScale() here only updated the legacy field, leaving the
+    // window's state stale after a monitor DPI change → cursor coordinates were
+    // divided by the OLD scale, desyncing hover/clicks (hidpi:true only).
+    InputManager::GetInstance().SetContentScaleForWindow(window, app->GetContentScale());
     app->OnContentScaleChanged();
     // FIX (2026-08-24): the framebuffer-size callback can fire BEFORE this one
     // when moving the window between monitors with different DPI, so

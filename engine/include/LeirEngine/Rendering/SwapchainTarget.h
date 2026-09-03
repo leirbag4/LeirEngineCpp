@@ -42,7 +42,7 @@ public:
      */
     SwapchainTarget(VkInstance instance, VkPhysicalDevice physicalDevice,
                     VkDevice device, VkQueue graphicsQueue, VkQueue presentQueue,
-                    VkCommandPool commandPool, GLFWwindow* window,
+                    GLFWwindow* window,
                     VkRenderPass renderPass, VkRenderPass overlayRenderPass,
                     bool vsync);
 
@@ -152,7 +152,8 @@ private:
     std::vector<VkFence> m_ImagesInFlight; // per swapchain image
 
     // Per-frame sync + command buffers
-    static const int MAX_FRAMES_IN_FLIGHT = 2;
+    // Fase 1 (2026-09-02): 2 -> 3 frames in flight (aligned with the image count).
+    static const int MAX_FRAMES_IN_FLIGHT = 3;
     std::vector<VkSemaphore> m_ImageAvailableSemaphores;
     std::vector<VkFence> m_InFlightFences;
     std::vector<VkCommandBuffer> m_CommandBuffers;

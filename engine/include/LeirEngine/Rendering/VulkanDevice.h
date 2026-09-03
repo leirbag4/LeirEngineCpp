@@ -196,7 +196,12 @@ private:
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
 
     // Sync
-    static const int MAX_FRAMES_IN_FLIGHT = 2;
+    // Fase 1 (2026-09-02): 2 -> 3 frames in flight. The swapchain is created with
+    // minImageCount+1 = 3 images; aligning framesInFlight with the image count is
+    // the industry standard and gives the dynamic per-frame resources (grid,
+    // RenderPipeline UBOs, gizmos) a 3-deep ring instead of 2 — which absorbs the
+    // extra queue submissions when a second window renders on the same queue.
+    static const int MAX_FRAMES_IN_FLIGHT = 3;
     std::vector<VkSemaphore> m_ImageAvailableSemaphores;
     std::vector<VkSemaphore> m_RenderFinishedSemaphores;
     std::vector<VkFence> m_InFlightFences;

@@ -118,8 +118,8 @@ private:
     RHI::RHIPipeline m_Pipeline;                            ///< Graphics pipeline.
     RHI::RHIDescriptorSetLayout m_DescSetLayout;            ///< Descriptor set layout.
     std::vector<RHISetLayoutEntry> m_SetLayouts;            ///< Reflection-derived layouts.
-    RHI::RHIBuffer m_VertexBuffers[2];                      ///< Vertex buffers (double buffered).
-    RHI::RHIDeviceMemory m_VertexMemories[2];               ///< Vertex memories.
+    RHI::RHIBuffer m_VertexBuffers[3];                      ///< Vertex buffers (triple buffered).
+    RHI::RHIDeviceMemory m_VertexMemories[3];               ///< Vertex memories.
     int m_MaxVertices = 0;                                  ///< Max vertices.
 
     std::vector<UIVertex> m_Vertices;                       ///< Regular batch vertices.

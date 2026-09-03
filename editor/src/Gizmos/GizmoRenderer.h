@@ -109,7 +109,7 @@ private:
         Leir::Vector4 color;
     };
 
-    static const int kFrames = 2;
+    static const int kFrames = 3;
     static const uint32_t kMaxLines = 16384;
     // Each line = 4 strip corners + up to 2 degenerate strip-closers.
     static const uint32_t kMaxVertices = kMaxLines * 6;

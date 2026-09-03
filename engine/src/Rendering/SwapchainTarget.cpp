@@ -12,7 +12,7 @@ namespace Leir {
 
 SwapchainTarget::SwapchainTarget(VkInstance instance, VkPhysicalDevice physicalDevice,
                                  VkDevice device, VkQueue graphicsQueue, VkQueue presentQueue,
-                                 VkCommandPool commandPool, GLFWwindow* window,
+                                 GLFWwindow* window,
                                  VkRenderPass renderPass, VkRenderPass overlayRenderPass,
                                  bool vsync)
     : m_Instance(instance)
@@ -20,13 +20,38 @@ SwapchainTarget::SwapchainTarget(VkInstance instance, VkPhysicalDevice physicalD
     , m_Device(device)
     , m_GraphicsQueue(graphicsQueue)
     , m_PresentQueue(presentQueue)
-    , m_CommandPool(commandPool)
     , m_RenderPass(renderPass)
     , m_OverlayRenderPass(overlayRenderPass)
     , m_Vsync(vsync)
     , m_Window(window)
 {
     CreateSurface();
+
+    // Fase 2: each window gets its OWN command pool instead of sharing the
+    // main device's pool. This eliminates any cross-window interference from
+    // command buffer allocation/reset within a shared pool.
+    {
+        uint32_t queueCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &queueCount, nullptr);
+        std::vector<VkQueueFamilyProperties> families(queueCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &queueCount, families.data());
+        uint32_t graphicsFam = UINT32_MAX;
+        for (uint32_t i = 0; i < queueCount; ++i) {
+            if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { graphicsFam = i; break; }
+        }
+        if (graphicsFam == UINT32_MAX)
+            throw std::runtime_error("SwapchainTarget: no graphics queue family");
+
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.queueFamilyIndex = graphicsFam;
+        if (vkCreateCommandPool(m_Device, &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+            throw std::runtime_error("SwapchainTarget: failed to create command pool");
+        XConsole::Debug("SwapchainTarget: own command pool created (fam {})", graphicsFam);
+    }
+
+    CreateSwapchain();
     CreateSwapchain();
     CreateImageViews();
     CreateDepthResources();
@@ -45,6 +70,7 @@ SwapchainTarget::~SwapchainTarget()
         vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
         vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
     }
+    vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
     vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
 }
 

@@ -217,7 +217,7 @@ UIRenderer::UIRenderer(RHI::RenderBackend* device)
 
     m_MaxVertices = 65536;
     uint32_t vbSize = m_MaxVertices * sizeof(UIVertex);
-    for (int f = 0; f < 2; ++f) {
+    for (int f = 0; f < 3; ++f) {
         m_VertexBuffers[f] = m_Device->CreateBuffer(vbSize,
             RHI::BufferUsage::Vertex,
             RHI::MemoryProperty::HostVisible | RHI::MemoryProperty::HostCoherent,
@@ -307,7 +307,7 @@ UIRenderer::~UIRenderer()
         if (entry.layout.IsValid())
             m_Device->DestroyDescriptorSetLayout(entry.layout);
     }
-    for (int f = 0; f < 2; ++f) {
+    for (int f = 0; f < 3; ++f) {
         if (m_VertexBuffers[f].IsValid()) m_Device->DestroyBuffer(m_VertexBuffers[f]);
         if (m_VertexMemories[f].IsValid()) m_Device->DestroyMemory(m_VertexMemories[f]);
     }

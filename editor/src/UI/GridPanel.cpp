@@ -1,6 +1,8 @@
 #include "GridPanel.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <vector>
 
 GridPanel::GridPanel()
 {
@@ -59,6 +61,56 @@ GridPanel::GridPanel()
     AddField(horizonRow, "horizonEnd:", m_HorizonEnd, m_HorizonEndVal,
         [this](float v) { if (m_Manual) m_HorizonEndVal = v; });
 
+    // ---- Diagnostics (only enabled in manual mode) ----
+    auto makeToggle = [&](const std::string& label, bool& flag) -> Leir::UIButton* {
+        auto* btn = new Leir::UIButton();
+        btn->SetSizePolicy(Leir::SizePolicy::Fixed);
+        btn->SetOnClick([this, &flag, label, btn]() {
+            if (!m_Manual)
+                return; // greyed out: diagnostic toggles only work in manual
+            flag = !flag;
+            btn->SetText((flag ? "[x] " : "[ ] ") + label);
+        });
+        btn->SetText("[ ] " + label);
+        AddChild(btn);
+        return btn;
+    };
+    m_ChunkOnlyBtn = makeToggle("Chunk Only (>=10)", m_ChunkOnly);
+    m_DisableClipBtn = makeToggle("Disable Clip", m_DisableClip);
+    m_ThinChunksBtn = makeToggle("Thin Chunks", m_ThinChunks);
+
+    // ---- Per-level visibility toggles ----
+    auto* levelRow = makeRow();
+    levelRow->SetName("LevelRow");
+    Leir::UILabel* levelLbl = new Leir::UILabel();
+    levelLbl->SetText("Show:");
+    levelLbl->SetFontSize(10);
+    levelLbl->SetColor({0.6f, 0.6f, 0.6f, 1.0f});
+    levelLbl->SetSizePolicy(Leir::SizePolicy::Fixed);
+    levelRow->AddChild(levelLbl);
+
+    const char* kLevelLabels[] = { "1u", "10u", "100u", "1000u" };
+    for (int li = 0; li < 4; ++li) {
+        auto* btn = new Leir::UIButton();
+        btn->SetSizePolicy(Leir::SizePolicy::Fixed);
+        btn->SetText(std::string("[x] ") + kLevelLabels[li]);
+        btn->SetOnClick([this, li, btn, kLevelLabels]() {
+            if (!m_Manual) return;
+            uint32_t bit = 1u << li;
+            m_LevelMask ^= bit;
+            btn->SetText(((m_LevelMask & bit) ? "[x] " : "[ ] ") + std::string(kLevelLabels[li]));
+        });
+        levelRow->AddChild(btn);
+        m_LevelBtns[li] = btn;
+    }
+
+    m_DiagLabel = new Leir::UILabel();
+    m_DiagLabel->SetText("diag: nan 0 / segs 0 / quads 0/98304");
+    m_DiagLabel->SetFontSize(10);
+    m_DiagLabel->SetColor({0.7f, 0.7f, 0.4f, 1.0f});
+    m_DiagLabel->SetSizePolicy(Leir::SizePolicy::Fixed);
+    AddChild(m_DiagLabel);
+
     UpdateEnabledVisuals();
 }
 
@@ -75,6 +127,10 @@ void GridPanel::SetFont(Leir::Font* font)
             for (auto* sub : panel->GetChildren()) {
                 if (auto* dfi = dynamic_cast<UIDragFloatInput*>(sub))
                     dfi->SetFont(font);
+                else if (auto* subBtn = dynamic_cast<Leir::UIButton*>(sub))
+                    subBtn->SetFont(font);
+                else if (auto* subLbl = dynamic_cast<Leir::UILabel*>(sub))
+                    subLbl->SetFont(font);
             }
         }
     }
@@ -109,6 +165,17 @@ void GridPanel::SetAutoValues(float fadeStartPx, float fadeEndPx, float chunkWid
     m_Density->SetValue(density);
     m_HorizonStart->SetValue(horizonStart);
     m_HorizonEnd->SetValue(horizonEnd);
+}
+
+void GridPanel::SetDiagnostics(uint32_t nanSkipped, uint32_t quadCount, uint32_t quadMax,
+                               uint32_t segCount)
+{
+    if (m_DiagLabel) {
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "diag: nan %u / segs %u / quads %u/%u",
+            nanSkipped, segCount, quadCount, quadMax);
+        m_DiagLabel->SetText(buf);
+    }
 }
 
 void GridPanel::ComputeAutoHorizon(float camH, float& outStart, float& outEnd)
@@ -193,5 +260,27 @@ void GridPanel::UpdateEnabledVisuals()
             f->GetInput()->SetTextColor(textColor);
             f->GetInput()->SetEditable(m_Manual);
         }
+    }
+
+    // Diagnostics toggles: only editable in manual mode, greyed otherwise.
+    std::vector<Leir::UIButton*> toggles = { m_ChunkOnlyBtn, m_DisableClipBtn, m_ThinChunksBtn };
+    for (auto* b : m_LevelBtns) toggles.push_back(b);
+    for (auto* b : toggles) {
+        if (!b)
+            continue;
+        if (m_Manual) {
+            b->SetTextColor(Leir::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            b->SetColors(
+                {0.25f, 0.3f, 0.45f, 1.0f}, {0.35f, 0.4f, 0.6f, 1.0f}, {0.15f, 0.2f, 0.3f, 1.0f});
+        } else {
+            b->SetTextColor(Leir::Vector4(0.45f, 0.45f, 0.45f, 1.0f));
+            b->SetColors(
+                {0.14f, 0.14f, 0.16f, 1.0f}, {0.14f, 0.14f, 0.16f, 1.0f}, {0.14f, 0.14f, 0.16f, 1.0f});
+        }
+    }
+    if (m_DiagLabel) {
+        m_DiagLabel->SetColor(m_Manual
+            ? Leir::Vector4(0.7f, 0.7f, 0.4f, 1.0f)
+            : Leir::Vector4(0.42f, 0.42f, 0.42f, 1.0f));
     }
 }
