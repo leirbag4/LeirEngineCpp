@@ -59,6 +59,7 @@ ${LEIR_ROOT}/engine/src/Rendering/Shader.cpp
     ${LEIR_ROOT}/engine/src/UI/UIButton.cpp
     ${LEIR_ROOT}/engine/src/UI/UIPanel.cpp
     ${LEIR_ROOT}/engine/src/UI/UIRenderer.cpp
+    ${LEIR_ROOT}/engine/src/UI/UIWindow.cpp
     ${LEIR_ROOT}/engine/src/UI/UITextInput.cpp
     ${LEIR_ROOT}/engine/src/UI/UIFloatInput.cpp
     ${LEIR_ROOT}/engine/src/UI/UISlider.cpp
