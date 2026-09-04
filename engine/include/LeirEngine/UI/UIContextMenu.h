@@ -103,6 +103,13 @@ public:
     float GetMaxWidth() const { return m_MaxWidth; }
 
     /**
+     * @brief Clears all item descriptors and frees the current rows.
+     * @details Used to rebuild a reused menu (e.g. the dock tab context menu)
+     *  with a fresh item set on every open.
+     */
+    void ClearItems();
+
+    /**
      * @brief Opens the menu at a canvas position.
      * @param[in] canvasPos Position in canvas coordinates.
      */

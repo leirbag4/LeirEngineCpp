@@ -823,6 +823,13 @@ protected:
             }
         });
 
+        // Fase E — Detach to Window: when a panel is detached the dock manager
+        // calls this to create an external window hosting the SAME content
+        // reference (no copy). The window closes -> re-dock via ReattachPanel.
+        m_DockManager->SetOnPanelDetached([this](Leir::DockPanel* panel) {
+            CreateDetachedWindow(panel);
+        });
+
 #ifdef LEIR_EDITOR_SLANG
         // ---- Shader hot-reload + export wiring (Plan A) ----
         // m_ShaderCompiler was created earlier in OnInit (before the Shader,
@@ -892,16 +899,41 @@ protected:
             m_AboutWindow = nullptr;
         }
 
+        // Fase E — deferred delete of detached windows: when one closes its
+        // OnClosed already re-docked the panel; free the window object here
+        // (outside any dispatch). Erase-remove to keep the vector stable.
+        for (size_t i = m_DetachedWindows.size(); i-- > 0;) {
+            Leir::UIWindowExternal* w = m_DetachedWindows[i];
+            if (w && !w->IsVisible()) {
+                delete w;
+                m_DetachedWindows.erase(m_DetachedWindows.begin() + i);
+            }
+        }
+
         auto* scene = Leir::SceneManager::GetInstance().GetActiveScene();
         if (!scene) return;
 
         // Editor camera controls (right-click + WASD free-fly). The viewport is
-        // now the content of a dock pane, so walk ancestors up to it.
+        // now the content of a dock pane, so walk ancestors up to it. When the
+        // viewport is DETACHED to an external window, the hover lives in that
+        // window's canvas (its own content scale), not the main canvas — check
+        // every detached window's canvas too.
         auto* hovered = m_Canvas->GetHoveredElement();
         bool inViewport = false;
-        if (m_ViewportPanel && hovered) {
+        if (m_ViewportPanel) {
             for (Leir::UIElement* e = hovered; e; e = e->GetParent()) {
                 if (e == m_ViewportPanel) { inViewport = true; break; }
+            }
+            if (!inViewport) {
+                for (auto* w : m_DetachedWindows) {
+                    if (!w) continue;
+                    Leir::UICanvas* c = w->GetCanvas();
+                    if (!c) continue;
+                    for (Leir::UIElement* e = c->GetHoveredElement(); e; e = e->GetParent()) {
+                        if (e == m_ViewportPanel) { inViewport = true; break; }
+                    }
+                    if (inViewport) break;
+                }
             }
         }
         bool rightDown = inViewport && Leir::Mouse::IsDown(Leir::PointerButton::Right);
@@ -1177,6 +1209,11 @@ protected:
         if (m_AboutWindow)
             m_AboutWindow->RenderFrame();
 
+        // Fase E — render detached dock panel windows (same frame-logical rule:
+        // before the main EndFrame, sharing the backend's queue).
+        for (auto* w : m_DetachedWindows)
+            if (w) w->RenderFrame();
+
         m_Backend->EndFrame();
     }
 
@@ -1251,6 +1288,14 @@ protected:
             delete m_AboutWindow;
             m_AboutWindow = nullptr;
         }
+        // Fase E — detached dock panel windows share the backend device; free
+        // them BEFORE WaitIdle/backend teardown. Their content is reparented
+        // back out by ~UIWindowExternal (canvas dtor nulls child parents, it
+        // does not delete them), so the editor-owned panel contents below are
+        // still freed exactly once by the DeleteUiSubtree calls.
+        for (auto* w : m_DetachedWindows)
+            delete w;
+        m_DetachedWindows.clear();
         if (m_Backend)
             m_Backend->WaitIdle();
         auto& settings = Leir::LeirSettings::Get();
@@ -1544,6 +1589,9 @@ private:
     // Fase F — internal floating window test (UIWindowInternal). Floating inside
     // the main canvas with chrome (title bar, buttons, drag, resize, modal).
     Leir::UIWindowInternal* m_InternalWindow = nullptr;
+    // Fase E — detached dock panels hosted in external windows (created by
+    // CreateDetachedWindow; deleted deferred in OnUpdate when !IsVisible).
+    std::vector<Leir::UIWindowExternal*> m_DetachedWindows;
 
     // Per-frame command graphs (see GCommandGraph): the scene graph owns the
     // RenderTexture pass; the UI graph records draws into the swapchain
@@ -1638,6 +1686,38 @@ private:
 
     // Opens a floating internal window with chrome (title bar, close, drag,
     // resize, modal). This tests the UIWindowInternal + Fase C chrome path.
+    void CreateDetachedWindow(Leir::DockPanel* panel)
+    {
+        if (!panel || !panel->content || !m_Backend)
+            return;
+
+        // The external window hosts the panel's SAME content reference (no
+        // copy). The dock manager already removed the panel from its pane, so
+        // panel->content is detached; reparent it into the window's canvas.
+        auto* win = new Leir::UIWindowExternal(m_Backend.get(), panel->title);
+        win->Show();
+
+        if (Leir::UICanvas* c = win->GetCanvas()) {
+            panel->content->SetActive(true);
+            panel->content->SetSizePolicy(Leir::SizePolicy::Fill);
+            panel->content->GetRect().anchor = Leir::AnchorSet::Stretch();
+            panel->content->GetRect().offset = {};
+            c->AddChild(panel->content);
+        }
+
+        // When the window closes (X button or other close path), re-dock the
+        // panel into the dock tree and mark the window for deferred delete.
+        win->SetOnClosed([this, panel, win]() {
+            if (m_DockManager)
+                m_DockManager->ReattachPanel(panel);
+            // Re-dock reparents panel->content back into the dock; the window
+            // is deleted next frame in OnUpdate (safe, outside any dispatch).
+        });
+
+        m_DetachedWindows.push_back(win);
+        Leir::XConsole::Println("Panel '{}' detached to window", panel->title);
+    }
+
     void ShowInternalTestWindow()
     {
         // Persistent window: create once, reuse with Show/Hide. Never delete

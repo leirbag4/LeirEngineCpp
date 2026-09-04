@@ -4,6 +4,7 @@
 #include "LeirEngine/UI/Dock/DockPane.h"
 #include "LeirEngine/UI/Dock/DockTabBar.h"
 #include "LeirEngine/UI/Dock/DockDropOverlay.h"
+#include "LeirEngine/UI/UIContextMenu.h"
 #include "LeirEngine/UI/UICanvas.h"
 #include "LeirEngine/UI/Font.h"
 #include <nlohmann/json.hpp>
@@ -151,6 +152,11 @@ DockManager::~DockManager()
         RemoveChild(m_Overlay);
         delete m_Overlay;
     }
+    if (m_TabMenu) {
+        if (m_TabMenu->GetParent()) m_TabMenu->GetParent()->RemoveChild(m_TabMenu);
+        delete m_TabMenu;
+        m_TabMenu = nullptr;
+    }
 }
 
 DockPanel* DockManager::RegisterPanel(const std::string& id, const std::string& title,
@@ -177,6 +183,10 @@ DockPanel* DockManager::FindPanelById(const std::string& id) const
 void DockManager::BuildDefaultLayout()
 {
     DestroyTree();
+    // External windows do not persist across sessions: any detached panel is
+    // re-docked on startup (the detached flag belongs to a running window).
+    for (auto& p : m_Panels)
+        p->detached = false;
 
     auto makePane = [this](const char* name) -> DockPane* {
         auto* pane = new DockPane(this);
@@ -235,6 +245,10 @@ bool DockManager::LoadLayout(const std::string& json)
         nlohmann::json j = nlohmann::json::parse(json);
 
         DestroyTree();
+        // Detached windows do not survive a session: re-dock everything so no
+        // panel is orphaned on startup.
+        for (auto& p : m_Panels)
+            p->detached = false;
         m_Root = DeserializeNodeJson(this, j);
         if (m_Root) {
             m_Root->GetRect().anchor = AnchorSet::Stretch();
@@ -305,6 +319,71 @@ void DockManager::Process()
         m_PendingClosePanel = nullptr;
         ClosePanel(p);
     }
+}
+
+void DockManager::DetachPanel(DockPanel* panel)
+{
+    if (!panel || panel->detached)
+        return;
+    if (!FindPaneByPanel(panel))
+        return; // not in the tree
+
+    panel->detached = true;
+    RemovePanelFromPane(panel);
+    CleanupEmptyPanes();
+    ClearDanglingPointers();
+    NotifyLayoutChanged();
+    if (m_OnPanelDetached)
+        m_OnPanelDetached(panel);
+}
+
+void DockManager::ReattachPanel(DockPanel* panel)
+{
+    if (!panel || !panel->detached)
+        return;
+    panel->detached = false;
+
+    // Prefer re-docking into the pane the panel was detached from. There is no
+    // persistent pane id, so fall back to the first available pane (keeping the
+    // panel open somewhere) or create a fresh root pane if the tree is empty.
+    DockPane* target = FindFirstPaneRecursive(m_Root);
+    if (!target) {
+        target = new DockPane(this);
+        target->SetName("Pane:" + panel->id);
+        m_Root = target;
+        m_Root->GetRect().anchor = AnchorSet::Stretch();
+        m_Root->GetRect().offset = {};
+        AddChild(m_Root);
+        PushOverlayToTop();
+    }
+    MergeIntoPane(panel, target);
+    ClearDanglingPointers();
+    NotifyLayoutChanged();
+}
+
+void DockManager::OpenTabContextMenu(DockPanel* panel, const Vector2& pos)
+{
+    if (!panel)
+        return;
+
+    if (!m_TabMenu) {
+        m_TabMenu = new UIContextMenu();
+        m_TabMenu->SetName("DockTabMenu");
+        m_TabMenu->SetFont(m_Font);
+    }
+
+    m_TabMenu->ClearItems();
+    m_TabMenu->AddItem("Detach to Window", [this, panel]() { DetachPanel(panel); });
+    if (panel->closeable)
+        m_TabMenu->AddItem("Close Panel", [this, panel]() { RequestClosePanel(panel); });
+
+    // The menu must live on the canvas (overlay) to render above the dock.
+    if (!m_TabMenu->GetParent()) {
+        for (UIElement* e = this; e; e = e->GetParent()) {
+            if (auto* c = dynamic_cast<UICanvas*>(e)) { c->AddChild(m_TabMenu); break; }
+        }
+    }
+    m_TabMenu->OpenAt(pos);
 }
 
 void DockManager::ClearDanglingPointers()
@@ -616,8 +695,8 @@ void DockManager::PlaceMissingPanels()
     if (!first)
         return;
     for (auto& p : m_Panels) {
-        if (!p->active)
-            continue;
+        if (!p->active || p->detached)
+            continue; // closed or floating in an external window
         if (FindPaneByPanel(p.get()))
             continue;
         first->AddTab(p.get());

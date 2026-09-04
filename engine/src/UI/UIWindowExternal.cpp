@@ -29,6 +29,18 @@ void ExternalCloseCallback(GLFWwindow* window)
     auto* self = static_cast<UIWindowExternal*>(glfwGetWindowUserPointer(window));
     if (self) self->RequestClose();
 }
+
+void ExternalCursorEnterCallback(GLFWwindow* window, int entered)
+{
+    // The cursor left this external window (GLFW_CURSOR_LEAVE). The canvas
+    // receives no more events for it, so its hovered/focus would go stale —
+    // for a detached viewport that keeps the editor's inViewport true and the
+    // pick/gizmo running with the MAIN window's mouse position (deselect on a
+    // click elsewhere). Fire a clean pointer-leave so the hover is dropped.
+    auto* self = static_cast<UIWindowExternal*>(glfwGetWindowUserPointer(window));
+    if (self && !entered && self->GetCanvas())
+        self->GetCanvas()->NotifyPointerLeave();
+}
 } // namespace
 
 UIWindowExternal::UIWindowExternal(RHI::RenderBackend* backend, const std::string& title)
@@ -102,6 +114,10 @@ void UIWindowExternal::Show(UIWindow* parent)
     // nothing polled it — external windows could not be closed. The callback
     // defers the real Close() to the next RenderFrame (see RequestClose()).
     glfwSetWindowCloseCallback(m_NativeWindow, ExternalCloseCallback);
+    // On cursor-leave the canvas would go stale (no more events for this window);
+    // drop hover/focus so a detached viewport stops driving the editor's
+    // inViewport/picking once the mouse leaves the window.
+    glfwSetCursorEnterCallback(m_NativeWindow, ExternalCursorEnterCallback);
 
     // Create the swapchain target sharing the main device.
     if (m_Backend) {

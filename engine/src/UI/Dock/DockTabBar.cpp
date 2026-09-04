@@ -2,6 +2,7 @@
 #include "LeirEngine/UI/Dock/DockPane.h"
 #include "LeirEngine/UI/Dock/DockManager.h"
 #include "LeirEngine/UI/Font.h"
+#include "LeirEngine/Input/Pointer.h"
 #include <algorithm>
 
 namespace Leir {
@@ -113,6 +114,15 @@ bool DockTab::OnPointerDown(const Vector2& pos)
 {
     if (!m_Panel)
         return true;
+
+    // Right-click on a tab opens the panel context menu (Detach to Window,
+    // Close Panel). The polling state is already updated when the UI hook
+    // dispatches (EventQueue processes Pointer events before the canvas hooks).
+    if (Pointer::IsDown(PointerButton::Secondary)) {
+        if (m_Manager)
+            m_Manager->OpenTabContextMenu(m_Panel, pos);
+        return true;
+    }
 
     const auto& cr = GetComputedRect();
     const float localX = pos.x - cr.x;

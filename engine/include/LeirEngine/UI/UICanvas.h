@@ -141,6 +141,16 @@ public:
     void ClearHoverAndFocus() { m_HoveredElement = nullptr; m_FocusElement = nullptr; }
 
     /**
+     * @brief Notifies that the pointer left the canvas/window.
+     * @details Fires OnPointerExit + SetHovered(false) on the hovered element,
+     *  then clears hover/focus. Used by external windows on GLFW cursor-leave so
+     *  a detached viewport stops reporting hover once the mouse leaves its
+     *  window (otherwise its stale hovered element keeps the editor's
+     *  inViewport true and picking runs with the main window's mouse position).
+     */
+    void NotifyPointerLeave();
+
+    /**
      * @brief Captures pointer (all move/release go to the element).
      * @param[in] element Element to capture.
      */

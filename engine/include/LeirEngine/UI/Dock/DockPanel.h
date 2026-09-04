@@ -23,6 +23,7 @@ struct LEIR_API DockPanel {
     UIElement* content = nullptr; ///< Content subtree (owned by caller, e.g. editor).
     bool closeable = false;///< True if closeable via tab X.
     bool active = true;    ///< Open/closed state (persisted).
+    bool detached = false; ///< Floating in an external window (not in the dock tree).
 };
 
 } // namespace Leir

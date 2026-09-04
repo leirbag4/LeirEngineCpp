@@ -341,11 +341,64 @@ Al cerrar la ventana:
 
 ### Fase E — Desacople de dock panels
 
-- [ ] Click derecho en el tab → `UIContextMenu` contextual por panel.
-- [ ] Paneles desacoplables → item "Detach to Window" arriba de todo.
-- [ ] `DockManager::DetachPanel(panel)` → crea UIWindowExternal con el content (misma
+- [x] Click derecho en el tab → `UIContextMenu` contextual por panel.
+- [x] Paneles desacoplables → item "Detach to Window" arriba de todo.
+- [x] `DockManager::DetachPanel(panel)` → crea UIWindowExternal con el content (misma
       referencia, no copia); re-dock al cerrar (posición/ratio recordados).
-- [ ] 3D en ventanas: `UIViewportPanel` muestrea RT compartido.
+- [x] 3D en ventanas: `UIViewportPanel` muestrea RT compartido (al detachar el Viewport,
+      el RT se redimensiona al tamaño de la ventana detached — el editor lo actualiza
+      vía `UpdateViewportRenderTarget` que lee `m_ViewportPanel->GetComputedRect()`).
+
+**Implementación (2026-09-04)**: `DockPanel::detached` (flag); `DockManager::DetachPanel`
+remueve el panel del tree y dispara `SetOnPanelDetached`; el editor crea un
+`UIWindowExternal` hosteando la MISMA referencia del content (reparentada al canvas del
+window con Stretch) y `ReattachPanel` al cerrar. `DockTab::OnPointerDown` con click
+derecho (`Pointer::IsDown(Secondary)`) abre `OpenTabContextMenu` (menú reusado con
+`ClearItems`, items "Detach to Window" + "Close Panel"). `PlaceMissingPanels`/
+`BuildDefaultLayout`/`LoadLayout` tratan `detached` (no re-agregan ni persisten). El
+editor trackea `m_DetachedWindows` (render antes de EndFrame, delete diferido en
+OnUpdate, teardown antes de WaitIdle). Verificado: build limpio + smoke Vulkan y D3D12
+(crashLog delta=0, stderr vacío, 3ª ventana detached creada en vivo), ctest 3/3.
+**Verificación visual del usuario completada** (detach de varios paneles, re-dock al
+cerrar, viewport detached).
+
+**Fix input multi-ventana (2026-09-04)**: dos bugs reportados por el usuario en paneles
+detached — (1) Ctrl/Shift no funcionaban en campos de texto detached; (2) el viewport
+detached no recibía mouse/teclado. **Causa raíz única**: `EventQueue::Process()` solo
+actualizaba el polling state global (`Keyboard::ProcessEvent`/`Mouse::ProcessEvent`/
+`Pointer::ProcessEvent`/`Touch::ProcessEvent`/`Mouse::ProcessScroll`) si
+`IsPrimaryWindow(e.window)` — los eventos de ventanas externas nunca alimentaban el
+estado global, así que `Keyboard::IsDown(LeftControl)`/`Mouse::GetDelta()` eran false/0
+en ventanas detached. **Fix**: el polling global refleja los DISPOSITIVOS físicos (un
+teclado, un mouse) → se actualiza con eventos de TODAS las ventanas. Cada `UICanvas` ya
+filtra por su ventana en sus hooks, y la posición del evento ya viene lógica por-ventana
+(`ToLogical` usa el content scale de ESA ventana), así que `Mouse::GetPos()` + el
+`GetComputedRect()` del viewport detached quedan en el mismo sistema de coords. Además,
+`inViewport` en el editor ahora busca el hovered también en los canvases de
+`m_DetachedWindows` (antes solo `m_Canvas`). El gizmo es seguro: `leftPressed` está
+gateado por `inViewport`, el drag solo comienza con `leftPressed`. Verificado: build
+limpio + smoke (crashLog delta=0, stderr vacío). **Verificación visual del usuario
+completada**.
+
+**Fix hovered stale en cursor-leave (2026-09-04)**: bug reportado — con el viewport
+detached, seleccionar el cubo y luego clickear en el editor (o en otra ventana detached)
+des-seleccionaba; con el viewport acoplado eso no pasaba. **Causa raíz**: al salir el
+cursor de una ventana detached, su canvas no recibe más eventos → `m_HoveredElement`
+quedaba STALE (seguía apuntando al viewport) → `inViewport` true en el editor → el
+picking corría con el click del editor + `Mouse::GetPos()` (que tras el fix anterior
+refleja la posición del editor) → `PickObjectAtCursor` devolvía nullptr → des-selección.
+**Fix (patrón de industria: cursor-leave limpia el estado)**:
+- `UICanvas::NotifyPointerLeave()` (nuevo): dispara `OnPointerExit()` +
+  `SetHovered(false)` al hovered, luego limpia hover/focus y `m_PointerDown` — el mismo
+  exit limpio que `ProcessPointerEvent` usa al cambiar de hovered.
+- `UIWindowExternal::Show()` registra `glfwSetCursorEnterCallback` →
+  `ExternalCursorEnterCallback` → en `entered == GLFW_FALSE` llama
+  `canvas->NotifyPointerLeave()`.
+Ahora, al mover el mouse del viewport detached al editor, el hovered del canvas detached
+se limpia → `inViewport` false → el click en el editor no dispara picking → la selección
+se conserva. Al volver a entrar, el canvas detached restaura el hover. Verificado: build
+limpio + smoke (crashLog delta=0, stderr vacío). **Verificación visual del usuario
+completada**.
 
 ### Fase F — `UIWindowInternal` (embedded, mobile/web)
 

@@ -23,6 +23,7 @@ class DockTab;
 class DockDropOverlay;
 class DockSplitNode;
 class Font;
+class UIContextMenu;
 
 /**
  * @brief Drop zone for docking (split or tab-merge).
@@ -151,6 +152,49 @@ public:
     void RequestClosePanel(DockPanel* panel);
 
     /**
+     * @brief Detaches a panel into an external window.
+     * @details Removes the panel from the dock tree (the content is reparented
+     *  out of its pane) and fires SetOnPanelDetached so the host can create the
+     *  external window hosting the SAME content reference (no copy). Re-dock
+     *  with ReattachPanel when the window closes.
+     * @param[in] panel Panel to detach.
+     */
+    void DetachPanel(DockPanel* panel);
+
+    /**
+     * @brief Re-docks a detached panel (called when its external window closes).
+     * @details Adds the panel back into the dock tree. Prefers the pane it was
+     *  detached from; falls back to the first available pane, or creates a new
+     *  root pane if the tree is empty.
+     * @param[in] panel Panel to re-attach.
+     */
+    void ReattachPanel(DockPanel* panel);
+
+    /**
+     * @brief Sets the callback fired after a panel is detached.
+     * @details The host (editor) uses it to create the external window hosting
+     *  the panel's content. Receives the detached DockPanel*.
+     * @param[in] cb Callback.
+     */
+    void SetOnPanelDetached(std::function<void(DockPanel*)> cb) { m_OnPanelDetached = std::move(cb); }
+
+    /**
+     * @brief Whether a panel is currently detached (floating in a window).
+     * @param[in] panel Panel to query.
+     * @return True if detached.
+     */
+    bool IsPanelDetached(DockPanel* panel) const { return panel && panel->detached; }
+
+    /**
+     * @brief Opens the tab context menu (right-click on a tab) for a panel.
+     * @details Rebuilds a reused UIContextMenu with panel actions: "Detach to
+     *  Window" and (for closeable panels) "Close Panel".
+     * @param[in] panel Panel the menu is for.
+     * @param[in] pos Canvas position to open at.
+     */
+    void OpenTabContextMenu(DockPanel* panel, const Vector2& pos);
+
+    /**
      * @brief Processes deferred closes (call every frame from the host).
      */
     void Process();
@@ -212,6 +256,8 @@ private:
     Font* m_Font = nullptr;                               ///< Font for tabs.
     std::vector<std::unique_ptr<DockPanel>> m_Panels;     ///< Panel registry.
     std::function<void()> m_OnLayoutChanged;              ///< Layout changed callback.
+    std::function<void(DockPanel*)> m_OnPanelDetached;    ///< Panel detached callback.
+    UIContextMenu* m_TabMenu = nullptr;                   ///< Tab context menu (lazy, owned).
 
     DockTab* m_DragTab = nullptr;                         ///< Dragged tab.
     DockPanel* m_DragPanel = nullptr;                     ///< Dragged panel.

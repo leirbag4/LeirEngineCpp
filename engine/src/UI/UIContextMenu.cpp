@@ -178,6 +178,12 @@ void UIContextMenu::RebuildItems()
     }
 }
 
+void UIContextMenu::ClearItems()
+{
+    m_Items.clear();
+    RebuildItems(); // frees the current rows
+}
+
 void UIContextMenu::OpenAt(const Vector2& canvasPos)
 {
     RebuildItems();

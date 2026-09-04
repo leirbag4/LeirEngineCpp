@@ -19,17 +19,13 @@ void EventQueue::Push(const InputEvent& event)
     m_Queue.push_back(event);
 }
 
-// The global polling state (Keyboard/Mouse/Touch/Pointer) tracks the PRIMARY
-// window only. Events from external windows (e.window != primary) update the
-// polling state here would move the main editor's mouse/hover when the pointer
-// is over an external window. nullptr primary = single-window apps (accept all).
-static bool IsPrimaryWindow(const void* window)
-{
-    void* primary = InputManager::GetPrimaryWindow();
-    if (!primary) return true;  // single-window app: no window filtering
-    return !window || window == primary;
-}
-
+// The global polling state (Keyboard/Mouse/Touch/Pointer) reflects the physical
+// input devices, so events from ALL windows update it — a key press or mouse
+// move is a device-level fact regardless of which window delivered it. Each
+// UICanvas already filters events by its own window in its hooks, so the global
+// state only feeds polling queries (Mouse::GetDelta, Keyboard::IsDown, ...);
+// the editor gates camera/gizmo/picking on the viewport hover, which keeps the
+// coordinates consistent (the hover comes from the same window's events).
 void EventQueue::Process()
 {
     std::vector<InputEvent> events;
@@ -49,22 +45,20 @@ void EventQueue::Process()
         std::visit([this](const auto& e) {
             using T = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<T, KeyEvent>) {
-                if (IsPrimaryWindow(e.window)) Keyboard::ProcessEvent(e);
+                Keyboard::ProcessEvent(e);
                 auto hooks = m_KeyHooks;
                 for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, PointerEvent>) {
-                if (IsPrimaryWindow(e.window)) {
-                    Mouse::ProcessEvent(e);
-                    Touch::ProcessEvent(e);
-                    Pointer::ProcessEvent(e);
-                }
+                Mouse::ProcessEvent(e);
+                Touch::ProcessEvent(e);
+                Pointer::ProcessEvent(e);
                 auto hooks = m_PointerHooks;
                 for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, CharEvent>) {
                 auto hooks = m_CharHooks;
                 for (auto& [id, h] : hooks) (void)id, h(e);
             } else if constexpr (std::is_same_v<T, ScrollEvent>) {
-                if (IsPrimaryWindow(e.window)) Mouse::ProcessScroll(e);
+                Mouse::ProcessScroll(e);
                 auto hooks = m_ScrollHooks;
                 for (auto& [id, h] : hooks) (void)id, h(e);
             }

@@ -1135,6 +1135,32 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Fase E — Desacople de dock panels "Detach to Window" (2026-09-04, ver
+  `TODO_WINDOW_SYSTEM.md` §Fase E)**: click derecho en un tab → `UIContextMenu`
+  ("Detach to Window" + "Close Panel") → `DockManager::DetachPanel(panel)` remueve el
+  panel del tree y dispara `SetOnPanelDetached`; el editor crea un `UIWindowExternal`
+  hosteando la MISMA referencia del content (reparentada al canvas del window con
+  Stretch, sin copia) y `ReattachPanel` al cerrar (re-dock). **Fixes de input
+  multi-ventana** (ambos con la misma causa raíz): **(1)** `EventQueue::Process()` solo
+  actualizaba el polling state global (`Keyboard/Mouse/Pointer/Touch/Scroll`) si
+  `IsPrimaryWindow(e.window)` — los eventos de ventanas externas nunca alimentaban el
+  estado → `Ctrl+A`/`Shift+arrows` no funcionaban en campos de texto detached y el
+  viewport detached no recibía mouse. Fix: el polling refleja los DISPOSITIVOS físicos →
+  se actualiza con eventos de TODAS las ventanas (cada `UICanvas` ya filtra por su
+  ventana; la posición viene lógica por-ventana vía `ToLogical`). `inViewport` en el
+  editor ahora busca el hovered también en los canvases de `m_DetachedWindows`.
+  **(2)** Al salir el cursor de una ventana detached su canvas no recibía más eventos →
+  `m_HoveredElement` stale (seguía apuntando al viewport) → `inViewport` true → el
+  picking corría con el click del editor → des-selección. Fix: `UICanvas::
+  NotifyPointerLeave()` (nuevo, exit limpio + SetHovered(false) + limpia hover/focus) +
+  `glfwSetCursorEnterCallback` en `UIWindowExternal::Show()` (`ExternalCursorEnterCallback`
+  lo llama en `GLFW_FALSE`). **Detalles**: `DockPanel::detached`; `UIContextMenu::
+  ClearItems()` (reusa el menú del tab); `PlaceMissingPanels/BuildDefaultLayout/
+  LoadLayout` tratan `detached` (no re-agregan ni persisten). El editor trackea
+  `m_DetachedWindows` (render antes de EndFrame, delete diferido en OnUpdate, teardown
+  antes de WaitIdle). Verificado: build limpio + smoke Vulkan/D3D12 (crashLog delta=0,
+  stderr vacío), ctest 3/3, **verificado por el usuario ("funciono todo perfecto")**.
+
 - **Port del external window a D3D12 (2026-09-04, ver `TODO_WINDOW_SYSTEM.md` §15)**:
   las ventanas externas (`UIWindowExternal`) ahora funcionan con el backend D3D12 además
   de Vulkan, con la misma API/UI/sync. **(1) `ISwapchainTarget`** (nuevo

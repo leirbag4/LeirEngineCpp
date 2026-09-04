@@ -253,6 +253,17 @@ void UICanvas::ProcessPointerEvent(const PointerEvent& e)
     }
 }
 
+void UICanvas::NotifyPointerLeave()
+{
+    if (m_HoveredElement) {
+        m_HoveredElement->OnPointerExit();
+        m_HoveredElement->SetHovered(false);
+        m_HoveredElement = nullptr;
+    }
+    m_FocusElement = nullptr;
+    m_PointerDown = false;
+}
+
 void UICanvas::ProcessScrollEvent(const ScrollEvent& e)
 {
     XConsole::Trace("[Canvas] Scroll: ({:.1f},{:.1f}) hover={}",
