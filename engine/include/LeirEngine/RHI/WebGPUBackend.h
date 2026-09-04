@@ -79,6 +79,8 @@ public:
     void NotifyResized() override;
     void RecreateSwapchain() override;
 
+    Leir::ISwapchainTarget* CreateSwapchainTarget(void* window) override;
+
     RHIShaderModule CreateShaderModule(const std::vector<char>& code) override;
     void DestroyShaderModule(RHIShaderModule module) override;
 
@@ -178,6 +180,10 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> m_Impl;
+
+    // The per-window swapchain target accesses Impl internals (device/queue/
+    // instance/proc pointers) to share them across external windows.
+    friend class WebGPUSwapchainTarget;
 };
 
 } // namespace RHI

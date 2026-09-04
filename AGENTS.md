@@ -1135,6 +1135,27 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Port del external window a WebGPU (2026-09-05, ver `TODO_WINDOW_SYSTEM.md` §16)**:
+  las ventanas externas (`UIWindowExternal`) ahora funcionan con el backend WebGPU
+  (wgpu-native) además de Vulkan y D3D12, con la misma API/UI/sync. El
+  `WebGPUBackend` era mono-ventana: un solo `WGPUSurface` + un solo
+  `WGPUCommandEncoder`/`WGPURenderPassEncoder` globales, y TODOS los `Cmd*` de draw
+  usaban `im.currentPass` ignorando el `RHICommandBuffer`. **(1) `Impl::encoderPasses`**
+  — mapa `encoder → {pass, w, h}` + helpers `PassOf(cmd)`/`PassWidth/PassHeight(cmd)`
+  (fallback al main; patrón `CmdListOf` de D3D12). **(2) `Cmd*`** de draw resuelven el
+  pass del handle (9 funciones) + `CmdSetScissor` clamp por target. **(3)
+  `WebGPUSwapchainTarget`** (en el TU de `WebGPUBackend.cpp` + `friend` en el header):
+  surface propia por HWND (`WGPUSurfaceSourceWindowsHWND`), `ConfigureSwapchain` (BGRA8
+  sRGB, Fifo/Immediate según vsync), `BeginFrame` (skip iconified, adquiere texture +
+  view + encoder propios), `BeginOverlayRenderPass` (pass Clear al gris del body +
+  registra `encoderPasses[m_Encoder]`), `EndFrame` (end pass + finish + submit en el
+  queue compartido + present + release), `RecreateSwapchain` (guard 0×0/iconified).
+  Desktop nativo solo (`#if !defined(__EMSCRIPTEN__)`). **(4)
+  `WebGPUBackend::CreateSwapchainTarget`** override (nativo) / `nullptr` (web y stub de
+  otras plataformas). Verificado: build limpio + smoke `backend=webgpu`
+  (`WebGPUSwapchainTarget created (400x300)` ×2, crashLog delta=0, stderr vacío) +
+  ctest 3/3. **Confirmado por el usuario ("funciona todo perfecto")**.
+
 - **Fase E — Desacople de dock panels "Detach to Window" (2026-09-04, ver
   `TODO_WINDOW_SYSTEM.md` §Fase E)**: click derecho en un tab → `UIContextMenu`
   ("Detach to Window" + "Close Panel") → `DockManager::DetachPanel(panel)` remueve el

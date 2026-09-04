@@ -1,6 +1,7 @@
 #include "LeirEngine/RHI/WebGPUBackend.h"
 
 #include "LeirEngine/Core/Log.h"
+#include "LeirEngine/Rendering/ISwapchainTarget.h"
 
 #if (defined(_WIN32) && defined(_MSC_VER)) || defined(__EMSCRIPTEN__)
 
@@ -377,6 +378,41 @@ struct WebGPUBackend::Impl {
     WGPUTextureView swapchainView = nullptr;
     bool swapchainWasWritten = false; // main pass (BeginFrame(false)) ran this frame
     bool resized = false;
+
+    // Multi-window: external SwapchainTargets record into their OWN command
+    // encoder + render pass. The Cmd* methods resolve the active pass from the
+    // RHICommandBuffer handle (== the encoder) via PassOf, falling back to the
+    // main window's currentPass. passW/passH are per-encoder (scissor clamp).
+    struct EncoderPassInfo {
+        WGPURenderPassEncoder pass = nullptr;
+        uint32_t w = 0, h = 0;
+    };
+    std::unordered_map<WGPUCommandEncoder, EncoderPassInfo> encoderPasses;
+
+    WGPURenderPassEncoder PassOf(RHICommandBuffer cmd) {
+        if (cmd.handle) {
+            auto it = encoderPasses.find(
+                reinterpret_cast<WGPUCommandEncoder>(cmd.handle));
+            if (it != encoderPasses.end()) return it->second.pass;
+        }
+        return currentPass;
+    }
+    uint32_t PassWidth(RHICommandBuffer cmd) {
+        if (cmd.handle) {
+            auto it = encoderPasses.find(
+                reinterpret_cast<WGPUCommandEncoder>(cmd.handle));
+            if (it != encoderPasses.end()) return it->second.w;
+        }
+        return passW;
+    }
+    uint32_t PassHeight(RHICommandBuffer cmd) {
+        if (cmd.handle) {
+            auto it = encoderPasses.find(
+                reinterpret_cast<WGPUCommandEncoder>(cmd.handle));
+            if (it != encoderPasses.end()) return it->second.h;
+        }
+        return passH;
+    }
 
     // Depth attachment for the swapchain main pass (PhysicsDemo).
     WGPUTexture depthTexture = nullptr;
@@ -1137,6 +1173,209 @@ struct WebGPUBackend::Impl {
     }
 };
 
+// =============================================================================
+// WebGPUSwapchainTarget: a per-window present target for external windows.
+//
+// Shares the backend's WGPUInstance/Adapter/Device/Queue and proc pointers but
+// owns its OWN WGPUSurface (created from the window's HWND), its own command
+// encoder + render pass per frame, and its own acquired texture/view. The pass
+// is registered in Impl::encoderPasses so the Cmd* methods route to it via the
+// RHICommandBuffer handle (PassOf) — the exact same multi-command-list pattern
+// the D3D12 backend uses. Submissions go to the SHARED queue, so the FIFO
+// ordering rule of §14.3.1 (external windows render before the main EndFrame)
+// holds exactly like Vulkan/D3D12.
+//
+// Desktop native only: WebGPU browser builds (Emscripten) have a single
+// #canvas surface and no OS windows, so external targets are not created there.
+// =============================================================================
+#if !defined(__EMSCRIPTEN__)
+class WebGPUSwapchainTarget : public ISwapchainTarget {
+public:
+    WebGPUSwapchainTarget(WebGPUBackend::Impl& im, GLFWwindow* window, bool vsync)
+        : m_Im(im), m_Window(window), m_Vsync(vsync)
+    {
+        m_Hwnd = glfwGetWin32Window(window);
+        int fbW = 0, fbH = 0;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        m_Width = fbW > 0 ? fbW : 1;
+        m_Height = fbH > 0 ? fbH : 1;
+
+        WGPUSurfaceSourceWindowsHWND srcDesc{};
+        srcDesc.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
+        srcDesc.hinstance = GetModuleHandleW(nullptr);
+        srcDesc.hwnd = m_Hwnd;
+        WGPUSurfaceDescriptor surfDesc{};
+        surfDesc.label = WgpuStr("LeirEngine external surface");
+        surfDesc.nextInChain = &srcDesc.chain;
+        m_Surface = im.InstanceCreateSurface(im.instance, &surfDesc);
+        if (!m_Surface)
+            throw std::runtime_error("WebGPUSwapchainTarget: failed to create surface");
+
+        ConfigureSwapchain(m_Width, m_Height);
+        XConsole::Println("WebGPUSwapchainTarget created ({}x{})", m_Width, m_Height);
+    }
+
+    ~WebGPUSwapchainTarget() override {
+        m_Im.WaitIdle();
+        if (m_View) m_Im.TextureViewRelease(m_View);
+        if (m_Texture) m_Im.TextureRelease(m_Texture);
+        if (m_Surface) m_Im.SurfaceRelease(m_Surface);
+    }
+
+    bool BeginFrame(uint32_t& outImageIndex) override {
+        // Minimized windows have no presentable surface; skip (fix §14.10).
+        if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+            return false;
+
+        if (m_NeedsResize) {
+            RecreateSwapchain();
+            return false;
+        }
+
+        // Acquire this window's surface texture.
+        WGPUSurfaceTexture st{};
+        m_Im.SurfaceGetCurrentTexture(m_Surface, &st);
+        if (st.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+            st.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+            return false;
+        }
+        m_Texture = st.texture;
+
+        WGPUTextureViewDescriptor vd{};
+        vd.label = WgpuStr("external swapchain view");
+        vd.format = m_Format;
+        vd.dimension = WGPUTextureViewDimension_2D;
+        vd.baseMipLevel = 0;
+        vd.mipLevelCount = 1;
+        vd.baseArrayLayer = 0;
+        vd.arrayLayerCount = 1;
+        vd.aspect = WGPUTextureAspect_All;
+        m_View = m_Im.TextureCreateView(m_Texture, &vd);
+
+        WGPUCommandEncoderDescriptor ed{};
+        ed.label = WgpuStr("external frame");
+        m_Encoder = m_Im.DeviceCreateCommandEncoder(m_Im.device, &ed);
+        outImageIndex = 0;
+        return true;
+    }
+
+    void BeginOverlayRenderPass(uint32_t /*imageIndex*/) override {
+        WGPURenderPassColorAttachment color{};
+        color.view = m_View;
+        color.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+        color.loadOp = WGPULoadOp_Clear;
+        color.storeOp = WGPUStoreOp_Store;
+        color.clearValue = { 0.12f, 0.12f, 0.15f, 1.0f };
+
+        WGPURenderPassDescriptor rpd{};
+        rpd.label = WgpuStr("external overlay");
+        rpd.colorAttachmentCount = 1;
+        rpd.colorAttachments = &color;
+        m_Pass = m_Im.CommandEncoderBeginRenderPass(m_Encoder, &rpd);
+
+        m_Im.RenderPassEncoderSetViewport(m_Pass, 0.0f, 0.0f,
+            (float)m_Width, (float)m_Height, 0.0f, 1.0f);
+        m_Im.RenderPassEncoderSetScissorRect(m_Pass, 0, 0,
+            (uint32_t)m_Width, (uint32_t)m_Height);
+
+        // Route Cmd* to this pass when the handle is this window's encoder.
+        m_Im.encoderPasses[m_Encoder] = { m_Pass, (uint32_t)m_Width, (uint32_t)m_Height };
+    }
+
+    void EndFrame(uint32_t /*imageIndex*/) override {
+        if (m_Pass) {
+            m_Im.RenderPassEncoderEnd(m_Pass);
+            m_Im.RenderPassEncoderRelease(m_Pass);
+            m_Pass = nullptr;
+        }
+        m_Im.encoderPasses.erase(m_Encoder);
+
+        if (m_Encoder) {
+            WGPUCommandBufferDescriptor cbd{};
+            cbd.label = WgpuStr("external frame");
+            WGPUCommandBuffer cb = m_Im.CommandEncoderFinish(m_Encoder, &cbd);
+            m_Im.CommandEncoderRelease(m_Encoder);
+            m_Encoder = nullptr;
+            if (cb) {
+                m_Im.QueueSubmit(m_Im.queue, 1, &cb);
+                m_Im.CommandBufferRelease(cb);
+                m_Im.SurfacePresent(m_Surface);
+            }
+        }
+
+        if (m_View) { m_Im.TextureViewRelease(m_View); m_View = nullptr; }
+        if (m_Texture) { m_Im.TextureRelease(m_Texture); m_Texture = nullptr; }
+    }
+
+    void RecreateSwapchain() override {
+        // Minimized windows report 0×0 and never fire more events (fix §14.10).
+        int w = 0, h = 0;
+        glfwGetFramebufferSize(m_Window, &w, &h);
+        if ((w == 0 || h == 0) && glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+            return; // keep m_NeedsResize; rebuilt on restore
+
+        m_Im.WaitIdle();
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+        ConfigureSwapchain(w, h);
+        m_NeedsResize = false;
+    }
+
+    uint32_t GetWidth() const override { return (uint32_t)m_Width; }
+    uint32_t GetHeight() const override { return (uint32_t)m_Height; }
+    uint64_t GetCommandBufferHandle() const override {
+        return reinterpret_cast<uint64_t>(m_Encoder);
+    }
+    GLFWwindow* GetWindow() const override { return m_Window; }
+    bool IsValid() const override { return m_Surface != nullptr; }
+    void MarkResized() override { m_NeedsResize = true; }
+    bool NeedsResize() const override { return m_NeedsResize; }
+    void ResetResized() override { m_NeedsResize = false; }
+
+private:
+    void ConfigureSwapchain(int w, int h) {
+        WGPUSurfaceCapabilities capsSc{};
+        m_Format = WGPUTextureFormat_BGRA8UnormSrgb;
+        if (m_Im.SurfaceGetCapabilities(m_Surface, m_Im.adapter, &capsSc) ==
+                WGPUStatus_Success && capsSc.formatCount > 0) {
+            m_Format = capsSc.formats[0];
+            for (size_t i = 0; i < capsSc.formatCount; ++i) {
+                if (capsSc.formats[i] == WGPUTextureFormat_BGRA8UnormSrgb) {
+                    m_Format = capsSc.formats[i];
+                    break;
+                }
+            }
+        }
+
+        WGPUSurfaceConfiguration sc{};
+        sc.device = m_Im.device;
+        sc.format = m_Format;
+        sc.usage = WGPUTextureUsage_RenderAttachment;
+        sc.width = (uint32_t)w;
+        sc.height = (uint32_t)h;
+        sc.alphaMode = WGPUCompositeAlphaMode_Auto;
+        sc.presentMode = m_Vsync ? WGPUPresentMode_Fifo : WGPUPresentMode_Immediate;
+        m_Im.SurfaceConfigure(m_Surface, &sc);
+        m_Width = w;
+        m_Height = h;
+    }
+
+    WebGPUBackend::Impl& m_Im;            // shared instance/adapter/device/queue/procs
+    GLFWwindow* m_Window = nullptr;
+    HWND m_Hwnd = nullptr;
+    bool m_Vsync = false;
+    int m_Width = 1, m_Height = 1;
+
+    WGPUSurface m_Surface = nullptr;
+    WGPUTextureFormat m_Format = WGPUTextureFormat_BGRA8UnormSrgb;
+    WGPUTexture m_Texture = nullptr;
+    WGPUTextureView m_View = nullptr;
+    WGPUCommandEncoder m_Encoder = nullptr;
+    WGPURenderPassEncoder m_Pass = nullptr;
+    bool m_NeedsResize = false;
+};
+#endif // !__EMSCRIPTEN__
+
 WebGPUBackend::WebGPUBackend(void* window, int width, int height, bool vsync,
                              const std::string& appName)
     : m_Impl(std::make_unique<Impl>(window, width, height, vsync, appName))
@@ -1298,6 +1537,17 @@ bool WebGPUBackend::WasResized() const { return m_Impl->resized; }
 void WebGPUBackend::ResetResized() { m_Impl->resized = false; }
 void WebGPUBackend::NotifyResized() { m_Impl->resized = true; }
 void WebGPUBackend::RecreateSwapchain() { m_Impl->RecreateSwapchainInternal(); }
+
+Leir::ISwapchainTarget* WebGPUBackend::CreateSwapchainTarget(void* window)
+{
+#if !defined(__EMSCRIPTEN__)
+    return new WebGPUSwapchainTarget(*m_Impl, static_cast<GLFWwindow*>(window), m_Impl->vsync);
+#else
+    // Browser builds have a single #canvas surface; no external OS windows.
+    (void)window;
+    return nullptr;
+#endif
+}
 
 // ---- Resource creation ----
 
@@ -2218,18 +2468,19 @@ void WebGPUBackend::CmdEndRenderPass(RHICommandBuffer cmd) {
 
 void WebGPUBackend::CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
     PipelineRec* rec = reinterpret_cast<PipelineRec*>(pipeline.handle);
     if (!rec || !rec->pipeline) return;
-    im.RenderPassEncoderSetPipeline(im.currentPass, rec->pipeline);
+    im.RenderPassEncoderSetPipeline(pass, rec->pipeline);
 }
 
 void WebGPUBackend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout layout,
     uint32_t firstSet, const std::vector<RHIDescriptorSet>& sets) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd; (void)layout;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
+    (void)layout;
     for (size_t i = 0; i < sets.size(); ++i) {
         DescSetRec* s = reinterpret_cast<DescSetRec*>(sets[i].handle);
         if (!s) continue;
@@ -2239,50 +2490,51 @@ void WebGPUBackend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayou
 #if defined(__EMSCRIPTEN__)
         if (s->isBindless) im.bindlessSetSlot = (int)slot;
 #endif
-        im.RenderPassEncoderSetBindGroup(im.currentPass, slot, bg, 0, nullptr);
+        im.RenderPassEncoderSetBindGroup(pass, slot, bg, 0, nullptr);
     }
 }
 
 void WebGPUBackend::CmdBindVertexBuffer(RHICommandBuffer cmd, RHIBuffer buffer) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
     BufferRec* rec = reinterpret_cast<BufferRec*>(buffer.handle);
     if (!rec || !rec->buffer) return;
-    im.RenderPassEncoderSetVertexBuffer(im.currentPass, 0, rec->buffer, 0, WGPU_WHOLE_SIZE);
+    im.RenderPassEncoderSetVertexBuffer(pass, 0, rec->buffer, 0, WGPU_WHOLE_SIZE);
 }
 
 void WebGPUBackend::CmdBindIndexBuffer(RHICommandBuffer cmd, RHIBuffer buffer) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
     BufferRec* rec = reinterpret_cast<BufferRec*>(buffer.handle);
     if (!rec || !rec->buffer) return;
-    im.RenderPassEncoderSetIndexBuffer(im.currentPass, rec->buffer, WGPUIndexFormat_Uint32,
+    im.RenderPassEncoderSetIndexBuffer(pass, rec->buffer, WGPUIndexFormat_Uint32,
         0, WGPU_WHOLE_SIZE);
 }
 
 void WebGPUBackend::CmdDraw(RHICommandBuffer cmd, uint32_t vertexCount, uint32_t firstVertex) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
-    im.RenderPassEncoderDraw(im.currentPass, vertexCount, 1, firstVertex, 0);
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
+    im.RenderPassEncoderDraw(pass, vertexCount, 1, firstVertex, 0);
 }
 
 void WebGPUBackend::CmdDrawIndexed(RHICommandBuffer cmd, uint32_t indexCount,
     uint32_t instanceCount, uint32_t firstIndex) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
-    im.RenderPassEncoderDrawIndexed(im.currentPass, indexCount, instanceCount,
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
+    im.RenderPassEncoderDrawIndexed(pass, indexCount, instanceCount,
         firstIndex, 0, 0);
 }
 
 void WebGPUBackend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout layout,
     ShaderStageMask stage, uint32_t offset, uint32_t size, const void* data) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd; (void)stage;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
+    (void)stage;
 
     PipelineLayoutRec* lr = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
     if (!lr || !lr->hasPush) return;
@@ -2321,28 +2573,30 @@ void WebGPUBackend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout lay
     if (!buf || !group) return;
 
     im.QueueWriteBuffer(im.queue, buf, offset, data, size);
-    im.RenderPassEncoderSetBindGroup(im.currentPass, lr->pushGroup, group, 0, nullptr);
+    im.RenderPassEncoderSetBindGroup(pass, lr->pushGroup, group, 0, nullptr);
     lr->pushSlot = slot + 1;
 }
 
 void WebGPUBackend::CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewport) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
     // Positive viewport, no flip (D3D12/WebGPU convention).
-    im.RenderPassEncoderSetViewport(im.currentPass, viewport.x, viewport.y,
+    im.RenderPassEncoderSetViewport(pass, viewport.x, viewport.y,
         viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth);
 }
 
 void WebGPUBackend::CmdSetScissor(RHICommandBuffer cmd, const RHIRect2D& scissor) {
     Impl& im = *m_Impl;
-    if (!im.currentPass) return;
-    (void)cmd;
+    WGPURenderPassEncoder pass = im.PassOf(cmd);
+    if (!pass) return;
     uint32_t x = (uint32_t)scissor.x;
     uint32_t y = (uint32_t)scissor.y;
-    uint32_t w = std::min(scissor.width, im.passW - std::min(x, im.passW));
-    uint32_t h = std::min(scissor.height, im.passH - std::min(y, im.passH));
-    im.RenderPassEncoderSetScissorRect(im.currentPass, x, y, w, h);
+    uint32_t pw = im.PassWidth(cmd);
+    uint32_t ph = im.PassHeight(cmd);
+    uint32_t w = std::min(scissor.width, pw - std::min(x, pw));
+    uint32_t h = std::min(scissor.height, ph - std::min(y, ph));
+    im.RenderPassEncoderSetScissorRect(pass, x, y, w, h);
 }
 
 void WebGPUBackend::CmdBarrier(RHICommandBuffer cmd) {
@@ -2396,7 +2650,7 @@ void WebGPUBackend::CmdExecuteGraph(RHICommandBuffer cmd, const GCommandGraph& g
                     ? im.bindlessBindGroup
                     : im.GetTextureBindGroup(rec.draw.sampledTextures[0]);
                 if (bg)
-                    im.RenderPassEncoderSetBindGroup(im.currentPass,
+                    im.RenderPassEncoderSetBindGroup(im.PassOf(cmd),
                         (uint32_t)im.bindlessSetSlot, bg, 0, nullptr);
             }
 #endif
@@ -2458,6 +2712,7 @@ bool WebGPUBackend::WasResized() const { return false; }
 void WebGPUBackend::ResetResized() {}
 void WebGPUBackend::NotifyResized() {}
 void WebGPUBackend::RecreateSwapchain() {}
+Leir::ISwapchainTarget* WebGPUBackend::CreateSwapchainTarget(void*) { return nullptr; }
 RHIShaderModule WebGPUBackend::CreateShaderModule(const std::vector<char>&) { return RHIShaderModule{}; }
 void WebGPUBackend::DestroyShaderModule(RHIShaderModule) {}
 RHIPipeline WebGPUBackend::CreateGraphicsPipeline(const RHIPipelineDesc&) { return RHIPipeline{}; }

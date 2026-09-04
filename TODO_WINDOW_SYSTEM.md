@@ -249,8 +249,10 @@ Al cerrar la ventana:
       pool quedan compartidos en `VulkanDevice` (un solo device físico, múltiples
       surfaces/swapchains). `VulkanDevice::CreateSwapchainTarget(window)` crea targets
       adicionales reutilizando device/queues/render passes. (2026-08-31)
-- [ ] Igual en `D3D12Backend`: swapchain + RTV heap + backbuffers + depth → `SwapchainTarget`.
-- [ ] Igual en `WebGPUBackend`: `WGPUSurface` + configure → target por ventana.
+- [x] Igual en `D3D12Backend`: swapchain + RTV heap + backbuffers + depth → `SwapchainTarget`.
+      Hecho 2026-09-04 (§15: `D3D12SwapchainTarget`).
+- [x] Igual en `WebGPUBackend`: `WGPUSurface` + configure → target por ventana.
+      Hecho 2026-09-05 (§16: `WebGPUSwapchainTarget`).
 - [x] `RenderBackend::CreateSwapchainTarget(window)` virtual (default nullptr) +
       `VulkanBackend` override. **Futuro:** abstraer a interfaz RHI-neutral (`ISwapchainTarget`)
       con 3 impls (Vulkan/D3D12/WebGPU) — para portar D3D12/WebGPU/macOS al final.
@@ -1150,6 +1152,65 @@ externa en su propio command list hay que enrutar el comando al command list del
 - [x] Fase 3 — CmdExecuteGraph/Cmd* enrutan al command list del handle
 - [x] Fase 4 — Editor: gate de backend genérico (CreateSwapchainTarget decide)
 - [x] Fase 5 — Verificación funcional D3D12 (completa, visual confirmada por el usuario)
+
+---
+
+## 16. Port del external window a WebGPU (plan 2026-09-05)
+
+### 16.1 Estado
+
+El `ISwapchainTarget` neutral (Fase 1) ya está listo con impls Vulkan (`SwapchainTarget`)
+y D3D12 (`D3D12SwapchainTarget`). El `WebGPUBackend` es **mono-ventana**: un solo
+`WGPUSurface` + un solo `WGPUCommandEncoder`/`WGPURenderPassEncoder` globales en el
+`Impl`. Todos los `Cmd*` de draw (`CmdBindPipeline`, `CmdBindDescriptorSets`,
+`CmdBindVertexBuffer`, `CmdBindIndexBuffer`, `CmdDraw`, `CmdDrawIndexed`,
+`CmdPushConstants`, `CmdSetViewport`, `CmdSetScissor`) usaban `im.currentPass` global e
+ignoraban el `RHICommandBuffer cmd` recibido — igual que pasaba en D3D12 antes de la
+Fase 3.
+
+### 16.2 Arquitectura objetivo
+
+`WebGPUSwapchainTarget` (en el TU de `WebGPUBackend.cpp`, `friend` en el header):
+surface propia por HWND + configure, encoder/pass/texture/view propios por frame,
+compartiendo `instance/adapter/device/queue` y los proc pointers del Impl. Los `Cmd*`
+resuelven el pass activo del handle vía `Impl::PassOf(cmd)` (patrón `CmdListOf` de
+D3D12).
+
+### 16.3 Checkboxes
+
+- [x] `Impl::encoderPasses` — mapa `encoder → {pass, w, h}` + helpers `PassOf(cmd)`/
+      `PassWidth(cmd)`/`PassHeight(cmd)` (fallback al `currentPass`/`passW`/`passH` del
+      main cuando `cmd.handle == 0` o el encoder no está registrado).
+- [x] `Cmd*` de draw usan `PassOf(cmd)` en vez de `im.currentPass` (9 funciones) +
+      `PassWidth/PassHeight` en `CmdSetScissor` (clamp por target). `CmdExecuteGraph`
+      web-only (`im.PassOf(cmd)` para el bind group per-texture).
+- [x] `WebGPUSwapchainTarget : ISwapchainTarget` — surface por HWND
+      (`WGPUSurfaceSourceWindowsHWND`), `ConfigureSwapchain` (BGRA8 sRGB preferido,
+      Fifo/Immediate según vsync), `BeginFrame` (skip iconified, adquiere texture +
+      view + encoder propios), `BeginOverlayRenderPass` (pass overlay Clear al gris del
+      body, viewport/scissor al extent, registra `encoderPasses[m_Encoder]`),
+      `EndFrame` (end pass + finish encoder + submit en el queue compartido + present +
+      release, limpia el registro), `RecreateSwapchain` (guard 0×0/iconified),
+      getters de la interfaz. Desktop nativo solo (`#if !defined(__EMSCRIPTEN__)` —
+      browser tiene un único `#canvas`, sin ventanas OS).
+- [x] `WebGPUBackend::CreateSwapchainTarget(void*)` override → crea
+      `WebGPUSwapchainTarget` (nativo) o `nullptr` (web). Header: `friend class
+      WebGPUSwapchainTarget` + override; stub de otras plataformas devuelve `nullptr`.
+- [x] Verificación: build limpio + smoke `backend=webgpu` (adapter d3d12, `WebGPUSwapchainTarget
+      created (400x300)` ×2, crashLog delta=0, stderr vacío, teardown limpio) + ctest 3/3.
+- [x] **Verificación visual del usuario** (externas WebGPU visibles, detach, X,
+      minimizar, parity con Vulkan/D3D12). **Confirmado por el usuario ("funciona todo
+      perfecto").**
+
+### 16.4 Notas
+
+- WebGPU tiene un solo `WGPUQueue` compartido (como D3D12) → la regla de orden §14.3.1
+  (externas renderizan ANTES de `EndFrame()` del principal) escala igual.
+- El `passW/passH` del clamp del scissor es ahora **por encoder** (cada target registra
+  su tamaño) — antes era global del main.
+- WebGPU sincroniza layouts automáticamente → las transiciones siguen siendo no-op.
+- El `WebGPUSwapchainTarget` comparte los proc pointers del Impl (wgpu_native.dll cargado
+  dinámicamente), así que no hay carga adicional de la DLL.
 
 ---
 
