@@ -1,6 +1,7 @@
 #include "LeirEngine/RHI/D3D12Backend.h"
 
 #include "LeirEngine/Core/Log.h"
+#include "LeirEngine/Rendering/ISwapchainTarget.h"
 
 #include <windows.h>
 #include <d3d12.h>
@@ -283,6 +284,27 @@ struct D3D12Backend::Impl {
     // Current pipeline (for vertex-buffer stride in CmdBindVertexBuffer)
     PipelineRec* currentPipeline = nullptr;
     ComPtr<ID3D12RootSignature> currentRootSig;
+
+    // The command list the currentPipeline/currentRootSig caches belong to.
+    // With multi-window (external SwapchainTargets record into their OWN command
+    // list), binding state must be re-established whenever the active list
+    // changes — the caches above are per-command-list, not per-backend.
+    ID3D12GraphicsCommandList* cachedCmdList = nullptr;
+
+    // Resolves the command list a RHICommandBuffer refers to. cmd.handle==0
+    // means the backend's main-window command list (legacy single-list path).
+    // Returns the list and resets the per-list binding caches on a switch.
+    ID3D12GraphicsCommandList* CmdListOf(RHICommandBuffer cmd) {
+        ID3D12GraphicsCommandList* cl = cmd.handle
+            ? reinterpret_cast<ID3D12GraphicsCommandList*>(cmd.handle)
+            : cmdList.Get();
+        if (cl != cachedCmdList) {
+            cachedCmdList = cl;
+            currentPipeline = nullptr;
+            currentRootSig.Reset();
+        }
+        return cl;
+    }
 
     // Cached bindless descriptor set (the whole heaps as tables).
     DescSetRec* bindlessSetRec = nullptr;
@@ -652,6 +674,227 @@ struct D3D12Backend::Impl {
     }
 };
 
+// =============================================================================
+// D3D12SwapchainTarget: a per-window present target for external windows.
+//
+// Shares the backend's device, command queue, DXGI factory and descriptor
+// heaps (RTV/SRV/sampler) but owns its OWN swapchain, backbuffers, RTV slots,
+// command allocator(s), command list and fence. Frames are paced by its own
+// fence ring (MAX_FRAMES_IN_FLIGHT = 3, matching the swapchain image count);
+// submissions go to the SHARED queue, so the FIFO ordering rule of §14.3.1
+// (external windows render before the main EndFrame) holds exactly like Vulkan.
+// =============================================================================
+class D3D12SwapchainTarget : public ISwapchainTarget {
+public:
+    D3D12SwapchainTarget(D3D12Backend::Impl& im, GLFWwindow* window, bool vsync)
+        : m_Im(im), m_Window(window), m_Vsync(vsync)
+    {
+        m_Hwnd = glfwGetWin32Window(window);
+
+        int fbW = 0, fbH = 0;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        m_Width = fbW > 0 ? fbW : 1;
+        m_Height = fbH > 0 ? fbH : 1;
+
+        // Own swapchain for this HWND on the shared queue.
+        DXGI_SWAP_CHAIN_DESC1 scDesc{};
+        scDesc.Width = (UINT)m_Width;
+        scDesc.Height = (UINT)m_Height;
+        scDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // resource UNORM; sRGB via RTV view format
+        scDesc.Stereo = FALSE;
+        scDesc.SampleDesc.Count = 1;
+        scDesc.SampleDesc.Quality = 0;
+        scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        scDesc.BufferCount = kBackBuffers;
+        scDesc.Scaling = DXGI_SCALING_STRETCH;
+        scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        scDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+
+        ComPtr<IDXGISwapChain1> sc1;
+        HRESULT hres = im.factory->CreateSwapChainForHwnd(im.queue.Get(), m_Hwnd,
+            &scDesc, nullptr, nullptr, &sc1);
+        if (FAILED(hres))
+            throw std::runtime_error("D3D12SwapchainTarget: failed to create swap chain");
+        sc1->QueryInterface(IID_PPV_ARGS(&m_Swapchain));
+        im.factory->MakeWindowAssociation(m_Hwnd, DXGI_MWA_NO_ALT_ENTER);
+
+        // Own command allocator ring + one command list + own fence ring.
+        for (UINT i = 0; i < kFrames; ++i) {
+            im.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                IID_PPV_ARGS(&m_Allocators[i]));
+            im.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_Fences[i]));
+            m_FenceEvents[i] = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        }
+        im.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+            m_Allocators[0].Get(), nullptr, IID_PPV_ARGS(&m_CmdList));
+        m_CmdList->Close();
+
+        InitBackBuffers();
+        XConsole::Println("D3D12SwapchainTarget created ({}x{})", m_Width, m_Height);
+    }
+
+    ~D3D12SwapchainTarget() override {
+        m_Im.WaitIdle();
+        ReleaseBackBuffers();
+        for (UINT i = 0; i < kFrames; ++i)
+            if (m_FenceEvents[i]) CloseHandle(m_FenceEvents[i]);
+    }
+
+    bool BeginFrame(uint32_t& outImageIndex) override {
+        // Minimized windows have no presentable surface; skip (fix §14.10).
+        if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+            return false;
+
+        if (m_NeedsResize) {
+            RecreateSwapchain();
+            return false;
+        }
+
+        // Wait for the previous frame that used this allocator slot.
+        if (m_Fences[m_FrameIndex]->GetCompletedValue() < m_FenceValues[m_FrameIndex]) {
+            m_Fences[m_FrameIndex]->SetEventOnCompletion(
+                m_FenceValues[m_FrameIndex], m_FenceEvents[m_FrameIndex]);
+            WaitForSingleObject(m_FenceEvents[m_FrameIndex], INFINITE);
+        }
+
+        m_Allocators[m_FrameIndex]->Reset();
+        m_CmdList->Reset(m_Allocators[m_FrameIndex].Get(), nullptr);
+
+        // This window's command list must bind the shared shader-visible heaps
+        // (bindless SRV + sampler) before any draw, exactly like the main one.
+        ID3D12DescriptorHeap* heaps[] = { m_Im.srvHeap.Get(), m_Im.samplerHeap.Get() };
+        m_CmdList->SetDescriptorHeaps(2, heaps);
+
+        m_BackBufferIndex = m_Swapchain->GetCurrentBackBufferIndex();
+        outImageIndex = m_BackBufferIndex;
+
+        D3D12_RESOURCE_BARRIER bbBarrier{};
+        bbBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        bbBarrier.Transition.pResource = m_BackBuffers[m_BackBufferIndex].Get();
+        bbBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        bbBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        bbBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_CmdList->ResourceBarrier(1, &bbBarrier);
+        m_BackBufferState[m_BackBufferIndex] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        return true;
+    }
+
+    void BeginOverlayRenderPass(uint32_t imageIndex) override {
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_Im.RtvCpu(m_BackBufferRtvSlots[imageIndex]);
+        m_CmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        // Clear to the same neutral gray the main overlay pass uses; the UI
+        // paints its own opaque background over it.
+        float clear[4] = { 0.12f, 0.12f, 0.15f, 1.0f };
+        m_CmdList->ClearRenderTargetView(rtv, clear, 0, nullptr);
+
+        D3D12_VIEWPORT vp{ 0.0f, 0.0f, (float)m_Width, (float)m_Height, 0.0f, 1.0f };
+        m_CmdList->RSSetViewports(1, &vp);
+        D3D12_RECT sc{ 0, 0, (LONG)m_Width, (LONG)m_Height };
+        m_CmdList->RSSetScissorRects(1, &sc);
+    }
+
+    void EndFrame(uint32_t imageIndex) override {
+        D3D12_RESOURCE_BARRIER bbBarrier{};
+        bbBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        bbBarrier.Transition.pResource = m_BackBuffers[imageIndex].Get();
+        bbBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        bbBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        bbBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_CmdList->ResourceBarrier(1, &bbBarrier);
+        m_BackBufferState[imageIndex] = D3D12_RESOURCE_STATE_PRESENT;
+
+        m_CmdList->Close();
+
+        ID3D12CommandList* lists[] = { m_CmdList.Get() };
+        m_Im.queue->ExecuteCommandLists(1, lists);
+        m_Swapchain->Present(m_Vsync ? 1 : 0, 0);
+
+        ++m_FenceValues[m_FrameIndex];
+        m_Im.queue->Signal(m_Fences[m_FrameIndex].Get(), m_FenceValues[m_FrameIndex]);
+        m_FrameIndex = (m_FrameIndex + 1) % kFrames;
+    }
+
+    void RecreateSwapchain() override {
+        // Minimized windows report 0×0 and never fire more events (fix §14.10).
+        int w = 0, h = 0;
+        glfwGetFramebufferSize(m_Window, &w, &h);
+        if ((w == 0 || h == 0) && glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+            return; // keep m_NeedsResize; rebuilt on restore
+
+        m_Im.WaitIdle();
+        ReleaseBackBuffers();
+
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+        m_Swapchain->ResizeBuffers(kBackBuffers, (UINT)w, (UINT)h,
+            DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        m_Width = w;
+        m_Height = h;
+        InitBackBuffers();
+        m_NeedsResize = false;
+    }
+
+    uint32_t GetWidth() const override { return (uint32_t)m_Width; }
+    uint32_t GetHeight() const override { return (uint32_t)m_Height; }
+    uint64_t GetCommandBufferHandle() const override {
+        return reinterpret_cast<uint64_t>(m_CmdList.Get());
+    }
+    GLFWwindow* GetWindow() const override { return m_Window; }
+    bool IsValid() const override { return m_Swapchain.Get() != nullptr; }
+    void MarkResized() override { m_NeedsResize = true; }
+    bool NeedsResize() const override { return m_NeedsResize; }
+    void ResetResized() override { m_NeedsResize = false; }
+
+private:
+    static const UINT kBackBuffers = 3;
+    static const UINT kFrames = 3; // MAX_FRAMES_IN_FLIGHT, aligned with image count
+
+    void InitBackBuffers() {
+        for (UINT i = 0; i < kBackBuffers; ++i) {
+            m_Swapchain->GetBuffer(i, IID_PPV_ARGS(&m_BackBuffers[i]));
+            m_BackBufferRtvSlots[i] = m_Im.AllocRtv();
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_Im.RtvCpu(m_BackBufferRtvSlots[i]);
+            D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+            rtvDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; // sRGB encode on store
+            rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+            m_Im.device->CreateRenderTargetView(m_BackBuffers[i].Get(), &rtvDesc, rtv);
+            m_BackBufferState[i] = D3D12_RESOURCE_STATE_PRESENT;
+        }
+    }
+
+    void ReleaseBackBuffers() {
+        for (UINT i = 0; i < kBackBuffers; ++i) {
+            m_BackBuffers[i].Reset();
+            if (m_BackBufferRtvSlots[i] != UINT_MAX) {
+                m_Im.rtvFree[m_BackBufferRtvSlots[i]] = false;
+                m_BackBufferRtvSlots[i] = UINT_MAX;
+            }
+        }
+    }
+
+    D3D12Backend::Impl& m_Im;                 // shared device/queue/factory/heaps
+    GLFWwindow* m_Window = nullptr;
+    HWND m_Hwnd = nullptr;
+    bool m_Vsync = false;
+    int m_Width = 1, m_Height = 1;
+
+    ComPtr<IDXGISwapChain3> m_Swapchain;
+    ComPtr<ID3D12Resource> m_BackBuffers[kBackBuffers];
+    UINT m_BackBufferRtvSlots[kBackBuffers] = { UINT_MAX, UINT_MAX, UINT_MAX };
+    D3D12_RESOURCE_STATES m_BackBufferState[kBackBuffers];
+    UINT m_BackBufferIndex = 0;
+
+    ComPtr<ID3D12CommandAllocator> m_Allocators[kFrames];
+    ComPtr<ID3D12GraphicsCommandList> m_CmdList;
+    ComPtr<ID3D12Fence> m_Fences[kFrames];
+    HANDLE m_FenceEvents[kFrames] = {};
+    UINT64 m_FenceValues[kFrames] = {};
+    UINT m_FrameIndex = 0;
+
+    bool m_NeedsResize = false;
+};
+
 D3D12Backend::D3D12Backend(void* window, int width, int height, bool vsync,
                            const std::string& appName)
     : m_Impl(std::make_unique<Impl>(window, width, height, vsync, appName))
@@ -792,6 +1035,11 @@ bool D3D12Backend::WasResized() const { return m_Impl->resized; }
 void D3D12Backend::ResetResized() { m_Impl->resized = false; }
 void D3D12Backend::NotifyResized() { m_Impl->resized = true; }
 void D3D12Backend::RecreateSwapchain() { m_Impl->RecreateSwapchainInternal(); }
+
+Leir::ISwapchainTarget* D3D12Backend::CreateSwapchainTarget(void* window)
+{
+    return new D3D12SwapchainTarget(*m_Impl, static_cast<GLFWwindow*>(window), m_Impl->vsync);
+}
 
 // ---- Resource creation ----
 
@@ -1445,8 +1693,8 @@ void D3D12Backend::DestroyFramebuffer(RHIFramebuffer framebuffer) {
 
 void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate passTemplate,
     RHIFramebuffer framebuffer) {
-    (void)cmd;
     Impl& im = *m_Impl;
+    ID3D12GraphicsCommandList* cl = im.CmdListOf(cmd);
     FramebufferRec* fb = reinterpret_cast<FramebufferRec*>(framebuffer.handle);
     PassTemplateRec* tpl = reinterpret_cast<PassTemplateRec*>(passTemplate.handle);
 
@@ -1458,55 +1706,55 @@ void D3D12Backend::CmdBeginRenderPass(RHICommandBuffer cmd, RHIPassTemplate pass
     bool hasDsv = fb->depthAttachment != nullptr;
     if (hasDsv) dsv = im.DsvCpu(fb->depthAttachment->dsvSlot);
 
-    im.cmdList->OMSetRenderTargets((UINT)rtvs.size(),
+    cl->OMSetRenderTargets((UINT)rtvs.size(),
         rtvs.empty() ? nullptr : rtvs.data(), FALSE, hasDsv ? &dsv : nullptr);
 
     for (size_t i = 0; i < rtvs.size() && i < tpl->clears.size(); ++i) {
         const auto& cv = tpl->clears[i];
         float c[4] = { cv.color.x, cv.color.y, cv.color.z, cv.color.w };
-        im.cmdList->ClearRenderTargetView(rtvs[i], c, 0, nullptr);
+        cl->ClearRenderTargetView(rtvs[i], c, 0, nullptr);
     }
     if (hasDsv) {
         for (const auto& cv : tpl->clears) {
             if (cv.isDepth) {
-                im.cmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH,
+                cl->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH,
                     cv.depth, (UINT8)cv.stencil, 0, nullptr);
                 break;
             }
         }
     }
 
-    im.cmdList->RSSetViewports(1, &tpl->viewport);
-    im.cmdList->RSSetScissorRects(1, &tpl->scissor);
+    cl->RSSetViewports(1, &tpl->viewport);
+    cl->RSSetScissorRects(1, &tpl->scissor);
 }
 void D3D12Backend::CmdEndRenderPass(RHICommandBuffer cmd) {
     (void)cmd; // D3D12 has no render-pass objects; the RT is transitioned via CmdTransitionImageLayout
 }
 
 void D3D12Backend::CmdBindPipeline(RHICommandBuffer cmd, RHIPipeline pipeline) {
-    (void)cmd;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     PipelineRec* rec = reinterpret_cast<PipelineRec*>(pipeline.handle);
-    m_Impl->cmdList->SetPipelineState(rec->pso.Get());
-    m_Impl->cmdList->IASetPrimitiveTopology(rec->primitiveTopology);
+    cl->SetPipelineState(rec->pso.Get());
+    cl->IASetPrimitiveTopology(rec->primitiveTopology);
     m_Impl->currentPipeline = rec;
     // Root signature must be bound before any root-argument setters; binding it
     // here (only once per pipeline change) preserves root arguments (e.g. push
     // constants) written between the pipeline bind and the descriptor-set bind.
-    m_Impl->cmdList->SetGraphicsRootSignature(rec->layout->rootSig.Get());
+    cl->SetGraphicsRootSignature(rec->layout->rootSig.Get());
     m_Impl->currentRootSig = rec->layout->rootSig;
 }
 
 void D3D12Backend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout layout,
     uint32_t firstSet, const std::vector<RHIDescriptorSet>& sets) {
-    (void)cmd;
     Impl& im = *m_Impl;
+    ID3D12GraphicsCommandList* cl = im.CmdListOf(cmd);
     PipelineLayoutRec* pl = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
     // Bind the root signature only when it changes. Re-binding the same root
     // signature invalidates previously set root arguments (including push
     // constants), which made UIRenderer's push-then-bind-descriptor-sets order
     // drop screenSize -> all quads collapsed -> empty window.
     if (pl->rootSig.Get() != im.currentRootSig.Get()) {
-        im.cmdList->SetGraphicsRootSignature(pl->rootSig.Get());
+        cl->SetGraphicsRootSignature(pl->rootSig.Get());
         im.currentRootSig = pl->rootSig;
     }
     for (size_t i = 0; i < sets.size(); ++i) {
@@ -1516,56 +1764,57 @@ void D3D12Backend::CmdBindDescriptorSets(RHICommandBuffer cmd, RHIPipelineLayout
         const RootParamInfo& info = pl->setParams[setIndex];
         if (set->kind == SetKind::UniformBuffer) {
             if (set->ubo && set->ubo->res.Get())
-                im.cmdList->SetGraphicsRootConstantBufferView(info.srvParam,
+                cl->SetGraphicsRootConstantBufferView(info.srvParam,
                     set->ubo->res->GetGPUVirtualAddress());
         } else {
-            im.cmdList->SetGraphicsRootDescriptorTable(info.srvParam, set->srvGpu);
-            im.cmdList->SetGraphicsRootDescriptorTable(info.samplerParam, set->samplerGpu);
+            cl->SetGraphicsRootDescriptorTable(info.srvParam, set->srvGpu);
+            cl->SetGraphicsRootDescriptorTable(info.samplerParam, set->samplerGpu);
         }
     }
 }
 
 void D3D12Backend::CmdBindVertexBuffer(RHICommandBuffer cmd, RHIBuffer buffer) {
-    (void)cmd;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     BufferRec* buf = reinterpret_cast<BufferRec*>(buffer.handle);
     if (!m_Impl->currentPipeline || m_Impl->currentPipeline->vbStride == 0) return;
     D3D12_VERTEX_BUFFER_VIEW view{};
     view.BufferLocation = buf->res->GetGPUVirtualAddress();
     view.SizeInBytes = buf->size;
     view.StrideInBytes = m_Impl->currentPipeline->vbStride;
-    m_Impl->cmdList->IASetVertexBuffers(0, 1, &view);
+    cl->IASetVertexBuffers(0, 1, &view);
 }
 
 void D3D12Backend::CmdBindIndexBuffer(RHICommandBuffer cmd, RHIBuffer buffer) {
-    (void)cmd;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     BufferRec* buf = reinterpret_cast<BufferRec*>(buffer.handle);
     D3D12_INDEX_BUFFER_VIEW view{};
     view.BufferLocation = buf->res->GetGPUVirtualAddress();
     view.SizeInBytes = buf->size;
     view.Format = DXGI_FORMAT_R32_UINT;
-    m_Impl->cmdList->IASetIndexBuffer(&view);
+    cl->IASetIndexBuffer(&view);
 }
 
 void D3D12Backend::CmdDraw(RHICommandBuffer cmd, uint32_t vertexCount, uint32_t firstVertex) {
-    (void)cmd;
-    m_Impl->cmdList->DrawInstanced(vertexCount, 1, firstVertex, 0);
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
+    cl->DrawInstanced(vertexCount, 1, firstVertex, 0);
 }
 void D3D12Backend::CmdDrawIndexed(RHICommandBuffer cmd, uint32_t indexCount,
     uint32_t instanceCount, uint32_t firstIndex) {
-    (void)cmd;
-    m_Impl->cmdList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, 0, 0);
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
+    cl->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, 0, 0);
 }
 
 void D3D12Backend::CmdPushConstants(RHICommandBuffer cmd, RHIPipelineLayout layout,
     ShaderStageMask stage, uint32_t offset, uint32_t size, const void* data) {
-    (void)cmd; (void)stage;
+    (void)stage;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     PipelineLayoutRec* pl = reinterpret_cast<PipelineLayoutRec*>(layout.handle);
     if (pl->pushParam == UINT_MAX) return;
-    m_Impl->cmdList->SetGraphicsRoot32BitConstants(pl->pushParam, size / 4, data, offset / 4);
+    cl->SetGraphicsRoot32BitConstants(pl->pushParam, size / 4, data, offset / 4);
 }
 
 void D3D12Backend::CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewport) {
-    (void)cmd;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     D3D12_VIEWPORT vp{};
     vp.TopLeftX = viewport.x;
     vp.TopLeftY = viewport.y;
@@ -1573,13 +1822,13 @@ void D3D12Backend::CmdSetViewport(RHICommandBuffer cmd, const RHIViewport& viewp
     vp.Height = viewport.height;
     vp.MinDepth = viewport.minDepth;
     vp.MaxDepth = viewport.maxDepth;
-    m_Impl->cmdList->RSSetViewports(1, &vp);
+    cl->RSSetViewports(1, &vp);
 }
 void D3D12Backend::CmdSetScissor(RHICommandBuffer cmd, const RHIRect2D& scissor) {
-    (void)cmd;
+    ID3D12GraphicsCommandList* cl = m_Impl->CmdListOf(cmd);
     D3D12_RECT sc{ (LONG)scissor.x, (LONG)scissor.y,
         (LONG)scissor.x + (LONG)scissor.width, (LONG)scissor.y + (LONG)scissor.height };
-    m_Impl->cmdList->RSSetScissorRects(1, &sc);
+    cl->RSSetScissorRects(1, &sc);
 }
 void D3D12Backend::CmdBarrier(RHICommandBuffer cmd) {
     (void)cmd;
@@ -1587,8 +1836,9 @@ void D3D12Backend::CmdBarrier(RHICommandBuffer cmd) {
 
 void D3D12Backend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image,
     Format format, ImageLayout oldLayout, ImageLayout newLayout, Aspect aspect) {
-    (void)cmd; (void)format; (void)oldLayout; (void)aspect;
+    (void)format; (void)oldLayout; (void)aspect;
     Impl& im = *m_Impl;
+    ID3D12GraphicsCommandList* cl = im.CmdListOf(cmd);
     ImageRec* img = reinterpret_cast<ImageRec*>(image.handle);
     D3D12_RESOURCE_STATES after = ToState(newLayout);
     if (after == img->state) return;
@@ -1599,7 +1849,7 @@ void D3D12Backend::CmdTransitionImageLayout(RHICommandBuffer cmd, RHIImage image
     b.Transition.StateBefore = img->state;
     b.Transition.StateAfter = after;
     b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    im.cmdList->ResourceBarrier(1, &b);
+    cl->ResourceBarrier(1, &b);
     img->state = after;
 }
 

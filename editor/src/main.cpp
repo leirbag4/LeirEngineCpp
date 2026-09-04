@@ -505,8 +505,10 @@ protected:
         {
             auto* helpItem = m_MenuBar->AddItem("Help");
             helpItem->AddMenuItem("About LeirEngine", [this]() {
-                // Create the About window (external, Vulkan-only for now).
-                if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+                // Create the About window. The backend decides whether it can
+                // create an external window: CreateSwapchainTarget returns
+                // nullptr on backends without support, and Show() logs it.
+                if (m_Backend) {
                     // If already open, just focus it (a second click with the
                     // About visible would otherwise leak the previous window).
                     if (m_AboutWindow && m_AboutWindow->IsVisible()) {
@@ -516,9 +518,6 @@ protected:
                     m_AboutWindow = new AboutWindow(m_Backend.get(), "1.0.0");
                     m_AboutWindow->SetFont(m_FontSmall.get());
                     m_AboutWindow->Show();
-                } else {
-                    Leir::XConsole::Println("AboutWindow requires Vulkan backend (got {})",
-                        m_Backend ? m_Backend->GetBackendName() : "?");
                 }
             });
         }
@@ -526,11 +525,11 @@ protected:
         // Load submenu arrow icon and propagate to all menus.
         ApplyMenuIcons();
 
-        // Fase D — external window test (only with the Vulkan backend for now;
-        // CreateSwapchainTarget is unimplemented for D3D12/WebGPU yet).
+        // Fase D — external window test (only with backends that support
+        // CreateSwapchainTarget; Show() logs when a backend can't create one).
         // Fase 1 (2026-09-02): re-activado tras el diagnóstico del bug del grid
         // (los recursos dinámicos ahora tienen un ring de 3 frames, MAX_FRAMES_IN_FLIGHT=3).
-        if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+        if (m_Backend) {
             m_TestWindow = new Leir::UIWindowExternal(m_Backend.get(), "Leir Test Window");
             m_TestWindow->Show();
             // Give the window real content so the render path is visible.
@@ -587,7 +586,7 @@ protected:
         // (una UI + otra UI). Cada ventana tiene su propio SwapchainTarget, su
         // propio command pool y su propio canvas; todas renderizan ANTES de
         // EndFrame() del principal (regla 3.1).
-        if (m_Backend && strcmp(m_Backend->GetBackendName(), "vulkan") == 0) {
+        if (m_Backend) {
             m_TestWindow2 = new Leir::UIWindowExternal(m_Backend.get(), "Leir Test Window 2");
             m_TestWindow2->Show();
             if (Leir::UICanvas* c2 = m_TestWindow2->GetCanvas()) {

@@ -1135,6 +1135,31 @@ The `.ico`/`.rc`/runtime PNG were generated once with a PowerShell + System.Draw
 
 ## Previous Changes Summary
 
+- **Port del external window a D3D12 (2026-09-04, ver `TODO_WINDOW_SYSTEM.md` §15)**:
+  las ventanas externas (`UIWindowExternal`) ahora funcionan con el backend D3D12 además
+  de Vulkan, con la misma API/UI/sync. **(1) `ISwapchainTarget`** (nuevo
+  `engine/include/LeirEngine/Rendering/ISwapchainTarget.h`, interfaz RHI-neutral sin
+  tipos Vulkan): `BeginFrame/BeginOverlayRenderPass/EndFrame/RecreateSwapchain/
+  GetWidth/GetHeight/GetCommandBufferHandle/GetWindow/IsValid/MarkResized/
+  NeedsResize/ResetResized`. `SwapchainTarget` (Vulkan) la implementa;
+  `RenderBackend::CreateSwapchainTarget` devuelve `ISwapchainTarget*`;
+  `UIWindowExternal` usa la interfaz (`GetExtent()/GetCommandBuffer()` reemplazados).
+  Se eliminó `BeginClearRenderPass` (código muerto). **(2) `D3D12SwapchainTarget`**
+  (definido en el TU de `D3D12Backend.cpp` + `friend class` en el header): swapchain
+  propio por HWND + 3 backbuffers + RTV slots del heap compartido + command allocator
+  ring + command list + fence ring (`MAX_FRAMES_IN_FLIGHT=3`), compartiendo
+  device/queue/factory/heaps del backend; portados los fixes de iconified (§14.10) y
+  resize. **(3) Routing multi-command-list**: `D3D12Backend::Impl::CmdListOf(cmd)`
+  enruta TODOS los `Cmd*`/`CmdExecuteGraph` al command list del handle (antes
+  escribían SIEMPRE a `m_Impl->cmdList`), reseteando `currentPipeline/currentRootSig`
+  al cambiar de command list activo (los caches de binding son POR command list).
+  **(4) Gate del editor**: `strcmp(backend,"vulkan")==0` → `if (m_Backend)`; el backend
+  decide su capacidad (`CreateSwapchainTarget` devuelve `nullptr` → `Show()` loguea).
+  Verificado: build limpio, smoke D3D12 (`D3D12SwapchainTarget created` ×2, crashLog
+  delta=0, stderr vacío), ctest 3/3, Vulkan sin regresión, **verificado por el usuario
+  ("funciona perfecto tanto vulkan como d3d12")**. WebGPU queda listo para el mismo
+  `ISwapchainTarget` (§16 futuro).
+
 - **Fix ventanas externas + crash del menú Help (2026-09-03, ver `TODO_WINDOW_SYSTEM.md` §14.8-14.9)**:
   **(1) iterator invalidation**: `EventQueue::Process()` itera **snapshots** de los hooks
   (`auto hooks = m_PointerHooks;`) en vez del vector vivo — crear el About dentro del

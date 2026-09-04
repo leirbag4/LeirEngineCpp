@@ -26,7 +26,7 @@ struct GLFWwindow;
 
 namespace Leir {
 
-class SwapchainTarget;
+class ISwapchainTarget;
 class UICanvas;
 
 namespace RHI { class RenderBackend; }
@@ -112,7 +112,7 @@ public:
     /**
      * @brief Returns the swapchain target (for frame sync).
      */
-    SwapchainTarget* GetSwapchainTarget() const { return m_SwapchainTarget; }
+    ISwapchainTarget* GetSwapchainTarget() const { return m_SwapchainTarget; }
 
     /**
      * @brief Returns the dedicated canvas for this window.
@@ -129,7 +129,7 @@ private:
 
     RHI::RenderBackend* m_Backend = nullptr;
     GLFWwindow* m_NativeWindow = nullptr;
-    SwapchainTarget* m_SwapchainTarget = nullptr;
+    ISwapchainTarget* m_SwapchainTarget = nullptr;
     UICanvas* m_WindowCanvas = nullptr;
     UIRenderer* m_WindowRenderer = nullptr;
     UIPanel* m_Background = nullptr;   // opaque full-window background (covers swapchain garbage).

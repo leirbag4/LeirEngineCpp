@@ -10,9 +10,13 @@
  * surface, swapchain, image views, depth, framebuffers, per-image semaphores,
  * per-frame acquire semaphores + fences, and command buffers. This is what lets
  * external (detached) editor windows render their own UI to their own OS window.
+ *
+ * Implements the RHI-neutral ISwapchainTarget so the editor/UIWindowExternal
+ * can drive any backend's external windows through one interface.
  */
 
 #include "LeirEngine/Core/Export.h"
+#include "LeirEngine/Rendering/ISwapchainTarget.h"
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <cstdint>
@@ -25,7 +29,7 @@ namespace Leir {
  * @brief Self-contained present target for one window.
  * @ingroup Rendering
  */
-class LEIR_API SwapchainTarget {
+class LEIR_API SwapchainTarget : public ISwapchainTarget {
 public:
     /**
      * @brief Constructs the present target for a GLFW window.
@@ -46,7 +50,7 @@ public:
                     VkRenderPass renderPass, VkRenderPass overlayRenderPass,
                     bool vsync);
 
-    ~SwapchainTarget();
+    ~SwapchainTarget() override;
 
     SwapchainTarget(const SwapchainTarget&) = delete;
     SwapchainTarget& operator=(const SwapchainTarget&) = delete;
@@ -57,35 +61,74 @@ public:
      * @param[out] outImageIndex Acquired image index.
      * @return False if the swapchain was recreated (call again next frame).
      */
-    bool BeginFrame(uint32_t& outImageIndex);
-
-    /**
-     * @brief Begins the main render pass (LOOP_OP_CLEAR) on the current image.
-     * @details Used to clear the window to a solid color (for tests or 3D content).
-     * @param[in] imageIndex Acquired image index.
-     * @param[in] clearColor Clear color for the framebuffer.
-     * @param[in] depthClear Depth clear value (default 1.0f).
-     */
-    void BeginClearRenderPass(uint32_t imageIndex, const VkClearValue& clearColor, float depthClear = 1.0f);
+    bool BeginFrame(uint32_t& outImageIndex) override;
 
     /**
      * @brief Begins the overlay render pass (LOAD_OP_LOAD) on the current image.
      * @param[in] imageIndex Acquired image index.
      */
-    void BeginOverlayRenderPass(uint32_t imageIndex);
+    void BeginOverlayRenderPass(uint32_t imageIndex) override;
 
     /**
      * @brief Ends the command buffer, submits and presents.
      * @param[in] imageIndex Acquired image index.
      */
-    void EndFrame(uint32_t imageIndex);
+    void EndFrame(uint32_t imageIndex) override;
 
     /**
      * @brief Recreates the swapchain after a resize/out-of-date event.
      */
-    void RecreateSwapchain();
+    void RecreateSwapchain() override;
 
-    // ---- Getters ----
+    /**
+     * @brief Present width in physical pixels.
+     * @return Width.
+     */
+    uint32_t GetWidth() const override { return m_Extent.width; }
+
+    /**
+     * @brief Present height in physical pixels.
+     * @return Height.
+     */
+    uint32_t GetHeight() const override { return m_Extent.height; }
+
+    /**
+     * @brief Command buffer handle for RHICommandBuffer.
+     * @return Opaque handle.
+     */
+    uint64_t GetCommandBufferHandle() const override {
+        return reinterpret_cast<uint64_t>(m_CommandBuffers[m_CurrentFrame]);
+    }
+
+    /**
+     * @brief Native window this target presents to.
+     * @return GLFW window pointer.
+     */
+    GLFWwindow* GetWindow() const override { return m_Window; }
+
+    /**
+     * @brief Whether the swapchain is valid.
+     * @return True if valid.
+     */
+    bool IsValid() const override { return m_Swapchain != VK_NULL_HANDLE; }
+
+    /**
+     * @brief Marks the swapchain as needing recreation (resize callback).
+     */
+    void MarkResized() override { m_NeedsResize = true; }
+
+    /**
+     * @brief Whether a resize is pending.
+     * @return True if pending.
+     */
+    bool NeedsResize() const override { return m_NeedsResize; }
+
+    /**
+     * @brief Clears the resize-requested flag.
+     */
+    void ResetResized() override { m_NeedsResize = false; }
+
+    // ---- Legacy Vulkan getters (kept for compatibility) ----
     VkExtent2D GetExtent() const { return m_Extent; }
     VkFormat GetFormat() const { return m_Format; }
     VkFramebuffer GetOverlayFramebuffer(uint32_t imageIndex) const { return m_OverlayFramebuffers[imageIndex]; }
@@ -93,16 +136,6 @@ public:
     VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
     VkCommandBuffer GetCommandBuffer() const { return m_CommandBuffers[m_CurrentFrame]; }
     uint32_t GetImageCount() const { return (uint32_t)m_Images.size(); }
-    GLFWwindow* GetWindow() const { return m_Window; }
-    bool IsValid() const { return m_Swapchain != VK_NULL_HANDLE; }
-
-    /**
-     * @brief Marks the swapchain as needing recreation (resize callback).
-     */
-    void MarkResized() { m_NeedsResize = true; }
-    bool NeedsResize() const { return m_NeedsResize; }
-    bool WasResized() const { return m_NeedsResize; }
-    void ResetResized() { m_NeedsResize = false; }
 
 private:
     void CreateSurface();

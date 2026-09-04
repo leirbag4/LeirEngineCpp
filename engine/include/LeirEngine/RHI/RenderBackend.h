@@ -19,7 +19,7 @@
 //
 // Public engine/editor code must only depend on this interface + RHI.h types.
 
-namespace Leir { class SwapchainTarget; }
+namespace Leir { class ISwapchainTarget; }
 
 namespace Leir {
 namespace RHI {
@@ -148,7 +148,7 @@ public:
     // backend's device/queues. Returns nullptr if not implemented for this
     // backend. The returned target is self-contained (BeginFrame/EndFrame);
     // the caller owns it (deletes with `delete`).
-    virtual Leir::SwapchainTarget* CreateSwapchainTarget(void* window) { return nullptr; }
+    virtual Leir::ISwapchainTarget* CreateSwapchainTarget(void* window) { return nullptr; }
 
     virtual RHIRenderPass CreateRenderPass(const std::vector<Format>& colorFormats,
         Format depthFormat, bool overlay) = 0;

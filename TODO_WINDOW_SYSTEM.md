@@ -895,6 +895,211 @@ real de minimizar/restaurar lo hace el usuario.
 
 ---
 
+## 15. Port del external window a D3D12 (plan 2026-09-04)
+
+### 15.1 Contexto / estado actual
+
+El window system completo (UIWindow, chrome, Plan A, input multi-ventana, grid fix,
+Fase 3 RHIFence) está **verificado en Vulkan**. `SwapchainTarget` es hoy una clase
+**concreta Vulkan** (`engine/include/LeirEngine/Rendering/SwapchainTarget.h` incluye
+`<vulkan/vulkan.h>`), y `RenderBackend::CreateSwapchainTarget(window)` tiene un default
+que devuelve `nullptr` — solo `VulkanBackend` lo implementa (`VulkanBackend.cpp:355`).
+
+El editor gatea la creación de las 3 ventanas externas con `strcmp(backend, "vulkan")==0`
+(`main.cpp:509` About, `:533` Test Window, `:590` Test Window 2), por lo que con
+`settings.json → graphics.backend = "d3d12"` el editor corre pero **sin externas**.
+
+### 15.2 Objetivo
+
+Hacer que las ventanas externas (`UIWindowExternal`) funcionen en el backend D3D12 con
+la **misma API, la misma UI y la misma sincronización multi-ventana** que en Vulkan,
+sin cambios en el editor ni en `UIWindowExternal` (salvo el gate de backend).
+
+### 15.3 Arquitectura objetivo: `ISwapchainTarget` (interfaz neutral)
+
+`SwapchainTarget` se abstrae a una **interfaz RHI-neutral** (el TODO ya lo anotaba en
+Fase A: "Futuro: abstraer a interfaz RHI-neutral (`ISwapchainTarget`) con 3 impls"). La
+interfaz expone SOLO lo que `UIWindowExternal`/`SwapchainTarget` consumidores usan hoy:
+
+```cpp
+// engine/include/LeirEngine/Rendering/ISwapchainTarget.h  (nuevo)
+class LEIR_API ISwapchainTarget {
+public:
+    virtual ~ISwapchainTarget() = default;
+    virtual bool  BeginFrame(uint32_t& outImageIndex) = 0;            // acquire + begin cmd buffer
+    virtual void  BeginOverlayRenderPass(uint32_t imageIndex) = 0;    // overlay pass (color only)
+    virtual void  EndFrame(uint32_t imageIndex) = 0;                  // end pass + submit + present
+    virtual void  RecreateSwapchain() = 0;
+    virtual VkExtent2D GetExtent() const = 0;                         // OJO: VkExtent2D es Vulkan — ver §15.5
+    virtual void* GetCommandBuffer() const = 0;                       // para RHICommandBuffer.handle
+    virtual GLFWwindow* GetWindow() const = 0;
+    virtual bool  IsValid() const = 0;
+    virtual void  MarkResized() = 0;
+    virtual bool  NeedsResize() const = 0;
+    virtual void  ResetResized() = 0;
+};
+```
+
+> **Decisión de diseño**: `GetExtent()`/`GetCommandBuffer()` devuelven tipos neutros
+> (`uint32_t w,h` / `void*`). `UIWindowExternal.cpp:145,152,218,225` usa
+> `GetExtent().width/height` y `reinterpret_cast<uint64_t>(GetCommandBuffer())` — se
+> actualizan esos 5 call-sites. Alternativa de mínimo cambio: una struct neutral
+> `{uint32_t width, height}`.
+
+### 15.4 Fases del port
+
+#### Fase 1 — Interfaz neutral `ISwapchainTarget` + refactor Vulkan
+
+- [x] 1.1 Crear `engine/include/LeirEngine/Rendering/ISwapchainTarget.h` (interfaz pura,
+      ver §15.3, sin `<vulkan/vulkan.h>`).
+- [x] 1.2 `SwapchainTarget` (Vulkan) implementa `ISwapchainTarget`:
+      `class LEIR_API SwapchainTarget : public ISwapchainTarget` y `override` de los
+      métodos. Se mantiene el `.cpp` y la implementación actual intactos (solo firma).
+      Bonus: se eliminó `BeginClearRenderPass` (sin callers, código muerto).
+- [x] 1.3 Actualizar `UIWindowExternal.cpp` a la interfaz:
+      - `GetExtent().width/height` → `GetWidth()/GetHeight()` (nuevos en la interfaz).
+      - `reinterpret_cast<uint64_t>(m_SwapchainTarget->GetCommandBuffer())` → `GetCommandBufferHandle()`.
+      - `MarkResized()`/`IsValid()` ya están en la interfaz.
+- [x] 1.4 `RenderBackend::CreateSwapchainTarget` devuelve `ISwapchainTarget*`
+      (default `nullptr`). `VulkanBackend` override igual pero tipo base.
+      `VulkanBackend.h:151` y `RenderBackend.h:151` actualizan la firma.
+- [x] 1.5 `UIWindowExternal.h:115,132` y `VulkanDevice.h:130` usan `ISwapchainTarget*`
+      (se mantuvo `SwapchainTarget` como clase base concreta Vulkan; la interfaz
+      `ISwapchainTarget` va en la firma del backend y en `UIWindowExternal`).
+- [x] 1.6 Build limpio (sin cambios de comportamiento) + smoke: editor Vulkan con
+      3 externas sigue funcionando (crashLog delta=0, stderr vacío, teardown completo).
+
+#### Fase 2 — D3D12: swapchain target por ventana
+
+**Problema**: `D3D12Backend` hoy es **mono-ventana** — tiene UN swapchain + UN command
+list + UN allocator ring + UN RTV heap para el main window (todo en `Impl`). Para las
+externas necesitamos un `SwapchainTarget` D3D12 que cree su propio
+`IDXGISwapChain3` + backbuffers + RTVs + command allocator(s) + fence, compartiendo
+**device / queue / descriptor heaps** del backend.
+
+**Modelo de sync (idéntico al de Vulkan, §14)**: el D3D12 `SwapchainTarget` tiene su
+propio fence por slot y su propio command allocator; el render de cada externa se
+ejecuta en el MISMO `ID3D12CommandQueue` del main (queue FIFO). La regla de orden
+§14.3.1 ("toda externa renderiza ANTES de `EndFrame()` del principal") ya la cumple el
+editor en `OnRender` (`main.cpp:1174-1179`), así que la sincronización por fence del
+frame lógico escala igual.
+
+- [x] 2.1 Crear `D3D12SwapchainTarget` (definida en el TU de `D3D12Backend.cpp` para
+      acceder a los helpers internos del Impl; `friend class D3D12SwapchainTarget`
+      en `D3D12Backend.h`):
+      - Ctor: `(D3D12Backend::Impl& im, GLFWwindow* window, bool vsync)` — comparte
+        `device`, `queue`, `factory`, heaps (SRV/sampler) y helpers
+        (`RtvCpu`, `AllocRtv`).
+      - Crea swapchain por HWND: `glfwGetWin32Window(window)` + `factory->CreateSwapChainForHwnd`.
+      - Backbuffers (`BufferCount = 3`), RTV slots del heap compartido (solo overlay → sin depth).
+      - Su propio `ID3D12CommandAllocator` ring + un `ID3D12GraphicsCommandList` +
+        fence ring (patrón del Impl main).
+      - `MAX_FRAMES_IN_FLIGHT = 3` (alineado con Vulkan/swapchain 3 images).
+- [x] 2.2 `BeginFrame(outImageIndex)`:
+      - Skip si `GLFW_ICONIFIED` (bug §14.10 portado a D3D12).
+      - `NeedsResize` → `RecreateSwapchain()`.
+      - Espera el fence del slot, `allocator->Reset()`, `cmdList->Reset(allocator)`,
+        `SetDescriptorHeaps` (reusa los heaps del backend: `srvHeap`+`samplerHeap`).
+      - `swapchain->GetCurrentBackBufferIndex()` → outImageIndex.
+      - Transición backbuffer `PRESENT → RENDER_TARGET`.
+- [x] 2.3 `BeginOverlayRenderPass(imageIndex)`: `OMSetRenderTargets(1, &RTV[imageIndex])`,
+      clear al gris del body, `RSSetViewports/ScissorRects` al extent físico.
+- [x] 2.4 `EndFrame(imageIndex)`: transición `RENDER_TARGET → PRESENT`, `Close()`,
+      `queue->ExecuteCommandLists(1, &list)`, `swapchain->Present(vsync)`,
+      `queue->Signal(fence)`, avanza slot.
+- [x] 2.5 `RecreateSwapchain()`: `WaitIdle` del backend, guard 0×0/iconified (port de
+      §14.10), `ResizeBuffers`, re-alloc de RTVs (libera slots viejos al heap).
+- [x] 2.6 `D3D12Backend::CreateSwapchainTarget(void* window)` override → crea
+      `D3D12SwapchainTarget` (reemplaza el default `nullptr`).
+
+#### Fase 3 — CmdExecuteGraph multi-command-list (D3D12)
+
+**Problema**: `D3D12Backend::Cmd*` (y `CmdExecuteGraph`) usan SIEMPRE `m_Impl->cmdList`
+(el del main) e ignoran el `RHICommandBuffer cmd` recibido. Para renderizar la UI de una
+externa en su propio command list hay que enrutar el comando al command list del handle.
+
+- [x] 3.1 En `D3D12Backend::Impl`, helper `ID3D12GraphicsCommandList* CmdListOf(RHICommandBuffer cmd)`:
+      si `cmd.handle != 0` → `reinterpret_cast<ID3D12GraphicsCommandList*>(cmd.handle)`;
+      si no → el `m_Impl->cmdList` del main (compat). Además resetea
+      `currentPipeline`/`currentRootSig` cuando el command list activo cambia
+      (los caches de binding son POR command list, no por backend — sin esto, al
+      alternar main↔externa el root signature/stride se reutilizaban mal).
+- [x] 3.2 Reemplazar `m_Impl->cmdList->X` por `CmdListOf(cmd)->X` en TODOS los `Cmd*`:
+      `CmdBindPipeline`, `CmdBindDescriptorSets`, `CmdBindVertexBuffer`,
+      `CmdBindIndexBuffer`, `CmdDraw`, `CmdDrawIndexed`, `CmdPushConstants`,
+      `CmdSetViewport`, `CmdSetScissor`, `CmdTransitionImageLayout`, `CmdBeginRenderPass`,
+      y el loop de `CmdExecuteGraph`.
+- [x] 3.3 `CmdTransitionImageLayout`/`bindlessImages`: la transición se emite en el
+      command list del handle (via `CmdListOf`); `ImageRec::state` es global y las
+      transiciones `ShaderReadOnly→ShaderReadOnly` son no-op → sin corrupción entre ventanas.
+- [x] 3.4 El comando de la UI de la externa (`UIRenderer::Flush` → `GCommandGraph`
+      pass-less, solo Draw records) se ejecuta con `rhiCmd.handle = GetCommandBufferHandle()`
+      → funcionó con 3.2.
+- [x] 3.5 Build + smoke D3D12: editor con `backend=d3d12` arranca, main window UI ok,
+      externas renderizan UI (gate de la Fase 4 abierto).
+
+#### Fase 4 — Abrir el gate en el editor
+
+- [x] 4.1 `main.cpp` (About + Test Window + Test Window 2): el gate `strcmp(backend,"vulkan")==0`
+      se reemplazó por `if (m_Backend)` — el backend decide su capacidad:
+      `CreateSwapchainTarget` devuelve `nullptr` si no soporta externas y
+      `UIWindowExternal::Show()` lo loguea y sigue.
+- [x] 4.2 El log de "AboutWindow requires Vulkan backend" se reemplazó por el manejo
+      genérico de `nullptr` (mensaje "CreateSwapchainTarget failed for backend '{}'").
+- [x] 4.3 Build limpio + smoke Vulkan (crashLog delta=0, 3 externas OK) + smoke D3D12
+      (`D3D12 backend created`, `D3D12SwapchainTarget created (400x300)` ×2,
+      crashLog delta=0, stderr vacío) + ctest 3/3.
+
+#### Fase 5 — Verificación funcional D3D12
+
+- [x] 5.1 Build MSVC limpio (editor + engine + demos que usan D3D12).
+- [x] 5.2 `settings.json → graphics.backend = "d3d12"`, abrir editor: main UI + 3 externas
+      visibles, resize sin glitch, drag de ventanas. **Verificado por el usuario.**
+- [x] 5.3 X de cada externa cierra (fix §14.9 portado — el `glfwSetWindowCloseCallback`
+      es de GLFW, ya funciona para cualquier backend). **Verificado por el usuario.**
+- [x] 5.4 Minimizar/restaurar una externa no congela el editor (fix §14.10 portado).
+      **Verificado por el usuario.**
+- [x] 5.5 Help → About abre/cierra sin crash (EventQueue snapshot §14.8 es backend-agnóstico).
+      **Verificado por el usuario.**
+- [x] 5.6 Parity visual: externas con el mismo fondo/layout que Vulkan.
+      **Verificado por el usuario ("funciona perfecto tanto vulkan como d3d12").**
+- [x] 5.7 ctest 3/3 (PhysicsTest + SlangExportTest + ECSTest) — no tocan D3D12 pero
+      confirman que el engine DLL sigue íntegro.
+- [x] 5.8 smoke test automatizado: crashLog delta=0, stderr sin VUIDs D3D12
+      (el debug layer de D3D12 reporta a stderr vía `DumpInfoQueue`).
+
+### 15.5 Riesgos y decisiones
+
+- **`GetExtent()` Vulkan**: la interfaz neutral no puede devolver `VkExtent2D`. Decisión:
+  devolver `uint32_t GetWidth()/GetHeight()` y actualizar `UIWindowExternal.cpp`
+  (5 call-sites). Es el punto que más toca el código consumidor.
+- **Descriptor heaps compartidos**: los heaps bindless (SRV/sampler) del backend D3D12
+  son del device (no por ventana) → las externas reusan el mismo heap. **OJO**: un
+  command list D3D12 solo puede tener un heap shader-visible por tipo a la vez; el
+  `SetDescriptorHeaps` se hace una vez en BeginFrame del main, así que el target de la
+  externa debe llamarlo también (2.2).
+- **RTV heap compartido (64 slots)**: las externas toman slots del heap del backend.
+  Con 3 externas × 3 backbuffers = 9 RTVs extra, cabe. Si en el futuro hay muchas
+  ventanas, subir `kRtvHeapSize`.
+- **Multithreading**: el modelado actual es single-thread (todas las ventanas en el
+  main thread). El `D3D12SwapchainTarget` con su propio command list prepara el terreno
+  para grabación en worker threads (cada ventana su propio command list) — pero la
+  sincronización de la cola sigue siendo FIFO, igual que Vulkan §14.5.
+- **`dxgi` / `d3d12` ya se linkean** en `engine/CMakeLists.txt:196` — no hay cambios de
+  build deps.
+- **WebGPU**: el mismo `ISwapchainTarget` servirá para `WebGPUBackend::CreateSwapchainTarget`
+  (futuro §16). El gate de la Fase 4 ya lo habilita.
+
+### 15.6 Checklist resumen
+
+- [x] Fase 1 — ISwapchainTarget + refactor Vulkan (sin cambio de comportamiento)
+- [x] Fase 2 — D3D12SwapchainTarget (swapchain + cmd list + fence por ventana)
+- [x] Fase 3 — CmdExecuteGraph/Cmd* enrutan al command list del handle
+- [x] Fase 4 — Editor: gate de backend genérico (CreateSwapchainTarget decide)
+- [x] Fase 5 — Verificación funcional D3D12 (completa, visual confirmada por el usuario)
+
+---
+
 ## 11. Notas / Referencias
 
 - El plan de `TODO_DOCKING.md` Fase 2 ya mencionaba: `SwapchainTarget` por ventana,

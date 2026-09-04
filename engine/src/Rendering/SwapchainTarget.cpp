@@ -448,40 +448,6 @@ bool SwapchainTarget::BeginFrame(uint32_t& outImageIndex)
     return true;
 }
 
-void SwapchainTarget::BeginClearRenderPass(uint32_t imageIndex, const VkClearValue& clearColor, float depthClear)
-{
-    VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrame];
-
-    VkClearValue clearValues[2];
-    clearValues[0] = clearColor;
-    clearValues[1].depthStencil = { depthClear, 0 };
-
-    VkRenderPassBeginInfo rpInfo{};
-    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpInfo.renderPass = m_RenderPass;
-    rpInfo.framebuffer = m_Framebuffers[imageIndex];
-    rpInfo.renderArea.extent = m_Extent;
-    rpInfo.clearValueCount = 2;
-    rpInfo.pClearValues = clearValues;
-
-    vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    VkViewport viewport{};
-    viewport.x = 0;
-    viewport.y = (float)m_Extent.height;
-    viewport.width = (float)m_Extent.width;
-    viewport.height = -(float)m_Extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-    VkRect2D scissor{};
-    scissor.extent = m_Extent;
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    m_InOverlay = false;
-}
-
 void SwapchainTarget::BeginOverlayRenderPass(uint32_t imageIndex)
 {
     VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrame];

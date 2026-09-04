@@ -17,7 +17,7 @@
 // The public header must not include Vulkan types; VulkanDevice is kept behind
 // a PIMPL.
 
-namespace Leir { class SwapchainTarget; }
+namespace Leir { class ISwapchainTarget; }
 
 namespace Leir {
 namespace RHI {
@@ -148,7 +148,7 @@ public:
     // backend's Vulkan device/queues/render passes. The returned object is
     // self-contained for its own frame loop (BeginFrame/EndFrame).
     // window: native GLFWwindow*.
-    Leir::SwapchainTarget* CreateSwapchainTarget(void* window) override;
+    Leir::ISwapchainTarget* CreateSwapchainTarget(void* window) override;
 
 private:
     struct Impl;

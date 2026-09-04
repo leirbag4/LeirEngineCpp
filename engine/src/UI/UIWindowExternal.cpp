@@ -1,6 +1,6 @@
 #include "LeirEngine/UI/UIWindowExternal.h"
 #include "LeirEngine/UI/UICanvas.h"
-#include "LeirEngine/Rendering/SwapchainTarget.h"
+#include "LeirEngine/Rendering/ISwapchainTarget.h"
 #include "LeirEngine/RHI/RenderBackend.h"
 #include "LeirEngine/Input/InputManager.h"
 #include "LeirEngine/Core/Log.h"
@@ -107,7 +107,8 @@ void UIWindowExternal::Show(UIWindow* parent)
     if (m_Backend) {
         m_SwapchainTarget = m_Backend->CreateSwapchainTarget(m_NativeWindow);
         if (!m_SwapchainTarget) {
-            XConsole::PrintError("UIWindowExternal: CreateSwapchainTarget failed (non-Vulkan backend?)");
+            XConsole::PrintError("UIWindowExternal: CreateSwapchainTarget failed for backend '{}'",
+                m_Backend->GetBackendName());
             glfwDestroyWindow(m_NativeWindow);
             m_NativeWindow = nullptr;
             return;
@@ -142,14 +143,14 @@ void UIWindowExternal::Show(UIWindow* parent)
     // Canvas works in logical units: extent (physical) / scale. Refreshed
     // every frame in RenderFrame so resize follows the swapchain.
     m_WindowCanvas->SetScreenSize(
-        (float)m_SwapchainTarget->GetExtent().width / scale,
-        (float)m_SwapchainTarget->GetExtent().height / scale);
+        (float)m_SwapchainTarget->GetWidth() / scale,
+        (float)m_SwapchainTarget->GetHeight() / scale);
 
     // Register callbacks on the external window so events reach EventQueue.
     Leir::InputManager::GetInstance().AddWindow(m_NativeWindow);
 
     XConsole::Println("UIWindowExternal: '{}' created ({}x{})", m_Title,
-        m_SwapchainTarget->GetExtent().width, m_SwapchainTarget->GetExtent().height);
+        m_SwapchainTarget->GetWidth(), m_SwapchainTarget->GetHeight());
 
     m_Visible = true;
     OnShow();
@@ -215,14 +216,14 @@ bool UIWindowExternal::RenderFrame()
         // logical size = physical extent / content scale.
         const float scale = m_WindowRenderer->GetContentScale();
         m_WindowCanvas->SetScreenSize(
-            (float)m_SwapchainTarget->GetExtent().width / scale,
-            (float)m_SwapchainTarget->GetExtent().height / scale);
+            (float)m_SwapchainTarget->GetWidth() / scale,
+            (float)m_SwapchainTarget->GetHeight() / scale);
         m_WindowCanvas->UpdateLayout();
         m_WindowGraph.Clear();
         m_WindowRenderer->Render(m_WindowGraph, m_WindowCanvas);
 
         RHI::RHICommandBuffer rhiCmd;
-        rhiCmd.handle = reinterpret_cast<uint64_t>(m_SwapchainTarget->GetCommandBuffer());
+        rhiCmd.handle = m_SwapchainTarget->GetCommandBufferHandle();
         m_Backend->CmdExecuteGraph(rhiCmd, m_WindowGraph);
     }
 
